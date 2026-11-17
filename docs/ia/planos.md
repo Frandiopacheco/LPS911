@@ -200,6 +200,40 @@ Flujo: niveles → cargar planos (plantas EST y ARQ en DXF) → **alistar** → 
 - Con la E-19 real: escala ✓ (324 de 324 cotas), ejes ⚠ (1 y 14 inclinados 0,52° y 0,50°; 44 cotas entre ejes coinciden), 82 columnas (66 de 0.60×0.60, 13 fuera de un cruce), 146 rótulos, contorno por trazar.
 - Pruebas: `planos-dxf.spec.js` › «alistar: …» (verificación pura con cotas, malla corrida, unidades equivocadas y sin nivel; y el flujo completo en el visor hasta fijar la malla) y «alistar › correcciones: …» (puras y en el visor con `dxfDemo({girado:true})`: eje E girado 0,64° y una línea de ejes sin nombre). `casco-dxf.spec.js` comprueba que Casco usa los ejes corregidos.
 
+## Planta digitalizada: la base de todo (17-11-2026, decidido con el dueño; por hacer)
+
+La mayoría de los planos sigue en **PDF**, como hasta ahora. Algunas plantas se **digitalizan al máximo** (PDF + DXF, Alistar), porque sobre ellas se apoya todo lo demás: Sectorización, frentes, Plan diario, Campo y Metrados. Esto se resuelve **antes de seguir con lo demás**.
+
+**Decisiones del dueño:**
+- **Qué plantas se digitalizan: las elige el usuario.** Por defecto, una planta típica de EST y una de ARQ, **incluidas cimentación y azotea**. Las demás quedan solo en PDF.
+- **Revisión nueva de una planta ya alistada:** las correcciones de Alistar y los vínculos (Sectorización, lookahead) **pasan solos por posición** y la app muestra las diferencias (ambientes nuevos, eliminados o con otra área) para decidir uno por uno. Hoy se pierden `ok`, `fix` y `ctn` y hay que rehacerlos.
+- **Proyectista:** no se le exige un estándar de DXF. **Oficina Técnica corrige en Alistar** lo que venga mal. Por eso pesa más sacar los ambientes de los muros cuando no vienen como áreas cerradas (etapa 4).
+- **Malla de ejes:** **solo el admin la cambia, y a propósito.** Nunca cambia sola: si su plano recibe una revisión nueva, se avisa y se sigue usando la malla anterior hasta que el admin confirme. Hoy `plMalla()` exige `ok.rev === rev`, así que el proyecto se queda sin malla y el siguiente plano que se aliste la fija sin aviso.
+
+**Diagnóstico (asesor, 17-11-2026):**
+- Cada consumidor rehace los roles del DXF por su cuenta: `csDxf` en `casco-dxf.js` lo usan `sz-plano`, `casco-niv` y `casco-met-plano`.
+- Las formas se guardan en píxeles de cada lámina (`ambientes.geo[lamId]`).
+- Hay tres alineaciones entre planos: `ok.fit` (se guarda pero nadie lo lee), `csDxfAl` (calce por ejes) y `plb.pd[lam].T` (puntos a mano en las capas del Plan diario).
+- Los ambientes del plano no tienen id: `ambRen` y `ambDel` funcionan por un punto en píxeles.
+- Muros, vanos y puertas no se extraen: `dxfFlat` explota los bloques.
+- `fix`, `ctn` y `revs[]` crecen dentro del documento `plb`, que tiene el límite de 1 MB.
+
+**Enfoque elegido: «planta del nivel» en metros de la malla.** Una capa única por nivel con lo ya verificado: ejes, columnas, contorno, ambientes con id estable y, más adelante, muros y vanos. Va en metros de la malla, usando `ok.fit` y `ok.mpp`. Cada lámina (EST, ARQ o capa) solo guarda su transformación a la malla. Es aditivo: `ambientes.geo` se mantiene y se puede derivar.
+
+**Etapas:**
+1. Endurecer lo que hay:
+   - malla protegida (decisión de arriba);
+   - `csDxf` pasa a `planos-dxf.js` con un nombre neutro, lo que también destraba «Traer ambientes» para la obra;
+   - `fix` y `revs` salen del documento `plb`.
+2. Una sola transformación de cada plano listo a la malla, usada en todas partes: la capa del Plan diario se alinea sola y se reemplaza `csDxfAl`.
+3. Ambientes con id estable y en metros. La revisión nueva se concilia pasando las correcciones por posición y mostrando la lista de diferencias.
+4. Muros y vanos (metros lineales, puertas), y ambientes armados desde los muros.
+5. Sectores, frentes y metrados sobre esa base.
+
+**Por decidir:**
+- si lo ya programado (lookahead, Matriz) se ata al ambiente del plano o sigue con un vínculo;
+- si esto pasa también a la obra en curso o queda para el proyecto nuevo.
+
 ## Medir (`web/js/planos-medir.js`, oct 2026)
 
 Botón **📏 Medir** en la barra del visor: distancia, poligonal y área sobre la lámina, con una barra flotante (`.plmbar`). Decidido con el dueño: **calibrar cada lámina** con una medida conocida (no confiar en la escala nominal; la exportación usa «Ajustar al papel», así que puede no ser exactamente 1/100).

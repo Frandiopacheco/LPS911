@@ -40,6 +40,9 @@ Hoy los ambientes se escriben en el lookahead y luego se dibujan en Sectorizaci�
 - **Área de cada ambiente** (m² del polígono): para metrar pisos, contrazócalos y pintura y alimentar el histograma de personal.
 - Después: sugerir el tipo de ambiente por el nombre («SH…» → baño) para la Matriz.
 
+## Planta digitalizada (17-11-2026, decidido con el dueño; va antes que lo demás)
+Decisiones y etapas en `planos.md`, «Planta digitalizada: la base de todo». Lo siguiente es la etapa 1: proteger la malla de ejes, sacar `csDxf` de Casco y sacar `fix` y `revs` del documento `plb`.
+
 ## Ideas del dueño para más adelante (de su memoria del chat, oct 2026)
 
 - **Valor ganado:** módulo aparte en una etapa siguiente, vinculando el catálogo de actividades con el catálogo de costos. No mezclarlo con el Last Planner (programar, liberar restricciones y medir la confiabilidad).
