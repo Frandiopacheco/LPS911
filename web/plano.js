@@ -1996,7 +1996,8 @@ const cxVis=()=>M.meet?!M.cqOn&&!cxHid()&&M.mmode==='plan':!M.cqOn&&(pmEng()?pmo
 const CQC=['#7B1FA2','#00897B','#EF6C00','#1565C0','#C2185B','#558B2F','#6D4C41','#00838F'];
 const fzId=(d,sc)=>'fz_'+d+'_'+sc;
 const fzOf=sc=>sc?PD.get(fzId(M.date,sc))||null:null;
-const fzMine=()=>myRole()==='sc'&&M.scDraw&&myScs().includes(M.scDraw)?M.scDraw:'';
+/* quién llena la fuerza laboral: el SC la suya; el ingeniero que decide en el piso (dzEng), la de la partida elegida (nov 2026: antes solo el SC y el ingeniero no podía crearla) */
+const fzMine=()=>{if(!M.scDraw)return'';if(myRole()==='sc')return myScs().includes(M.scDraw)?M.scDraw:'';return dzEng()&&S.con.has(M.scDraw)?M.scDraw:''};
 const fzTot=f=>(f&&f.items||[]).reduce((a,i)=>a+(+i.n||0),0);
 const cqCol=(f,c)=>{const i=(f&&f.cuad||[]).findIndex(q=>q.id===c);return CQC[(i<0?0:i)%CQC.length]};
 const horTxt=f=>{const h=f&&f.hor||{t:'n'};return h.t==='e'?`extendido hasta ${hm12(h.fin||'19:00')}`:'hasta 5:00 p. m.'};
@@ -2022,7 +2023,7 @@ function fzWrite(sc,patch,undoable){const id=fzId(M.date,sc);const cur=PD.get(id
 /* tarjeta del equipo en el panel (subcontratista) */
 function fzCardHtml(role,sc){const mine=fzMine();if(!mine)return'';const f=fzOf(mine);
   if(f&&f.sinDist)return`<div class="fzc off"><span>👷 Programas sin distribución de personal</span><button class="lnkb" data-fz="open">Añadir fuerza laboral</button></div>`;
-  if(!f||!(f.items||[]).length)return`<div class="fzc"><div><b>👷 Tu equipo para el ${dvLbl(M.date)}</b><small>Indica tu fuerza laboral, el horario y reparte tus cuadrillas en el plano.</small></div><div class="fzcb"><button class="ib pri" data-fz="open">Añadir fuerza laboral</button><button class="lnkb" data-fz="skip">Programar sin distribución</button></div></div>`;
+  if(!f||!(f.items||[]).length)return`<div class="fzc"><div><b>👷 ${myRole()==='sc'?'Tu equipo':'Equipo de '+esc(conOf(mine).name)} para el ${dvLbl(M.date)}</b><small>Indica ${myRole()==='sc'?'tu':'su'} fuerza laboral, el horario y reparte tus cuadrillas en el plano.</small></div><div class="fzcb"><button class="ib pri" data-fz="open">Añadir fuerza laboral</button><button class="lnkb" data-fz="skip">Programar sin distribución</button></div></div>`;
   const n=fzTot(f),nq=(f.cuad||[]).length,asg=Object.keys(asgDay(f)).length;
   return`<div class="fzc ok"><div><b>👷 ${n} persona${n===1?'':'s'} · ${nq} cuadrilla${nq===1?'':'s'} · ${horTxt(f)}</b><small>${(f.items||[]).map(i=>`${i.n} ${esc(i.cat)}${i.esp?' '+esc(i.esp):''}`).join(' · ')}${nq?` · ${asg} actividad${asg===1?'':'es'} con cuadrilla`:''}</small></div><div class="fzcb"><button class="ib" data-fz="open">Editar</button>${nq?`<button class="ib${M.cqOn?' on':''}" data-fz="rep">${M.cqOn?'Ocultar reparto':'Repartir en el plano'}</button>`:''}</div></div>`}
 /* hoja de fuerza laboral, horario y cuadrillas: cada cuadrilla tiene su personal; el total en obra es la suma.
@@ -2081,7 +2082,8 @@ function cqClear(){const sc=fzMine();const f=fzOf(sc);if(!f||!Object.keys(f.asg|
 /* lo que ve el ingeniero (y el SC lo suyo): equipos del día */
 function fzBoxHtml(role,sf){const mine=role==='sc'?new Set(myScs()):null;const scs=[...new Set(dayActs(M.piso,M.date).map(o=>o.x.sc))].filter(c=>(!mine||mine.has(c))&&scIn(sf,c)).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name));if(!scs.length)return'';
   const rows=scs.map(sc=>{const f=fzOf(sc);const c=conOf(sc);
-    if(!f||(!f.sinDist&&!(f.items||[]).length))return`<div class="mfzi" style="--c:${c.color}"><b>${esc(c.name)}</b><small>Sin fuerza laboral indicada</small></div>`;
+    const add=role!=='sc'&&dzEng()&&!M.meet?`<button class="lnkb" data-fzsc="${esc(sc)}">Indicar</button>`:'';
+    if(!f||(!f.sinDist&&!(f.items||[]).length))return`<div class="mfzi" style="--c:${c.color}"><b>${esc(c.name)}</b><small>Sin fuerza laboral indicada</small>${add}</div>`;
     if(f.sinDist)return`<div class="mfzi" style="--c:${c.color}"><b>${esc(c.name)}</b><small>Sin distribución</small></div>`;
     const acts=dayActs(M.piso,M.date).filter(o=>o.x.sc===sc&&!dpPend(o.x.id));const AD=asgDay(f);const sin=acts.filter(o=>!AD[o.x.id]).length;const ext=f.hor&&f.hor.t==='e';
     const rt=(f.cuad||[]).map(q=>{const R=cqRoute(f,q.id).map(a=>{const y=S.act.get(a);const ay=y&&S.amb.get(y.ambId);return ay?ay.code:'?'});return`<span class="mfzq${M.cqFocus===sc+'|'+q.id?' fo':''}" data-cqf="${sc}|${esc(q.id)}" role="button" title="Ver su recorrido en el plano" style="--q:${cqCol(f,q.id)}"><i>${esc(q.id)}</i>${R.length?esc(R.join(' → ')):'<em>sin actividad</em>'}${q.n?` · ${q.n} p.`:''}</span>`}).join('');
@@ -2206,6 +2208,7 @@ function planClick(e){const t=e.target;const g=(sel)=>t.closest(sel);let b;
   if((b=g('[data-golk]'))){if(typeof gotoAct==='function')gotoAct(b.dataset.golk);return true}
   if((b=g('[data-chu]'))){const z=PD.get(b.dataset.chu);if(z&&dzEng())revertRep(z,b);return true}
   if((b=g('[data-xun]'))){const o=dzEng()&&remDoc(b.dataset.xun);if(o){rec([o]);CROSS.key='';requestRender();toast('Decisión del cruce deshecha')}return true}
+  if((b=g('[data-fzsc]'))){const sc=b.dataset.fzsc;if(!dzEng()||!S.con.has(sc))return true;M.scDraw=sc;M.scX=[];requestRender();fzOpen(sc);return true}
   if((b=g('[data-fz]'))){const sc=fzMine();if(!sc)return true;const k=b.dataset.fz;if(k==='open')fzOpen(sc);else if(k==='skip'){fzWrite(sc,{sinDist:true});toast('Listo: programas sin distribución de personal.')}else if(k==='rep'){M.cqOn=!M.cqOn;M.cqSel='';requestRender()}return true}
   if((b=g('[data-pdtog]'))){M.pdOpen=M.pdOpen===false;requestRender();return true}
   if((b=g('[data-dz]'))){const[k,id]=b.dataset.dz.split('|');const x=S.act.get(id);if(!x||!dzCan(x))return true;if(k==='man')dzMove(b,x);else if(k==='fin')dzFin(x);else if(k==='res')dzRes(b,x);return true}
