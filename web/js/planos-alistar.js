@@ -172,6 +172,10 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
     /* ✓ solo si la geometría lo confirma (decisión del dueño, 17-11-2026): todas en un cruce de ejes y a lo más 3 tamaños */
     add('col','Columnas',R.col.length&&X.length&&!off.length&&L.length<=3&&noc<=X.length*0.3?'ok':'warn',R.col.length?`${R.col.length} columnas: ${L.slice(0,4).map(([k2,n])=>`${n} de ${k2}`).join(', ')}${L.length>4?'…':''}.${off.length?` ${off.length} fuera de un cruce de ejes.`:''}${R.cnt.chico?` Se ignoran ${R.cnt.chico} figura(s) menores de ${DXF_MIN_COL.toFixed(2)} m.`:''}`:'No se encontraron columnas: revisa la capa en «◇ Capas».',
       [...L.map(([k2,n])=>`${n} × ${k2} m`),noc?`${noc} cruce(s) de ejes sin columna`:'','Toca una figura en el plano para quitarla («No es columna» o «ninguna de este tamaño»).'].filter(Boolean),['lay','colAdd'],off)}
+  /* 6b. sugerencias por la forma (planos-forma.js): columnas y vigas aunque el proyectista no las separe en capas */
+  if(est&&c.ed!==undefined&&typeof dxfSug==='function'){let sg=[];   /* solo en Alistar (plPxMalla no las necesita) */try{sg=dxfSug(G,lay,mpp,R,c.fix)}catch(e){console.warn('sugerencias',e)}
+    if(sg.length){add('sug','Sugerencias del dibujo','warn',`${sg.length} sugerencia(s) por la forma de lo dibujado. Aplícalas si están bien (se deshacen en «Correcciones»; en un plano listo, aplicar lo devuelve a «Por alistar») o márcalas revisadas si no.`,[],[],sg.flatMap(s=>s.pts.slice(0,8)));
+      const x=it[it.length-1];x.sug=sg;x.html=`<ul class="palsug">${sg.map((s,i)=>`<li><span>${esc(s.t)}</span><button type="button" class="ab" data-pal="sugo:${i}" title="Ver en el plano" aria-label="Ver en el plano">◎</button>${c.ed?`<button type="button" class="ib pri" data-pal="sug:${i}">Aplicar</button>`:''}</li>`).join('')}</ul>`}}
   /* 7. contorno de la planta */
   const cand=palCtnGuess(G,R);
   if(c.ctn&&c.ctn.P&&c.ctn.P.length>=6){const H=palHoles(c.ctn);const ab=palArea(c.ctn.P)*mpp*mpp,ah=H.reduce((t,h)=>t+palArea(h.p),0)*mpp*mpp;
@@ -217,8 +221,8 @@ function palCtx(p){const M=plMalla();const estDxf=[...PLB.values()].some(x=>!x.a
   return{M,estDxf,key:[lv,lv?plLvName(lv):'',M?[M.id,M.rev,M.t||0,M.mt||0,!!M.vieja,M.base||''].join(':'):'',estDxf].join('|')}}
 function palCheck(p,G){const X=palCtx(p);const M=X.M,estDxf=X.estDxf;const fx=palFix(p),ct=palCtn(p);
   const key=[plGeoKey(plSpecOf(p)),JSON.stringify(p.dxf||{}),p.disc,p.tipo,p.cod,p.rev||1,p.base||'',fx.L.map(f=>f.id).join(','),ct?JSON.stringify(ct):'',X.key].join('|');
-  const c=PALCK.get(p.id);if(c&&c.key===key&&c.G===G)return c.C;
-  const C=dxfCheck({p,G,lay:p.dxf.lay||{},mpp:p.dxf.mpp,malla:M,estDxf,ctn:ct,fix:fx});PALCK.set(p.id,{key,G,C});return C}
+  const c=PALCK.get(p.id);if(c&&c.key===key+'|'+plAlEd(p)&&c.G===G)return c.C;
+  const ed=plAlEd(p);const C=dxfCheck({p,G,lay:p.dxf.lay||{},mpp:p.dxf.mpp,malla:M,estDxf,ctn:ct,fix:fx,ed});PALCK.set(p.id,{key:key+'|'+ed,G,C});return C}
 /** al abrir o cambiar de lámina en el visor */
 function palAttach(){if(!PAL.on||!PLV||!PLV.tv)return;const p=palP();const sp=p&&plSpecOf(p,PLV.rev);if(!p||!sp||!sp.dxf||!sp.cur){palReset();return}
   if(PAL.id!==p.id){PAL.sel=null;PAL.prev=null}PAL.id=p.id;PLV.tv.al=palDraw;const b=PLV.box.querySelector('[data-pv="alis"]');if(b)b.classList.add('on');palRender()}
@@ -258,7 +262,7 @@ function palFixTxt(f,mpp){const m=v=>pal2(v);switch(f.k){
   case'ejRen':return`Eje ${f.n} renombrado a ${f.a}`;case'ejDel':return`Eje ${f.n} quitado`;
   case'ejSet':return f.how?`Eje ${f.n} ${f.how}`:`Eje ${f.n} movido`;case'ejAdd':return f.lin?`Línea sin nombre nombrada como eje ${f.n}`:`Eje ${f.n} agregado`;
   case'linIgn':return'Línea de la capa de ejes descartada (no es eje)';case'colDel':return`Columna quitada${f.sz?` (${f.sz} m)`:''}`;case'colDelSz':return`Columnas de ${m(f.w)}×${m(f.h)} m quitadas (no son columnas)`;
-  case'colAdd':return`Columna agregada${f.sz?` (${f.sz} m)`:''}`;case'txDel':return`Rótulo «${f.t||''}» quitado`;case'ambRen':return`Ambiente renombrado a «${f.a}»`;case'ambDel':return`Ambiente «${f.n||''}» quitado`;case'ambAdd':return`Ambiente «${f.a||''}» agregado`}return f.k}
+  case'colAdd':return`Columna agregada${f.sz?` (${f.sz} m)`:''}`;case'txDel':return`Rótulo «${f.t||''}» quitado`;case'ambRen':return`Ambiente renombrado a «${f.a}»`;case'ambDel':return`Ambiente «${f.n||''}» quitado`;case'ambAdd':return`Ambiente «${f.a||''}» agregado`}return typeof dxfReglaTxt==='function'?dxfReglaTxt(f):f.k}
 async function palSet(p,o,msg){try{await plCol(p).doc(p.id).update(plMallaKeep(p,o));if(msg)toast(msg)}catch(e){toast('No se pudo guardar: '+(e.code||e.message||e))}}
 /** agrega una corrección (con quién y cuándo); si el plano estaba listo vuelve a «Por alistar» */
 async function palFixAdd(p,f,msg){const F=palFix(p);const L=[...F.L,{...f,id:uid('fx'),by:me.email,byN:me.name||me.email,t:NOW()}];const o={fix:{rev:p.rev||1,L}};if(plUsable(p))o.ok=firebase.firestore.FieldValue.delete();
@@ -273,6 +277,7 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
     await palSet(p,{alc:{rev:p.rev||1,chk}},`${L.length} punto(s) marcados como revisados.`);return}
   if(k.startsWith('go:')){const it=PAL.C&&PAL.C.it.find(x=>x.id===k.slice(3));if(it&&it.pts.length){PAL.goi=((PAL.goi||0)+1)%it.pts.length;const q=it.pts[PAL.goi];palGo(q.x,q.y)}return}
   if(k==='selx'){PAL.sel=null;PAL.prev=null;palRender();return}
+  if(k.startsWith('sugo:')){const it=PAL.C&&PAL.C.it.find(x=>x.id==='sug');const s=it&&it.sug[+k.slice(5)];if(s&&s.pts.length){PAL.sgi=((PAL.sgi||0)+1)%s.pts.length;const q=s.pts[PAL.sgi];palGo(q.x,q.y)}return}
   /* lista de ambientes: ◎ los elige en el plano (como tocarlos); ✎ y ✕ son las mismas correcciones que desde el plano */
   const ambR=k.startsWith('amb:')&&(()=>{const it=PAL.C&&PAL.C.it.find(x=>x.id==='amb');return it&&it.amb&&it.amb[+k.split(':')[2]]})();
   if(k.startsWith('amb:')&&!ambR)return;
@@ -287,6 +292,7 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   else if(k==='ok')await palOk(p);
   else if(k.startsWith('end:'))palEnd(p,k.slice(4),'end');
   else if(k.startsWith('fxdel:'))await palFixDel(p,k.slice(6));
+  else if(k.startsWith('sug:')){const it=PAL.C&&PAL.C.it.find(x=>x.id==='sug');const s=it&&it.sug[+k.slice(4)];if(!s)return;const{t,pts,n,...f}=s;await palFixAdd(p,f,'Aplicado: '+dxfReglaTxt(f))}
   else if(k.startsWith('sel:'))await palSelAct(p,k.slice(4));
   else if(k.startsWith('amb:ren:')){const n=await uiAsk({title:'Renombrar el ambiente',input:{label:'Nombre',required:true,value:ambR.n},ok:'Guardar'});if(n&&String(n).trim()!==ambR.n)await palFixAdd(p,{k:'ambRen',x:ambR.x,y:ambR.y,a:String(n).trim().slice(0,60)},'Ambiente renombrado')}
   else if(k.startsWith('amb:del:')){if(!await uiAsk({title:`¿Quitar el ambiente «${ambR.n||'sin nombre'}»?`,text:'Deja de contarse como ambiente de esta planta. Se puede deshacer en «Correcciones».',ok:'Quitar',tone:'warn'}))return;await palFixAdd(p,{k:'ambDel',x:ambR.x,y:ambR.y,n:ambR.n},'Ambiente quitado')}

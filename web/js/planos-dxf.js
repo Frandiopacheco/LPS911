@@ -319,7 +319,7 @@ const dxfSz=(P,mpp)=>{const xs=P.filter((v,i)=>!(i%2)),ys=P.filter((v,i)=>i%2);c
 const dxfAreaP=P=>{let s=0;for(let i=0,n=P.length/2;i<n;i++){const j=(i+1)%n;s+=P[2*i]*P[2*j+1]-P[2*j]*P[2*i+1]}return Math.abs(s)/2};
 const dxfAmbAt=(amb,x,y)=>amb.filter(a=>dxfPip(a.p,x,y)).sort((a,b)=>dxfAreaP(a.p)-dxfAreaP(b.p))[0]||null;
 function dxfRolesFix(G,lay,mpp,fix){const R=dxfRoles(G,lay,mpp);const L=fix&&Array.isArray(fix.L)?fix.L:[];if(!L.length)return R;
-  let E=R.ej.map(e=>({...e})),col=R.col.slice(),tx=R.tx.slice(),amb=R.amb.map(a=>({...a}));const near=(p,q,t)=>Math.abs(p[0]-q[0])<t&&Math.abs(p[1]-q[1])<t&&Math.abs(p[2]-q[2])<t&&Math.abs(p[3]-q[3])<t||Math.abs(p[0]-q[2])<t&&Math.abs(p[1]-q[3])<t&&Math.abs(p[2]-q[0])<t&&Math.abs(p[3]-q[1])<t;
+  let E=R.ej.map(e=>({...e})),col=R.col.slice(),tx=R.tx.slice(),amb=R.amb.map(a=>({...a})),ln=R.ln,F=null;const near=(p,q,t)=>Math.abs(p[0]-q[0])<t&&Math.abs(p[1]-q[1])<t&&Math.abs(p[2]-q[2])<t&&Math.abs(p[3]-q[3])<t||Math.abs(p[0]-q[2])<t&&Math.abs(p[1]-q[3])<t&&Math.abs(p[2]-q[0])<t&&Math.abs(p[3]-q[1])<t;
   const done=[];const tol=0.05/mpp;
   for(const f of L){switch(f.k){
     case'ejRen':E.forEach(e=>{if(e.n===f.n)e.n=f.a});break;
@@ -334,10 +334,12 @@ function dxfRolesFix(G,lay,mpp,fix){const R=dxfRoles(G,lay,mpp);const L=fix&&Arr
     /* renombrar o quitar toca solo el ambiente más chico que contiene el punto (un SH metido en una sala no arrastra a la sala) */
     case'ambRen':{const a=dxfAmbAt(amb,f.x,f.y);if(a)a.n=f.a;break}
     case'ambDel':{const a=dxfAmbAt(amb,f.x,f.y);if(a)amb=amb.filter(o=>o!==a);break}
-    case'ambAdd':amb.push({p:f.p.slice(),n:f.a||'',add:1});break}}
+    case'ambAdd':amb.push({p:f.p.slice(),n:f.a||'',add:1});break;
+    /* reglas aceptadas desde las sugerencias por la forma (planos-forma.js) */
+    case'colLin':case'colLay':case'clsVig':case'vigLay':{if(typeof dxfRegla!=='function')break;F=F||dxfGeoF(G);const o={ej:E,col,ln};dxfRegla(f,o,F,mpp,lay);col=o.col;ln=o.ln;break}}}
   /* las líneas sin nombre o repetidas que ya se nombraron o se descartaron dejan de avisar */
-  const S=R.S.filter(l=>!done.some(q=>near(l.p,q,1)));const cnt={...R.cnt,ej:E.length,ejSin:S.filter(l=>!l.dup).length,dup:[...new Set(S.filter(l=>l.dup).map(l=>l.dup))],col:col.length,tx:tx.length,amb:amb.length};
-  return{...R,ej:E,col,tx,amb,S,cnt}}
+  const S=R.S.filter(l=>!done.some(q=>near(l.p,q,1)));const cnt={...R.cnt,ej:E.length,ejSin:S.filter(l=>!l.dup).length,dup:[...new Set(S.filter(l=>l.dup).map(l=>l.dup))],col:col.length,ln:ln.length/4,tx:tx.length,amb:amb.length};
+  return{...R,ej:E,col,ln,tx,amb,S,cnt}}
 /** punto más cercano para pegarse (px del plano): vértice o cruce a menos de tol; si no, la proyección sobre una línea a menos de tol */
 function plGeoSnap(G,w,tol){if(!G)return null;let bp=null,bd=tol;const pt=(x,y)=>{const d=Math.hypot(x-w.x,y-w.y);if(d<bd){bd=d;bp={x,y,k:'pt'}}};
   const ln=[];for(const o of G.L){for(let i=0;i+3<o.l.length;i+=4){const a=o.l;if(Math.min(a[i],a[i+2])>w.x+tol||Math.max(a[i],a[i+2])<w.x-tol||Math.min(a[i+1],a[i+3])>w.y+tol||Math.max(a[i+1],a[i+3])<w.y-tol)continue;pt(a[i],a[i+1]);pt(a[i+2],a[i+3]);ln.push([a[i],a[i+1],a[i+2],a[i+3]])}

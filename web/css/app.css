@@ -4968,6 +4968,7 @@ body:has(#plv) #lqm{z-index:400}
 .palamb ul{list-style:none;padding:0;margin:6px 0;display:flex;flex-direction:column;gap:2px;max-height:320px;overflow:auto}.palamb li{display:flex;align-items:center;gap:6px;padding:2px 0;border-bottom:1px solid var(--line)}.palamb li>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.palamb li .ab{min-width:30px}
 @media (max-width:760px){.palamb li .ab{min-width:40px;min-height:40px}}
 /* etapa 3: diferencias de ambientes con la revisión anterior y aviso para pasar las correcciones (planos-rev.js) */
+.palsug{list-style:none;padding:0;margin:6px 0;display:flex;flex-direction:column;gap:6px}.palsug li{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.palsug li>span{flex:1;min-width:200px}
 .palrest{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0}.palrest .mu{font-size:12px}
 .paldif li{flex-wrap:wrap}.paldif li.pend{background:var(--warn-soft)}.paldif select.tin{max-width:180px}.palcar{margin:6px 0}.palcar .ib{margin-top:6px}
 .szpldif{color:var(--warn);font-weight:600}
