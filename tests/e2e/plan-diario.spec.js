@@ -371,6 +371,21 @@ test('el ingeniero ve los equipos del día y el recorrido de cada cuadrilla', as
   noErrors(errors, 'equipos');
 });
 
+test('el ingeniero también indica la fuerza laboral de un SC desde «Equipos del día» (nov 2026)', async ({ page }) => {
+  const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1, S8] });
+  const b = page.locator('#mfzbar #mfzb');
+  if ((await b.locator('.mfzh').getAttribute('aria-expanded')) !== 'true') await b.locator('.mfzh').click();
+  await expect(b).toContainText('Sin fuerza laboral indicada');
+  const btn = b.locator('[data-fzsc="c1"]');
+  await btn.click();
+  const m = page.locator('#lqm');
+  await expect(m).toContainText('Personal de C1');
+  await m.locator('[data-fok]').click();
+  await expect.poll(async () => (await fz(page) || {}).cuad?.map(q => [q.id, q.n])).toEqual([['C1', 2]]);
+  await expect(b).toContainText('2 personas · 1 cuadrillas');
+  noErrors(errors, 'fuerza laboral del ingeniero');
+});
+
 test('Ctrl+clic elige varias partidas; tocar el plano fuera de ellas no abre otras', async ({ page }) => {
   const errors = await openApp(page, { tab: 'mapa', extra: [...LAMINA, ...AMB, T1] });
   await page.click('#wtoday'); // hoy: SANITARIAS y ELÉCTRICAS
