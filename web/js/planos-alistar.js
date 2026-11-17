@@ -173,8 +173,8 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
     add('col','Columnas',R.col.length&&X.length&&!off.length&&L.length<=3&&noc<=X.length*0.3?'ok':'warn',R.col.length?`${R.col.length} columnas: ${L.slice(0,4).map(([k2,n])=>`${n} de ${k2}`).join(', ')}${L.length>4?'…':''}.${off.length?` ${off.length} fuera de un cruce de ejes.`:''}${R.cnt.chico?` Se ignoran ${R.cnt.chico} figura(s) menores de ${DXF_MIN_COL.toFixed(2)} m.`:''}`:'No se encontraron columnas: revisa la capa en «◇ Capas».',
       [...L.map(([k2,n])=>`${n} × ${k2} m`),noc?`${noc} cruce(s) de ejes sin columna`:'','Toca una figura en el plano para quitarla («No es columna» o «ninguna de este tamaño»).'].filter(Boolean),['lay','colAdd'],off)}
   /* 6b. sugerencias por la forma (planos-forma.js): columnas y vigas aunque el proyectista no las separe en capas */
-  if(est&&typeof dxfSug==='function'){let sg=[];try{sg=dxfSug(G,lay,mpp,R,c.fix)}catch(e){console.warn('sugerencias',e)}
-    if(sg.length){add('sug','Sugerencias del dibujo','warn',`${sg.length} sugerencia(s) por la forma de lo dibujado. Aplícalas si están bien (se deshacen en «Correcciones») o márcalas revisadas si no.`,[],[],sg.flatMap(s=>s.pts.slice(0,8)));
+  if(est&&c.ed!==undefined&&typeof dxfSug==='function'){let sg=[];   /* solo en Alistar (plPxMalla no las necesita) */try{sg=dxfSug(G,lay,mpp,R,c.fix)}catch(e){console.warn('sugerencias',e)}
+    if(sg.length){add('sug','Sugerencias del dibujo','warn',`${sg.length} sugerencia(s) por la forma de lo dibujado. Aplícalas si están bien (se deshacen en «Correcciones»; en un plano listo, aplicar lo devuelve a «Por alistar») o márcalas revisadas si no.`,[],[],sg.flatMap(s=>s.pts.slice(0,8)));
       const x=it[it.length-1];x.sug=sg;x.html=`<ul class="palsug">${sg.map((s,i)=>`<li><span>${esc(s.t)}</span><button type="button" class="ab" data-pal="sugo:${i}" title="Ver en el plano" aria-label="Ver en el plano">◎</button>${c.ed?`<button type="button" class="ib pri" data-pal="sug:${i}">Aplicar</button>`:''}</li>`).join('')}</ul>`}}
   /* 7. contorno de la planta */
   const cand=palCtnGuess(G,R);

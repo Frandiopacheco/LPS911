@@ -50,7 +50,9 @@ const palTP=(T,P)=>{const o=[];for(let i=0;i+1<P.length;i+=2){const q=simAp(T,{x
 function palLinSnap(g,S,tol){const d=(p,q)=>Math.max(Math.abs(p[0]-q[0]),Math.abs(p[1]-q[1]),Math.abs(p[2]-q[2]),Math.abs(p[3]-q[3]));let b=null,bd=tol;
   for(const l of S||[]){const v=Math.min(d(l.p,g.p),d(l.p,[g.p[2],g.p[3],g.p[0],g.p[1]]));if(v<bd){bd=v;b=l}}if(b)g.p=b.p.slice();return!!b}
 /** correcciones de la revisión anterior llevadas a la nueva (T) y verificadas contra su dibujo (G1, d1) → {L, no:[{k, t, why}]} */
-function palFixCarry(fix0,T,rv0,G1,d1){const L0=(fix0&&fix0.L)||[];const mpp=d1.mpp;const R=dxfRoles(G1,d1.lay||{},mpp);const ej=new Set(R.ej.map(e=>e.n));
+function palFixCarry(fix0,T,rv0,G1,d1){const L0=(fix0&&fix0.L)||[];const mpp=d1.mpp;
+  /* las reglas (planos-forma.js, sin coordenadas) se aplican antes: un colDel sobre una columna que agregó una regla sigue valiendo */
+  const RG=typeof DXF_REGLAS!=='undefined'?L0.filter(f=>DXF_REGLAS.includes(f.k)):[];const R=RG.length?dxfRolesFix(G1,d1.lay||{},mpp,{L:RG}):dxfRoles(G1,d1.lay||{},mpp);const ej=new Set(R.ej.map(e=>e.n));
   const amb=R.amb.slice();const L=[],no=[];const skip=(f,why)=>no.push({k:f.k,t:palFixTxt(f,mpp),why});const tol=0.05/mpp;
   for(const f of L0){const g={...f,id:uid('fx'),de:{rev:rv0,id:f.id||''}};if(Array.isArray(f.p))g.p=palTP(T,f.p);
     if(typeof f.x==='number'&&typeof f.y==='number'){const q=simAp(T,{x:f.x,y:f.y});g.x=plr2(q.x);g.y=plr2(q.y)}

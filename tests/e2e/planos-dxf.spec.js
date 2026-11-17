@@ -849,8 +849,8 @@ test('alistar › por la forma: columnas con líneas sueltas o en otra capa, vig
     const isCol = q => cols.some(P => P.length === q.length - 1 && P.every((v, i) => Math.abs(v - q[i + 1]) < 0.01));
     const sug = (G, L) => dxfSug(G, lay, mpp, dxfRolesFix(G, lay, mpp, { L: L || [] }), { L: L || [] });
     const out = { base: R0.col.length, sug0: sug(G0).map(s => s.k) };
-    /* 1. columnas explotadas en 4 líneas */
-    const G1 = cp(G0); const c1 = Lof(G1, lay.col); c1.p = c1.p.filter(q => !isCol(q)); for (const P of cols) for (const s of dxfEdges(P)) c1.l.push(...s);
+    /* 1. columnas explotadas en 4 líneas, con sus diagonales en X dibujadas antes que los lados */
+    const G1 = cp(G0); const c1 = Lof(G1, lay.col); c1.p = c1.p.filter(q => !isCol(q)); for (const P of cols) { c1.l.push(P[0], P[1], P[4], P[5], P[2], P[3], P[6], P[7]); for (const s of dxfEdges(P)) c1.l.push(...s); }
     const s1 = sug(G1); const f1 = s1.find(s => s.k === 'colLin');
     out.lin = { antes: dxfRolesFix(G1, lay, mpp, null).col.length, sug: f1 && f1.n, despues: dxfRolesFix(G1, lay, mpp, { L: [{ k: 'colLin', l: lay.col }] }).col.length,
       ln: dxfRolesFix(G1, lay, mpp, { L: [{ k: 'colLin', l: lay.col }] }).ln.length < dxfRolesFix(G1, lay, mpp, null).ln.length, otra: sug(G1, [{ k: 'colLin', l: lay.col }]).some(s => s.k === 'colLin') };
@@ -861,26 +861,37 @@ test('alistar › por la forma: columnas con líneas sueltas o en otra capa, vig
     /* 3. vigas como rectángulos en la capa de columnas: de una columna a la siguiente, 0,30 m de ancho */
     const G3 = cp(G0); const c3 = Lof(G3, lay.col); const cen = cols.map(dxfCen).sort((a, b) => a.x - b.x); const hw = 0.15 / mpp;
     for (let i = 1; i < cen.length - 1; i++) { const a = cen[i], b = cen[i + 1], x0 = a.x + 0.2 / mpp, x1 = b.x - 0.2 / mpp; c3.p.push([1, x0, a.y - hw, x1, a.y - hw, x1, a.y + hw, x0, a.y + hw]); }
+    /* una placa suelta del mismo tamaño que no toca columnas: no se vuelve viga */
+    { const a = cen[1], w = cen[2].x - cen[1].x - 0.4 / mpp, yy = a.y - 3 / mpp; c3.p.push([1, a.x, yy - hw, a.x + w, yy - hw, a.x + w, yy + hw, a.x, yy + hw]); }
     const s3 = sug(G3); const f3 = s3.find(s => s.k === 'clsVig'); const R3 = dxfRolesFix(G3, lay, mpp, { L: [{ k: 'clsVig', w: f3 && f3.w, h: f3 && f3.h }] });
     out.vig = { antes: dxfRolesFix(G3, lay, mpp, null).col.length, sug: f3 && f3.n, w: f3 && f3.w, despues: R3.col.length, ln: R3.ln.length - dxfRolesFix(G3, lay, mpp, null).ln.length };
-    /* 4. caras de vigas en una capa que no está elegida: 4 pares a 0,30 m */
-    const G4 = cp(G0); const v4 = Lof(G4, 'X-VIGAS'); const y0 = cen[0].y;
-    for (let k = 0; k < 4; k++) { const y = y0 - (2 + k) / mpp, xa = cen[1].x, xb = cen[2].x; v4.l.push(xa, y, xb, y, xa, y + 0.3 / mpp, xb, y + 0.3 / mpp); }
+    /* 4. caras de vigas en una capa que no está elegida: un par a 0,30 m centrado en cada eje horizontal y en un vertical */
+    const G4 = cp(G0); const v4 = Lof(G4, 'X-VIGAS'); const hw3 = 0.15 / mpp; const xa = cen[1].x + 0.5 / mpp, xb = cen[2].x - 0.5 / mpp;
+    const EH = R0.ej.filter(e => !palIsV(e.p)), EV = R0.ej.filter(e => palIsV(e.p));
+    for (const e of EH) { const y = (e.p[1] + e.p[3]) / 2; v4.l.push(xa, y - hw3, xb, y - hw3, xa, y + hw3, xb, y + hw3); }
+    { const x = (EV[0].p[0] + EV[0].p[2]) / 2, ya = Math.min(...EH.map(e => e.p[1])) + 0.5 / mpp, yb = ya + 2 / mpp; v4.l.push(x - hw3, ya, x - hw3, yb, x + hw3, ya, x + hw3, yb); }
     const f4 = sug(G4).find(s => s.k === 'vigLay' && s.l === 'X-VIGAS');
     out.cara = { sug: f4 && f4.n, mas: dxfRolesFix(G4, lay, mpp, { L: [{ k: 'vigLay', l: 'X-VIGAS' }] }).ln.length - R0.ln.length };
+    /* una losa aligerada (líneas cada 0,40 m lejos de los ejes) no se sugiere como caras */
+    const G5 = cp(G0); const v5 = Lof(G5, 'X-ALIG'); const yb5 = (EH[0].p[1] + EH[1].p[1]) / 2;
+    for (let k = -4; k <= 4; k++) { const y = yb5 + k * 0.4 / mpp; v5.l.push(xa, y, xb, y); }
+    out.alig = sug(G5).some(s => s.k === 'vigLay');
     out.txt = [palFixTxt({ k: 'colLay', l: 'X-ACH' }, mpp), palFixTxt({ k: 'clsVig', w: 0.3, h: 3.6 }, mpp)];
     /* la regla pasa a la revisión siguiente tal cual (no tiene coordenadas) */
     const C = palFixCarry({ rev: 1, L: [{ id: 'r1', k: 'colLay', l: 'X-ACH' }] }, { a: 1, b: 0, e: 5, f: 5 }, 1, G2, { lay, mpp });
     out.carry = C.L.map(f => f.k + ':' + f.l);
+    /* una columna quitada que había agregado una regla sigue quitada en la revisión siguiente */
+    const cq = dxfCen(cols[0]); const C2 = palFixCarry({ rev: 1, L: [{ id: 'r1', k: 'colLin', l: lay.col }, { id: 'd1', k: 'colDel', x: cq.x, y: cq.y }] }, { a: 1, b: 0, e: 0, f: 0 }, 1, G1, { lay, mpp });
+    out.carry2 = { k: C2.L.map(f => f.k).join(), no: C2.no.length, col: dxfRolesFix(G1, lay, mpp, { L: C2.L }).col.length };
     return out;
   }, dxfDemo());
   expect(r.sug0).toEqual([]);   /* el plano bien separado en capas no sugiere nada */
   expect(r.lin).toEqual({ antes: 0, sug: 5, despues: 5, ln: true, otra: false });
   expect(r.lay).toEqual({ sug: 5, despues: 5 });
-  expect(r.vig.antes).toBe(8); expect(r.vig.sug).toBe(3); expect(r.vig.w).toBe(0.3); expect(r.vig.despues).toBe(5); expect(r.vig.ln).toBe(3 * 16);
-  expect(r.cara.sug).toBeGreaterThanOrEqual(3); expect(r.cara.mas).toBe(8 * 4);
+  expect(r.vig.antes).toBe(9); expect(r.vig.sug).toBe(3); expect(r.vig.w).toBe(0.3); expect(r.vig.despues).toBe(6);   /* la placa suelta sigue como columna */ expect(r.vig.ln).toBe(3 * 8);   /* solo los dos lados largos */
+  expect(r.cara.sug).toBe(4); expect(r.cara.mas).toBe(8 * 4); expect(r.alig).toBe(false);
   expect(r.txt).toEqual(['Columnas de la capa X-ACH', 'Rectángulos de 0.30×3.60 m tratados como vigas']);
-  expect(r.carry).toEqual(['colLay:X-ACH']);
+  expect(r.carry).toEqual(['colLay:X-ACH']); expect(r.carry2).toEqual({ k: 'colLin,colDel', no: 0, col: 4 });
   expect(errors).toEqual([]);
 });
 
