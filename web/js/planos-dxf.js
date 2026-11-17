@@ -316,6 +316,8 @@ const dxfSz=(P,mpp)=>{const xs=P.filter((v,i)=>!(i%2)),ys=P.filter((v,i)=>i%2);c
 /** lo leído del DXF con las correcciones de Alistar encima (`plb.fix.L`, en orden; el DXF original no se toca). Tipos:
     ejRen {n,a} renombrar · ejDel {n} quitar · ejSet {n,p} recta nueva (enderezar, mover) · ejAdd {n,p} agregar (también nombrar una línea sin nombre) ·
     linIgn {p} la línea no es eje · colDel {x,y} no es columna · colDelSz {w,h} ninguna de ese tamaño · colAdd {p} · txDel {x,y} · ambRen {x,y,a} · ambDel {x,y} · ambAdd {p,a} */
+const dxfAreaP=P=>{let s=0;for(let i=0,n=P.length/2;i<n;i++){const j=(i+1)%n;s+=P[2*i]*P[2*j+1]-P[2*j]*P[2*i+1]}return Math.abs(s)/2};
+const dxfAmbAt=(amb,x,y)=>amb.filter(a=>dxfPip(a.p,x,y)).sort((a,b)=>dxfAreaP(a.p)-dxfAreaP(b.p))[0]||null;
 function dxfRolesFix(G,lay,mpp,fix){const R=dxfRoles(G,lay,mpp);const L=fix&&Array.isArray(fix.L)?fix.L:[];if(!L.length)return R;
   let E=R.ej.map(e=>({...e})),col=R.col.slice(),tx=R.tx.slice(),amb=R.amb.map(a=>({...a}));const near=(p,q,t)=>Math.abs(p[0]-q[0])<t&&Math.abs(p[1]-q[1])<t&&Math.abs(p[2]-q[2])<t&&Math.abs(p[3]-q[3])<t||Math.abs(p[0]-q[2])<t&&Math.abs(p[1]-q[3])<t&&Math.abs(p[2]-q[0])<t&&Math.abs(p[3]-q[1])<t;
   const done=[];const tol=0.05/mpp;
@@ -329,8 +331,9 @@ function dxfRolesFix(G,lay,mpp,fix){const R=dxfRoles(G,lay,mpp);const L=fix&&Arr
     case'colDelSz':col=col.filter(q=>{const z=dxfSz(q.p,mpp);return!(Math.abs(z[0]-f.w)<0.006&&Math.abs(z[1]-f.h)<0.006)});break;
     case'colAdd':col.push({p:f.p.slice(),add:1});break;
     case'txDel':tx=tx.filter(t=>Math.hypot(t.x-f.x,t.y-f.y)>tol);break;
-    case'ambRen':amb.forEach(a=>{if(dxfPip(a.p,f.x,f.y))a.n=f.a});break;
-    case'ambDel':amb=amb.filter(a=>!dxfPip(a.p,f.x,f.y));break;
+    /* renombrar o quitar toca solo el ambiente más chico que contiene el punto (un SH metido en una sala no arrastra a la sala) */
+    case'ambRen':{const a=dxfAmbAt(amb,f.x,f.y);if(a)a.n=f.a;break}
+    case'ambDel':{const a=dxfAmbAt(amb,f.x,f.y);if(a)amb=amb.filter(o=>o!==a);break}
     case'ambAdd':amb.push({p:f.p.slice(),n:f.a||'',add:1});break}}
   /* las líneas sin nombre o repetidas que ya se nombraron o se descartaron dejan de avisar */
   const S=R.S.filter(l=>!done.some(q=>near(l.p,q,1)));const cnt={...R.cnt,ej:E.length,ejSin:S.filter(l=>!l.dup).length,dup:[...new Set(S.filter(l=>l.dup).map(l=>l.dup))],col:col.length,tx:tx.length,amb:amb.length};

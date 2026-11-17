@@ -43,6 +43,13 @@ const palAp=(T,p)=>({x:T.a*p.x-T.b*p.y+T.e,y:T.b*p.x+T.a*p.y+T.f});
 function palArea(P){let s=0;for(let i=0,n=P.length/2;i<n;i++){const j=(i+1)%n;s+=P[2*i]*P[2*j+1]-P[2*j]*P[2*i+1]}return Math.abs(s)/2}
 function palPerim(P){let s=0;for(let i=0,n=P.length/2;i<n;i++){const j=(i+1)%n;s+=Math.hypot(P[2*j]-P[2*i],P[2*j+1]-P[2*i+1])}return s}
 function palPip(P,x,y){let c=false;for(let i=0,n=P.length/2,j=n-1;i<n;j=i++){const xi=P[2*i],yi=P[2*i+1],xj=P[2*j],yj=P[2*j+1];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c}return c}
+/** un punto dentro del polígono P que no caiga dentro de otro ambiente más chico (p. ej. un SH metido en una sala): así renombrar o quitar desde la lista toca solo ese ambiente */
+function palInPt(P,all){const aP=palArea(P);const sm=(all||[]).filter(o=>o.p!==P&&palArea(o.p)<aP);const free=(x,y)=>palPip(P,x,y)&&!sm.some(o=>palPip(o.p,x,y));
+  const c=dxfCen(P);if(free(c.x,c.y))return c;const ys=P.filter((v,i)=>i%2);const y0=Math.min(...ys),y1=Math.max(...ys);
+  for(let k=1;k<20;k++){const y=y0+(y1-y0)*(k%2?0.5+Math.ceil(k/2)/20:0.5-k/40);const X=[];
+    for(let i=0,n=P.length/2,j=n-1;i<n;j=i++){const yi=P[2*i+1],yj=P[2*j+1];if((yi>y)!==(yj>y))X.push(P[2*i]+(y-yi)*(P[2*j]-P[2*i])/(yj-yi))}
+    X.sort((a,b)=>a-b);for(let i=0;i+1<X.length;i+=2)for(const t of[0.5,0.25,0.75]){const x=X[i]+(X[i+1]-X[i])*t;if(free(x,y))return{x,y}}}
+  return null}
 const pal2=v=>(Math.round(v*100)/100).toFixed(2);
 const pal3=v=>(Math.round(v*1000)/1000).toFixed(3);
 /** distancia (px) del punto a la recta de un eje */
@@ -142,10 +149,13 @@ function dxfCheck(c){const{p,G,lay,mpp}=c;const k=(p.dxf&&p.dxf.k)||1;const R=dx
   /* 8. rótulos */
   if(est){const u=[...new Set(R.tx.map(t=>t.t.replace(/\s+/g,'')))].slice(0,6);add('tx','Rótulos de vigas','warn',R.tx.length?`${R.tx.length} rótulos de sección (${u.join(', ')}${u.length>=6?'…':''}): darán la sección de cada tramo en Metrados.`:'Sin rótulos de sección: las secciones de las vigas se escribirán a mano en Metrados.',[],['lay'])}
   /* 9. ambientes */
-  if(arq){const A=R.amb;let sinN=0,sum=0;const pts=[];const det=[];
-    for(const q of A){const a=palArea(q.p)*mpp*mpp;sum+=a;const c0=dxfCen(q.p);if(!q.n){sinN++;pts.push(c0)}else if(det.length<60)det.push(`${q.n} · ${pal2(a)} m²`)}
+  if(arq){const A=R.amb;let sinN=0,sum=0;const pts=[];const det=[];const rows=[];
+    for(const q of A){const a=palArea(q.p)*mpp*mpp;sum+=a;const c0=dxfCen(q.p);if(!q.n){sinN++;pts.push(c0)}
+      /* la lista se puede corregir: cada fila lleva un punto que cae solo dentro de su ambiente (no en uno más chico metido adentro) */
+      const ip=palInPt(q.p,A);if(ip)rows.push({n:q.n||'',a,x:ip.x,y:ip.y,add:!!q.add});else if(q.n&&det.length<60)det.push(`${q.n} · ${pal2(a)} m²`)}
+    rows.sort((u,v)=>!u.n-!v.n||u.n.localeCompare(v.n,'es'));
     const ca=c.ctn&&c.ctn.P?palArea(c.ctn.P)*mpp*mpp:0;
-    add('amb','Ambientes','warn',A.length?`Se identificaron ${A.length} ambientes (${pal2(sum)} m²${ca?`, ${Math.round(sum/ca*100)} % del contorno`:''}).${sinN?` ${sinN} sin nombre.`:''} Revisa que estén bien: toca uno en el plano para renombrarlo o quitarlo, y agrega los que falten.`:'Sin ambientes: elige la capa de ambientes (polilíneas cerradas) en «◇ Capas», agrégalos trazándolos o confirma que esta planta no los usa.',det,['lay','ambAdd'],pts)}
+    add('amb','Ambientes','warn',A.length?`Se identificaron ${A.length} ambientes (${pal2(sum)} m²${ca?`, ${Math.round(sum/ca*100)} % del contorno`:''}).${sinN?` ${sinN} sin nombre.`:''} Revisa que estén bien: corrígelos en la lista (o tocándolos en el plano) y agrega los que falten.`:'Sin ambientes: elige la capa de ambientes (polilíneas cerradas) en «◇ Capas», agrégalos trazándolos o confirma que esta planta no los usa.',det,['lay','ambAdd'],pts);it[it.length-1].amb=rows}
   /* 10. encuadre */
   {const d=p.dxf||{};add('enc','Encuadre de la lámina','warn',`Lámina de ${(p.mm||[0,0]).join(' × ')} mm desde el ${d.src||'modelo'}${d.crop?', recortada al marco':''}${d.far?`; ${d.far} objeto(s) lejanos quedaron fuera`:''}. Confirma que se ve completa y que no falta nada importante. Si falta algo, vuelve a cargar el DXF como nueva revisión con «Recortar al marco» desmarcado.`)}
   return{it,R,mine,cand,fit,ejM}}
@@ -181,6 +191,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
     <div class="plalv" role="group" aria-label="Ver encima del plano">${PAL_SHOW.filter(([k])=>p.disc==='ARQ'?!['col','vig','tx'].includes(k):k!=='amb').map(([k,t])=>`<button type="button" class="plchip${PAL.show[k]?' on':''}" data-pal="show:${k}">${t}</button>`).join('')}</div>
     ${ed?'<p class="note palhint">Toca cualquier trazo o texto del plano: ves de qué capa es (se resalta toda la capa) y le cambias la función; un eje, una columna o un ambiente se corrigen igual.</p>':''}
     <ol class="plall">${S.L.map(x=>`<li class="palit ${x.ef}"><div class="paltop"><span class="palic" aria-hidden="true">${ico[x.ef]}</span><b>${esc(x.t)}</b>${x.pts.length?`<button type="button" class="ab palgo" data-pal="go:${x.id}" title="Ver en el plano">◎ Ver</button>`:''}</div><p>${esc(x.msg)}</p>
+      ${x.amb&&x.amb.length?`<details class="palamb"${PAL.ambo?' open':''}><summary>Lista de ambientes (${x.amb.length})</summary><ul>${x.amb.map((r,i)=>`<li><span class="${r.n?'':'mu'}">${esc(r.n||'sin nombre')}</span><small class="mu">${pal2(r.a)} m²${r.add?' · agregado':''}</small><button type="button" class="ab" data-pal="amb:go:${i}" title="Ver en el plano" aria-label="Ver ${esc(r.n||'sin nombre')} en el plano">◎</button>${ed?`<button type="button" class="ab" data-pal="amb:ren:${i}" title="Renombrar" aria-label="Renombrar ${esc(r.n||'sin nombre')}">✎</button><button type="button" class="ab" data-pal="amb:del:${i}" title="Quitar" aria-label="Quitar ${esc(r.n||'sin nombre')}">✕</button>`:''}</li>`).join('')}</ul></details>`:''}
       ${x.det.length?`<details><summary>Detalle</summary><ul>${x.det.map(d=>`<li>${esc(d)}</li>`).join('')}</ul></details>`:''}
       ${ed&&(x.act.length||x.btn.length||(x.st==='warn'&&!ok))?`<div class="palac">${x.btn.map(b=>`<button type="button" class="ib pri" data-pal="${esc(b.a)}">${esc(b.t)}</button>`).join('')}${x.act.map(a=>`<button type="button" class="ib" data-pal="${a}">${actB[a]}</button>`).join('')}${x.st==='warn'&&!ok?`<label class="chk"><input type="checkbox" data-palc="${x.id}"${A.chk[x.id]?' checked':''}> Revisado</label><input class="tin paln" data-paln="${x.id}" placeholder="Nota (opcional)" value="${esc((A.chk[x.id]&&A.chk[x.id].n)||'')}" aria-label="Nota de ${esc(x.t)}">`:''}</div>`:''}
       ${!ed&&A.chk[x.id]&&A.chk[x.id].n?`<p class="mu">Nota: ${esc(A.chk[x.id].n)}</p>`:''}</li>`).join('')}</ol>
@@ -188,6 +199,7 @@ async function palRender(){const p=palP();if(!PAL.on||!p)return;const sp=plSpecO
     ${ed?`<div class="lqbtns">${ok?`<button type="button" class="ib" data-pal="undo">Volver a revisar</button>${me.role==='admin'&&M&&M.id!==p.id?'<button type="button" class="ib" data-pal="malla">Usar como malla de ejes</button>':''}`:`<button type="button" class="ib pri" data-pal="ok"${S.ready?'':' disabled'}>Marcar como listo</button>`}</div>`:`<p class="note">${ok?'':'Lo alistan el administrador y Oficina Técnica.'}</p>`}
     <p class="note">Hasta que esté listo, este plano no se puede vincular a Sectorización, Plan diario ni Metrados.</p>`);
   const fxd=el.querySelector('.palfx');if(fxd)fxd.addEventListener('toggle',()=>{PAL.fxo=fxd.open});
+  const amd=el.querySelector('.palamb');if(amd)amd.addEventListener('toggle',()=>{PAL.ambo=amd.open});
   const bt=PLV.box.querySelector('[data-pv="alis"]');if(bt){bt.textContent=ok?'✓ Listo':'⚠ Alistar';bt.classList.toggle('ok',ok)}
   palHook();PLV.tv.tick()}
 /** texto de una corrección para el registro */
@@ -206,6 +218,10 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   if(k.startsWith('show:')){const s=k.slice(5);PAL.show[s]=!PAL.show[s];palRender();return}
   if(k.startsWith('go:')){const it=PAL.C&&PAL.C.it.find(x=>x.id===k.slice(3));if(it&&it.pts.length){PAL.goi=((PAL.goi||0)+1)%it.pts.length;const q=it.pts[PAL.goi];palGo(q.x,q.y)}return}
   if(k==='selx'){PAL.sel=null;PAL.prev=null;palRender();return}
+  /* lista de ambientes: ◎ los elige en el plano (como tocarlos); ✎ y ✕ son las mismas correcciones que desde el plano */
+  const ambR=k.startsWith('amb:')&&(()=>{const it=PAL.C&&PAL.C.it.find(x=>x.id==='amb');return it&&it.amb&&it.amb[+k.split(':')[2]]})();
+  if(k.startsWith('amb:')&&!ambR)return;
+  if(k.startsWith('amb:go:')){const q=dxfAmbAt(PAL.C.R.amb,ambR.x,ambR.y);PAL.sel=q?{k:'amb',p:q.p,n:q.n,x:ambR.x,y:ambR.y}:null;PAL.prev=null;palGo(ambR.x,ambR.y);palRender();return}
   if(!plAlEd(p))return;
   /* con el plano ya listo todo se puede seguir corrigiendo: se avisa una vez y vuelve a «Por alistar» */
   if(plUsable(p)&&!['undo','malla','edit'].includes(k)&&!await palOkEdit(p))return;
@@ -217,6 +233,8 @@ async function palClick(e){const b=e.target.closest('[data-pal]');if(!b)return;c
   else if(k.startsWith('end:'))palEnd(p,k.slice(4),'end');
   else if(k.startsWith('fxdel:'))await palFixDel(p,k.slice(6));
   else if(k.startsWith('sel:'))await palSelAct(p,k.slice(4));
+  else if(k.startsWith('amb:ren:')){const n=await uiAsk({title:'Renombrar el ambiente',input:{label:'Nombre',required:true,value:ambR.n},ok:'Guardar'});if(n&&String(n).trim()!==ambR.n)await palFixAdd(p,{k:'ambRen',x:ambR.x,y:ambR.y,a:String(n).trim().slice(0,60)},'Ambiente renombrado')}
+  else if(k.startsWith('amb:del:')){if(!await uiAsk({title:`¿Quitar el ambiente «${ambR.n||'sin nombre'}»?`,text:'Deja de contarse como ambiente de esta planta. Se puede deshacer en «Correcciones».',ok:'Quitar',tone:'warn'}))return;await palFixAdd(p,{k:'ambDel',x:ambR.x,y:ambR.y,n:ambR.n},'Ambiente quitado')}
   else if(k==='undo'){if(!await uiAsk({title:'¿Volver a revisar este plano?',tone:'warn',text:'Lo que ya lo usa sigue igual, pero no se podrá vincular de nuevo hasta alistarlo.'+(p.ok&&p.ok.malla?' Este plano fija la malla de ejes: el próximo que se aliste será la nueva malla.':''),ok:'Volver a revisar'}))return;await palSet(p,{ok:firebase.firestore.FieldValue.delete()},'El plano volvió a «Por alistar».')}
   else if(k==='malla')await palMallaSet(p)}
 /** editar el contorno de un plano ya listo lo devuelve a «Por alistar»: se avisa antes */
@@ -240,7 +258,8 @@ function palPick(C,w,tol){const R=C.R;const dl=(p)=>{const dx=p[2]-p[0],dy=p[3]-
   for(const t of R.tx)if(Math.hypot(t.x-w.x,t.y-w.y)<tol)return{k:'tx',t:t.t,x:t.x,y:t.y};
   for(const q of R.col)if(palPip(q.p,w.x,w.y))return{k:'col',p:q.p,x:w.x,y:w.y,add:!!q.add};
   if(raw)return raw;
-  for(const a of R.amb||[])if(palPip(a.p,w.x,w.y))return{k:'amb',p:a.p,n:a.n,x:w.x,y:w.y};
+  /* ambientes uno dentro de otro (un SH en una sala): gana el más chico */
+  const am=(R.amb||[]).filter(a=>palPip(a.p,w.x,w.y)).sort((a,b)=>palArea(a.p)-palArea(b.p))[0];if(am)return{k:'amb',p:am.p,n:am.n,x:w.x,y:w.y};
   return null}
 function palTap(cx,cy){const p=palP();if(!PAL.on||!p||!PAL.C||PLM.on)return;const v=PLV.tv;const w=v.toWorld(cx,cy);const a=v.toScreen(0,0),b=v.toScreen(1,0);const k=Math.hypot(b.x-a.x,b.y-a.y)||1;
   PAL.sel=palPick(PAL.C,w,14/k);PAL.prev=null;palRender()}

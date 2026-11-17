@@ -392,6 +392,27 @@ test('planos DXF: el grosor de las líneas sale de la escala del plano (textos d
 
 /* 11-11-2026 (decidido con el dueño): la arquitectura se calibra con los ejes de estructura y usa esos ejes; el dueño revisa los ambientes
    identificados (no se comparan con el lookahead); el contorno es opcional; sus ejes girados no bloquean. */
+test('alistar › lista de ambientes: cada fila se corrige sola aunque un ambiente esté dentro de otro (puras)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(t => {
+    const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G)));
+    const p = { id: 'ARQ_X', cod: 'A03', disc: 'ARQ', tipo: 'Planta', pisoId: 'P3', rev: 1, mm: S.mm, dxf: { k: S.k, mpp: S.mpp, lay, src: S.src } };
+    /* una sala de 100×100 px con un SH de 20×20 justo en su centro */
+    const base = [{ k: 'ambAdd', p: [0, 0, 100, 0, 100, 100, 0, 100], a: 'SALA' }, { k: 'ambAdd', p: [40, 40, 60, 40, 60, 60, 40, 60], a: 'SH' }];
+    const chk = L => dxfCheck({ p, G, lay, mpp: S.mpp, malla: null, ctn: null, fix: { rev: 1, L } });
+    const rows = chk(base).it.find(x => x.id === 'amb').amb; const row = n => rows.find(x => x.n === n);
+    const nm = L => chk(L).R.amb.filter(a => a.add).map(a => a.n).sort().join(',');
+    const sala = row('SALA'), sh = row('SH');
+    return { n: rows.length, salaFuera: !(sala.x > 40 && sala.x < 60 && sala.y > 40 && sala.y < 60),
+      renSala: nm([...base, { k: 'ambRen', x: sala.x, y: sala.y, a: 'AULA' }]), renSh: nm([...base, { k: 'ambRen', x: sh.x, y: sh.y, a: 'SSHH' }]),
+      delSh: nm([...base, { k: 'ambDel', x: sh.x, y: sh.y }]) };
+  }, dxfDemo());
+  expect(r.n).toBeGreaterThanOrEqual(2);
+  expect(r.salaFuera).toBe(true);   /* el punto de la sala no cae dentro del SH */
+  expect(r.renSala).toBe('AULA,SH'); expect(r.renSh).toBe('SALA,SSHH'); expect(r.delSh).toBe('SALA');
+  expect(errors).toEqual([]);
+});
+
 test('alistar › arquitectura: se calibra con los ejes de estructura, el contorno es opcional y los ejes girados no bloquean', async ({ page }) => {
   const errors = await openApp(page, { as: 'admin', editar: false });
   const r = await page.evaluate(([m, gir]) => {
