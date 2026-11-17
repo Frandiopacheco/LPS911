@@ -4,12 +4,14 @@
 // ignora, caras de la viga del eje 2 (0.30), un rótulo de sección, un achurado sólido, una polilínea con un arco (bulge), un texto de varios
 // renglones y un objeto lejano que queda fuera de la lámina.
 // k: unidades por metro (100 = centímetros). layout: el plano en una presentación A3 (mm) con una ventana al modelo a 1/100.
-export function dxfDemo({ k = 1, layout = false, girado = false, sinCol = false } = {}) {
+export function dxfDemo({ k = 1, layout = false, girado = false, sinCol = false, colLineas = false } = {}) {
   const o = []; const P = (c, v) => o.push(String(c), String(v)); const n = v => Math.round(v * k * 1e6) / 1e6;
   const ent = (t, l, f, ps) => { P(0, t); P(8, l); if (ps) P(67, 1); f(); };
   const line = (l, x1, y1, x2, y2) => ent('LINE', l, () => { P(10, n(x1)); P(20, n(y1)); P(11, n(x2)); P(21, n(y2)); });
   const poly = (l, pts, cl = true, bul = []) => ent('LWPOLYLINE', l, () => { P(90, pts.length); P(70, cl ? 1 : 0); pts.forEach(([x, y], i) => { P(10, n(x)); P(20, n(y)); if (bul[i]) P(42, bul[i]); }); });
   const rect = (l, x0, y0, x1, y1) => poly(l, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+  /* colLineas: las columnas de 0.40 «explotadas» en 4 líneas sueltas (como cuando el proyectista no usa polilíneas) */
+  const colR = (l, x0, y0, x1, y1) => colLineas ? [[x0, y0, x1, y0], [x1, y0, x1, y1], [x1, y1, x0, y1], [x0, y1, x0, y0]].forEach(q => line(l, ...q)) : rect(l, x0, y0, x1, y1);
   const text = (l, s, x, y, h = 0.25) => ent('TEXT', l, () => { P(10, n(x)); P(20, n(y)); P(40, n(h)); P(1, s); P(72, 1); P(11, n(x)); P(21, n(y)); P(73, 2); });
   const circ = (l, x, y, r) => ent('CIRCLE', l, () => { P(10, n(x)); P(20, n(y)); P(40, n(r)); });
   P(0, 'SECTION'); P(2, 'HEADER'); P(9, '$ACADVER'); P(1, 'AC1032'); P(9, '$INSUNITS'); P(70, 1); P(0, 'ENDSEC');
@@ -29,7 +31,7 @@ export function dxfDemo({ k = 1, layout = false, girado = false, sinCol = false 
   P(0, 'SECTION'); P(2, 'ENTITIES');
   ent('INSERT', 'EST-EJES', () => { P(2, 'EJES'); P(10, n(1)); P(20, n(1)); });
   rect('EST-COLUMNAS', 1.95, 12.8, 2.45, 13.2);
-  [6, 10, 14, 18].filter(x => !(sinCol && x === 18)).forEach(x =>   /* sinCol: la revisión sin la columna E */ rect('EST-COLUMNAS', x - 0.2, 12.8, x + 0.2, 13.2));
+  [6, 10, 14, 18].filter(x => !(sinCol && x === 18)).forEach(x =>   /* sinCol: la revisión sin la columna E */ colR('EST-COLUMNAS', x - 0.2, 12.8, x + 0.2, 13.2));
   rect('EST-COLUMNAS', 3.9, 12.9, 4.15, 13.15); /* cuadradito de 0.25: se ignora */
   line('EST-TRAZO', 2.45, 12.85, 17.8, 12.85); line('EST-TRAZO', 2.45, 13.15, 17.8, 13.15);
   text('EST-TEXTOS', '(.30x.60)', 4, 13.0); text('EST-TEXTOS', '3/8"%%C@.20', 8, 12);

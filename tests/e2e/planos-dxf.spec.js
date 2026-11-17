@@ -836,3 +836,75 @@ test('alistar rápido: sin recalcular en cada toque, «Revisé lo demás» y «S
   await expect(panel.locator('[data-pal="next"]')).toContainText('Siguiente: E03');
   expect(errors).toEqual([]);
 });
+
+/* 17-11-2026, etapa 2 de «Alistar mejorado» (planos-forma.js): columnas y vigas por su forma aunque el proyectista no las separe en capas;
+   se sugieren agrupadas y, al aceptarlas, quedan como corrección por regla (un plano listo no cambia solo) */
+test('alistar › por la forma: columnas con líneas sueltas o en otra capa, vigas como rectángulos y caras en otra capa (puras)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(t => {
+    const S = dxfToPx(dxfSheet(dxfParse(t))); const G0 = dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G0))); const mpp = S.mpp;
+    const R0 = dxfRoles(G0, lay, mpp); const cols = R0.col.map(q => q.p);
+    const cp = G => ({ ...G, L: G.L.map(o => ({ ...o, l: o.l.slice(), p: o.p.map(q => q.slice()), c: o.c.slice(), t: o.t.slice(), d: (o.d || []).slice() })) });
+    const Lof = (G, n) => { let o = G.L.find(x => x.n === n); if (!o) G.L.push(o = { n, l: [], p: [], c: [], t: [], d: [] }); return o; };
+    const isCol = q => cols.some(P => P.length === q.length - 1 && P.every((v, i) => Math.abs(v - q[i + 1]) < 0.01));
+    const sug = (G, L) => dxfSug(G, lay, mpp, dxfRolesFix(G, lay, mpp, { L: L || [] }), { L: L || [] });
+    const out = { base: R0.col.length, sug0: sug(G0).map(s => s.k) };
+    /* 1. columnas explotadas en 4 líneas */
+    const G1 = cp(G0); const c1 = Lof(G1, lay.col); c1.p = c1.p.filter(q => !isCol(q)); for (const P of cols) for (const s of dxfEdges(P)) c1.l.push(...s);
+    const s1 = sug(G1); const f1 = s1.find(s => s.k === 'colLin');
+    out.lin = { antes: dxfRolesFix(G1, lay, mpp, null).col.length, sug: f1 && f1.n, despues: dxfRolesFix(G1, lay, mpp, { L: [{ k: 'colLin', l: lay.col }] }).col.length,
+      ln: dxfRolesFix(G1, lay, mpp, { L: [{ k: 'colLin', l: lay.col }] }).ln.length < dxfRolesFix(G1, lay, mpp, null).ln.length, otra: sug(G1, [{ k: 'colLin', l: lay.col }]).some(s => s.k === 'colLin') };
+    /* 2. columnas solo en otra capa (como un achurado) */
+    const G2 = cp(G0); const c2 = Lof(G2, lay.col); c2.p = c2.p.filter(q => !isCol(q)); Lof(G2, 'X-ACH').p.push(...cols.map(P => [1, ...P]));
+    const f2 = sug(G2).find(s => s.k === 'colLay' && s.l === 'X-ACH');
+    out.lay = { sug: f2 && f2.n, despues: dxfRolesFix(G2, lay, mpp, { L: [{ k: 'colLay', l: 'X-ACH' }] }).col.length };
+    /* 3. vigas como rectángulos en la capa de columnas: de una columna a la siguiente, 0,30 m de ancho */
+    const G3 = cp(G0); const c3 = Lof(G3, lay.col); const cen = cols.map(dxfCen).sort((a, b) => a.x - b.x); const hw = 0.15 / mpp;
+    for (let i = 1; i < cen.length - 1; i++) { const a = cen[i], b = cen[i + 1], x0 = a.x + 0.2 / mpp, x1 = b.x - 0.2 / mpp; c3.p.push([1, x0, a.y - hw, x1, a.y - hw, x1, a.y + hw, x0, a.y + hw]); }
+    const s3 = sug(G3); const f3 = s3.find(s => s.k === 'clsVig'); const R3 = dxfRolesFix(G3, lay, mpp, { L: [{ k: 'clsVig', w: f3 && f3.w, h: f3 && f3.h }] });
+    out.vig = { antes: dxfRolesFix(G3, lay, mpp, null).col.length, sug: f3 && f3.n, w: f3 && f3.w, despues: R3.col.length, ln: R3.ln.length - dxfRolesFix(G3, lay, mpp, null).ln.length };
+    /* 4. caras de vigas en una capa que no está elegida: 4 pares a 0,30 m */
+    const G4 = cp(G0); const v4 = Lof(G4, 'X-VIGAS'); const y0 = cen[0].y;
+    for (let k = 0; k < 4; k++) { const y = y0 - (2 + k) / mpp, xa = cen[1].x, xb = cen[2].x; v4.l.push(xa, y, xb, y, xa, y + 0.3 / mpp, xb, y + 0.3 / mpp); }
+    const f4 = sug(G4).find(s => s.k === 'vigLay' && s.l === 'X-VIGAS');
+    out.cara = { sug: f4 && f4.n, mas: dxfRolesFix(G4, lay, mpp, { L: [{ k: 'vigLay', l: 'X-VIGAS' }] }).ln.length - R0.ln.length };
+    out.txt = [palFixTxt({ k: 'colLay', l: 'X-ACH' }, mpp), palFixTxt({ k: 'clsVig', w: 0.3, h: 3.6 }, mpp)];
+    /* la regla pasa a la revisión siguiente tal cual (no tiene coordenadas) */
+    const C = palFixCarry({ rev: 1, L: [{ id: 'r1', k: 'colLay', l: 'X-ACH' }] }, { a: 1, b: 0, e: 5, f: 5 }, 1, G2, { lay, mpp });
+    out.carry = C.L.map(f => f.k + ':' + f.l);
+    return out;
+  }, dxfDemo());
+  expect(r.sug0).toEqual([]);   /* el plano bien separado en capas no sugiere nada */
+  expect(r.lin).toEqual({ antes: 0, sug: 5, despues: 5, ln: true, otra: false });
+  expect(r.lay).toEqual({ sug: 5, despues: 5 });
+  expect(r.vig.antes).toBe(8); expect(r.vig.sug).toBe(3); expect(r.vig.w).toBe(0.3); expect(r.vig.despues).toBe(5); expect(r.vig.ln).toBe(3 * 16);
+  expect(r.cara.sug).toBeGreaterThanOrEqual(3); expect(r.cara.mas).toBe(8 * 4);
+  expect(r.txt).toEqual(['Columnas de la capa X-ACH', 'Rectángulos de 0.30×3.60 m tratados como vigas']);
+  expect(r.carry).toEqual(['colLay:X-ACH']);
+  expect(errors).toEqual([]);
+});
+
+test('alistar › por la forma en el visor: la sugerencia se ve, se aplica como corrección y se deshace', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  await page.setInputFiles('#plfile', { name: '2459243-PTSA-XXX-P03-P2D-EST-E05-E03_ENCOFRADO TERCER PISO.dxf', mimeType: 'application/dxf', buffer: Buffer.from(dxfDemo({ colLineas: true })) });
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await page.click('#tabs [data-tab="pbib"]');
+  await page.click('.plc[data-pl="EST_E03"]');
+  await page.click('#plv [data-pv="alis"]');
+  const panel = page.locator('.plalp');
+  await expect(panel.locator('.palsug')).toContainText('4 columna(s) dibujadas con líneas sueltas');
+  await panel.locator('[data-pal="sug:0"]').click();
+  await expect.poll(() => page.evaluate(() => ((PLB.get('EST_E03').fix || {}).L || []).map(f => f.k + ':' + f.l).join())).toBe('colLin:EST-COLUMNAS');
+  await expect(panel.locator('.palsug')).toHaveCount(0);
+  await expect(panel.locator('.palit', { hasText: /\d+ columnas:/ })).toContainText('5 columnas');
+  await panel.locator('.palfx summary').click();
+  await expect(panel.locator('.palfx')).toContainText('Columnas con líneas sueltas de la capa EST-COLUMNAS');
+  await panel.locator('.palfx [data-pal^="fxdel:"]').click();
+  await expect(panel.locator('.palsug')).toBeVisible();
+  expect(errors).toEqual([]);
+});

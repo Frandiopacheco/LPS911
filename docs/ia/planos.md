@@ -231,7 +231,14 @@ El dueño pidió una interfaz menos básica, pensada para varios pisos y tipos d
    - **«Siguiente: <código> ›»** (`palNextOf`, `palNext`): el próximo plano por alistar (por nivel, especialidad y código) sin cerrar el visor ni Alistar.
    - Corregido: al terminar de bajar la geometría, Alistar la buscaba con la clave equivocada (`sp.base` en vez de `plGeoKey`) y quedaba en «Cargando…» hasta el siguiente cambio de la base.
    - Prueba: `planos-dxf.spec.js` «alistar rápido…».
-2. Columnas y vigas aunque compartan capa: detectores puros con cuadrícula espacial, sugerencias agrupadas como corrección por regla, y guardar en la geometría de los DXF nuevos la marca de achurado, el nombre del bloque y el color (sin migrar los ya cargados).
+2. ✓ (17-11-2026) **Columnas y vigas aunque compartan capa** (`web/js/planos-forma.js`). En estructuras, el ítem **«Sugerencias del dibujo»** (⚠, entra en «Revisé lo demás») lista lo que la forma sugiere; «Aplicar» lo guarda como **corrección por regla** en `fix.L` (sin coordenadas: pasa tal cual a la revisión siguiente; se deshace en «Correcciones»). Las reglas las aplica `dxfRolesFix` → `dxfRegla`:
+   - `colLin {l}`: rectángulos de tamaño de columna (0,20–1,50 m) armados con **líneas sueltas** de la capa de columnas (`dxfRings`: cuatro esquinas unidas por segmentos, grilla de 1 cm); sus bordes dejan de contarse como caras. Se sugiere si hay ≥ 2 en cruces de ejes.
+   - `colLay {l}`: figuras cerradas de tamaño de columna de **otra capa** (p. ej. el achurado), ≥ 2 y al menos la mitad en cruces de ejes (≤ 1 m).
+   - `clsVig {w,h}`: rectángulos de la capa de columnas de ≤ 0,60 × ≥ 1,50 m (largo ≥ 4 × ancho) que **tocan columnas en sus dos extremos** (`dxfEsViga`): son vigas; salen de las columnas y sus bordes pasan a caras. Las placas (sobre un eje, sin columnas en las puntas) no se sugieren.
+   - `vigLay {l}`: una capa no elegida como caras con ≥ 3 **pares de líneas paralelas** horizontales o verticales a 0,15–0,60 m que se solapan ≥ 1 m (`dxfPares`): sus líneas pasan a caras.
+   - Todo dentro de los ejes + 1,5 m (`dxfInR`), sin duplicar columnas que ya estaban. Un plano bien separado en capas no sugiere nada. `dxfSug` corre dentro de la verificación (en caché por `palCheck`).
+   - Pendiente: guardar en la geometría de los DXF nuevos la marca de achurado, el nombre del bloque y el color (más pistas; sin migrar los ya cargados); muros y placas en la etapa 4 del plan de «Planta digitalizada».
+   - Pruebas: `planos-dxf.spec.js` «por la forma…» (puras, con variantes del plano de prueba; `dxfDemo({colLineas:true})`) y «…en el visor».
 3. Tablero de digitalización: niveles × EST/ARQ con el estado de cada plano, verificación en segundo plano (`requestIdleCallback`), «Copiar el alistado de…».
 4. Carga de varios DXF sin bloquear la pantalla (Web Worker; ojo con `check.mjs`, `ASSETS` y huellas de `build.mjs`) y dividir un DXF con varias plantas.
 
