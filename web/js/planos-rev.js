@@ -46,6 +46,9 @@ function palRevFit(G0,d0,fix0,G1,d1){if(!G0||!G1||!d0||!d1)return{err:'Falta la 
   return{T:{a:T.a,b:T.b,e:T.e,f:T.f},n:I.length,de:P.length,res:Math.round(w.d*d1.mpp*1000)/1000}}
 const plr2=v=>Math.round(v*100)/100;
 const palTP=(T,P)=>{const o=[];for(let i=0;i+1<P.length;i+=2){const q=simAp(T,{x:P[i],y:P[i+1]});o.push(plr2(q.x),plr2(q.y))}return o};
+/** una corrección sobre una línea sin nombre (descartarla o nombrarla eje) se pega a esa línea del dibujo nuevo (Alistar la reconoce a 1 px) */
+function palLinSnap(g,S,tol){const d=(p,q)=>Math.max(Math.abs(p[0]-q[0]),Math.abs(p[1]-q[1]),Math.abs(p[2]-q[2]),Math.abs(p[3]-q[3]));let b=null,bd=tol;
+  for(const l of S||[]){const v=Math.min(d(l.p,g.p),d(l.p,[g.p[2],g.p[3],g.p[0],g.p[1]]));if(v<bd){bd=v;b=l}}if(b)g.p=b.p.slice();return!!b}
 /** correcciones de la revisión anterior llevadas a la nueva (T) y verificadas contra su dibujo (G1, d1) → {L, no:[{k, t, why}]} */
 function palFixCarry(fix0,T,rv0,G1,d1){const L0=(fix0&&fix0.L)||[];const mpp=d1.mpp;const R=dxfRoles(G1,d1.lay||{},mpp);const ej=new Set(R.ej.map(e=>e.n));
   const amb=R.amb.slice();const L=[],no=[];const skip=(f,why)=>no.push({k:f.k,t:palFixTxt(f,mpp),why});const tol=0.05/mpp;
@@ -55,7 +58,8 @@ function palFixCarry(fix0,T,rv0,G1,d1){const L0=(fix0&&fix0.L)||[];const mpp=d1.
     switch(f.k){
       case'ejRen':if(!ej.has(f.n)){skip(f,ej.has(f.a)?'ya viene con ese nombre':'el eje ya no está');continue}ej.delete(f.n);ej.add(f.a);break;
       case'ejDel':case'ejSet':if(!ej.has(f.n)){skip(f,'el eje ya no está');continue}if(f.k==='ejDel')ej.delete(f.n);break;
-      case'ejAdd':if(!f.lin&&ej.has(f.n)){skip(f,'ya viene en el plano');continue}ej.add(f.n);break;
+      case'ejAdd':if(!f.lin&&ej.has(f.n)){skip(f,'ya viene en el plano');continue}if(f.lin&&!palLinSnap(g,R.S,tol)){skip(f,'la línea ya no está');continue}ej.add(f.n);break;
+      case'linIgn':if(!palLinSnap(g,R.S,tol)){skip(f,'la línea ya no está');continue}break;
       case'colDel':if(!R.col.some(q=>dxfPip(q.p,g.x,g.y))){skip(f,'la columna ya no está');continue}break;
       case'colDelSz':if(!R.col.some(q=>{const z=dxfSz(q.p,mpp);return Math.abs(z[0]-f.w)<0.006&&Math.abs(z[1]-f.h)<0.006})){skip(f,'ya no hay columnas de ese tamaño');continue}break;
       case'colAdd':if(cen&&R.col.some(q=>dxfPip(q.p,cen.x,cen.y))){skip(f,'ya viene en el plano');continue}break;
@@ -77,11 +81,14 @@ function plAmbScale(o,f,ox,oy){if(!o||!Array.isArray(o.L))return o;return{...o,L
 function palCarrySrc(p){return(p.revs||[]).slice().reverse().find(r=>r.dxf&&(r.h||(r.fix&&r.fix.L&&r.fix.L.length)))||null}
 /** ya tiene algo propio en la revisión vigente (no se pasa encima) */
 const palHasOwn=d=>{const rv=d.rev||1;return['fix','ctn','amb'].some(k=>d[k]&&d[k].rev===rv)};
+/** ya está listo: no se le pasa nada encima (quedaría «Listo» con correcciones que nadie revisó) */
+const palOkRev=d=>!!(d.ok&&d.ok.rev===(d.rev||1));
 /** pasa a la revisión vigente del plano `id` lo de Alistar de la anterior. o.same = {data} (otro DXF en la misma revisión: mismo PDF, mismas
     coordenadas). Escribe en una transacción y no hace nada si la revisión ya tiene correcciones propias. → {n, no, ctn, amb, de} o {err} o {skip} */
 async function palCarry(id,o){o=o||{};const ref=fcol('plb').doc(id);const s=await ref.get();if(!s.exists)return{skip:1};const p={id,...s.data()};
-  if(!p.dxf||p.eto||palHasOwn(p))return{skip:1};const rv=p.rev||1;let H,T,rv0,G1;
+  if(!p.dxf||p.eto||palHasOwn(p)||palOkRev(p))return{skip:1};const rv=p.rev||1;let H,T,rv0,G1;
   try{G1=await plGeoGet(plSpecOf(p));}catch(e){return{err:'No se pudo leer la geometría del DXF nuevo.'}}if(!G1)return{err:'No se pudo leer la geometría del DXF nuevo.'};
+  if(!o.same&&p.dxfH&&p.dxfH.rev===rv){try{const d=await plHistGet(p.dxfH.h);if(d)o={...o,same:d}}catch(e){return{err:'No se pudo leer la copia del DXF anterior.'}}}
   if(o.same){H=o.same;rv0=rv;T={a:1,b:0,e:0,f:0}}
   else{const r=palCarrySrc(p);if(!r)return{skip:1};rv0=r.rev;try{H=await plRevData(r)}catch(e){return{err:'No se pudo leer el historial de la Rev. '+r.rev}}if(!H)return{skip:1};
     let G0;try{G0=await plGeoGet(plSpecOf(p,r.rev))}catch(e){G0=null}
@@ -94,7 +101,7 @@ async function palCarry(id,o){o=o||{};const ref=fcol('plb').doc(id);const s=awai
   if(fx.L.length||fx.no.length)u.fix={rev:rv,L:fx.L,de};if(ct)u.ctn=ct;
   if(reg&&reg.length)u.amb={rev:rv,de:{rev:rv0,...(o.same?{dxf:1}:{})},t:NOW(),L:reg.map(x=>{const q=simAp(T,{x:x.x,y:x.y});return{...x,x:plr2(q.x),y:plr2(q.y)}})};
   if(!Object.keys(u).length)return{skip:1};
-  try{await db.runTransaction(async tx=>{const sn=await tx.get(ref);const d=sn.data();if(!d||(d.rev||1)!==rv||palHasOwn(d))throw new Error('skip');tx.update(ref,u)})}
+  try{await db.runTransaction(async tx=>{const sn=await tx.get(ref);const d=sn.data();if(!d||(d.rev||1)!==rv||palHasOwn(d)||palOkRev(d))throw new Error('skip');tx.update(ref,u)})}
   catch(e){if(e.message==='skip')return{skip:1};return{err:'No se pudo guardar: '+(e.code||e.message)}}
   return{n:fx.L.length,no:fx.no,ctn:!!ct,amb:u.amb?u.amb.L.length:0,de:rv0}}
 /** aviso al terminar de pasar (carga masiva o botón) */
@@ -156,10 +163,12 @@ async function palRevClick(p,k,b){if(!plAlEd(p)&&!k.startsWith('amd:go:'))return
 /** «Es el mismo que…»: el ambiente que ya no está toma el lugar de uno nuevo (conserva su código y lo vinculado) */
 async function palRevSame(p,i,j){const d=PAL.dif;const r=d&&d.rows[i],o=d&&d.rows[j];if(!r||!o||!plAlEd(p))return;await palAmdSet(p,[{k:'same',id:r.id,x:plr2(o.x),y:plr2(o.y)}])}
 /** registro de ambientes al marcar listo: los que siguen conservan su id; los nuevos, uno nuevo */
-function palAmbSave(p,R,mpp){const amb=R.amb||[];if(!amb.length&&!palAmbOf(p))return null;const reg=palAmbOf(p);const{ids}=palAmbMatch(reg?reg.L:[],amb,reg&&reg.de?palAmd(p):null);
+function palAmbSave(p,R,mpp){const amb=R.amb||[];if(!amb.length)return null;   /* sin ambientes no se toca el registro (no se pierden los ids) */const reg=palAmbOf(p);const{ids}=palAmbMatch(reg?reg.L:[],amb,reg&&reg.de?palAmd(p):null);
   return{rev:p.rev||1,t:NOW(),L:amb.map(q=>{const ip=palInPt(q.p,amb)||dxfCen(q.p);return{id:ids.get(q)||uid('pa'),n:q.n||'',a:Math.round(palArea(q.p)*mpp*mpp*100)/100,x:plr2(ip.x),y:plr2(ip.y)}})}}
 /** ids de los ambientes de la revisión vigente (para plDxfLam): Map(ambiente → id) o null */
 function plAmbIds(p,sp,amb){if(!sp||!sp.cur)return null;const reg=palAmbOf(p);if(!reg||reg.de)return null;return palAmbMatch(reg.L,amb,null).ids}
 /** aviso en Alistar: una revisión sin nada propio cuya anterior tiene correcciones */
-function palCarryHtml(p,ed){if(!ed||palHasOwn(p))return'';const r=palCarrySrc(p);if(!r)return'';
+function palCarryHtml(p,ed){if(!ed||palHasOwn(p)||palOkRev(p))return'';
+  if(p.dxfH&&p.dxfH.rev===(p.rev||1))return`<div class="callout palcar"><b>El DXF anterior de esta revisión tenía correcciones de Alistar.</b> Pásalas a este DXF (mismas coordenadas; se comparan con el dibujo nuevo). <button type="button" class="ib" data-pal="carry">Pasar las correcciones del DXF anterior</button></div>`;
+  const r=palCarrySrc(p);if(!r)return'';
   return`<div class="callout palcar"><b>La Rev. ${r.rev} tiene correcciones de Alistar.</b> Pásalas a esta revisión (se llevan por los ejes y se comparan con el dibujo nuevo). <button type="button" class="ib" data-pal="carry">Pasar las correcciones de la Rev. ${r.rev}</button></div>`}

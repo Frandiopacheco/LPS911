@@ -523,12 +523,15 @@ function dxfEscOf(mmPapel,G){if(!G||!G.mpp||!G.W||!(mmPapel>0))return 0;const e=
 /** carga: el DXF se agrega como datos de la revisión vigente de un plano en PDF (no hace revisión nueva; la imagen sigue siendo el PDF) */
 async function plDxfAttach(it,P,say){const dx=await plDxfPrep(it,say);say('Calzando el DXF con el PDF…');const G0=JSON.parse(await dxfUnGz(dx.geo.b));const M=await plDxfMap(P,dx.W,dx.H,dx.crop,G0);const{f,ox,oy}=M;
   const G=dxfGeoScale(G0,f,ox,oy,P.W,P.H);const gz=await dxfGz(JSON.stringify(G),'application/json');
-  say('Subiendo el DXF y su geometría…');if(dx.orig.z)await plPut(`${P.base}/orig.dxf.gz`,dx.orig.b,dx.orig.type);await plPut(`${P.base}/${plGeoName({gz:gz.z})}`,gz.b,gz.type);
+  /* otro DXF para la misma revisión: archivo de geometría con otro nombre (gv), así ningún equipo sigue usando el anterior de su caché */
+  const gv=P.dxf?NOW().toString(36):0;
+  say('Subiendo el DXF y su geometría…');if(dx.orig.z)await plPut(`${P.base}/orig.dxf.gz`,dx.orig.b,dx.orig.type);await plPut(`${P.base}/${plGeoName({gz:gz.z,gv})}`,gz.b,gz.type);
   const D=firebase.firestore.FieldValue.delete();const mpp=dx.meta.mpp/f;
   /* otro DXF en la misma revisión: lo de Alistar del anterior se copia al historial (antes se perdía) y pasa al nuevo con las mismas
      coordenadas (el PDF es el mismo); una revisión nueva del PDF toma lo de la última revisión con correcciones, por los ejes (planos-rev.js) */
-  const same=plHistOf(P);const B=db.batch();if(same)plHistPut(B,P,'dxf');
-  B.update(plCol(P).doc(P.id),{dxf:{...dx.meta,...plMapMeta(M),mpp,gz:gz.z,sobre:'pdf',dfname:plItName(it),dfsize:it.file.size,dts:NOW(),dby:me.email},cal:{mpp,rev:P.rev||1,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()},ok:D,fix:D,alc:D,ctn:D,amb:D,amd:D});await B.commit();
+  /* `dxfH` enlaza la copia: si el traspaso falla, Alistar ofrece reintentarlo (planos-rev.js palCarryHtml) */
+  const same=plHistOf(P);const B=db.batch();const hid=same?plHistPut(B,P,'dxf'):'';
+  B.update(plCol(P).doc(P.id),plMallaKeep(P,{dxf:{...dx.meta,...plMapMeta(M),mpp,gz:gz.z,...(gv?{gv}:{}),sobre:'pdf',dfname:plItName(it),dfsize:it.file.size,dts:NOW(),dby:me.email},cal:{mpp,rev:P.rev||1,dxf:1,by:me.email,byN:me.name||me.email,ts:NOW()},ok:D,fix:D,alc:D,ctn:D,amb:D,amd:D,dxfH:hid?{h:hid,rev:P.rev||1}:D}));await B.commit();
   try{const r=await palCarry(P.id,same?{same}:null);const t=palCarryMsg(P.cod,r);if(t){it.carry=t;toast(t)}}catch(e){console.warn('pasar correcciones',e)}
   return{id:P.id,rev:P.rev||1,att:true,mm:P.mm,crop:true,dxf:{...dx.meta,mpp}}}
 /** une un plano solo DXF (o la revisión DXF anterior) con un plano en PDF: la geometría, las capas, las correcciones de Alistar, el contorno y

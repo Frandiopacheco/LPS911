@@ -572,15 +572,17 @@ test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fic
   expect(r.cal).toMatchObject({ dxf: 1, rev: 1 }); expect(r.cal.mpp / (dims.mpp / 2)).toBeCloseTo(1, 2);   /* Medir no pide calibrar */
   expect(r.W).toBe(dims.W * 2);
   /* etapa 3: otro DXF para la misma revisión (mismo PDF): lo de Alistar del anterior va al historial y pasa con las mismas coordenadas */
-  const rp = await page.evaluate(async t => { const P0 = PLB.get('EST_E-03'); const G = await plGeoGet(plSpecOf(P0)); const R = dxfRoles(G, P0.dxf.lay, P0.dxf.mpp); const c = dxfCen(R.col[0].p);
-    await fcol('plb').doc('EST_E-03').update({ fix: { rev: 1, L: [{ id: 'f1', k: 'colDel', x: c.x, y: c.y, by: 'x', t: 1 }] }, ctn: { rev: 1, P: [10, 10, 500, 10, 500, 400, 10, 400], H: [], a: 1 } });
+  /* el DXF nuevo no tiene la columna E: su corrección queda como «ya no aplica» (se compara con el dibujo nuevo, no con el de la caché) */
+  const rp = await page.evaluate(async t => { const P0 = PLB.get('EST_E-03'); const G = await plGeoGet(plSpecOf(P0)); const R = dxfRoles(G, P0.dxf.lay, P0.dxf.mpp);
+    const cs = R.col.map(q => dxfCen(q.p)).sort((a, b) => a.x - b.x); const c = cs[0], e = cs[cs.length - 1];
+    await fcol('plb').doc('EST_E-03').update({ fix: { rev: 1, L: [{ id: 'f1', k: 'colDel', x: c.x, y: c.y, by: 'x', t: 1 }, { id: 'f2', k: 'colDel', x: e.x, y: e.y, by: 'x', t: 1 }] }, ctn: { rev: 1, P: [10, 10, 500, 10, 500, 400, 10, 400], H: [], a: 1 } });
     await new Promise(r => setTimeout(r, 50));
     const it = { file: new File([t], 'E03 v2.dxf', { type: 'application/dxf' }) }; await plDxfAttach(it, PLB.get('EST_E-03'), () => {});
     const d = window.__dbGet('plb', 'EST_E-03'); const H = Object.values(window.__dbAll('plh')).find(h => h.plb === 'EST_E-03');
-    return { h: H && { why: H.why, n: H.fix.L.length, ctn: !!H.ctn }, fix: d.fix && d.fix.L.map(f => [f.de.id, Math.round(f.x - c.x)]), de: d.fix && d.fix.de, ctn: d.ctn && d.ctn.P.slice(0, 2), carry: it.carry || '' }; }, lay);
-  expect(rp.h).toEqual({ why: 'dxf', n: 1, ctn: true });
-  expect(rp.fix).toEqual([['f1', 0]]); expect(rp.de).toMatchObject({ rev: 1, dxf: 1 }); expect(rp.ctn).toEqual([10, 10]);
-  expect(rp.carry).toContain('pasaron 1 corrección(es), el contorno');
+    return { h: H && { why: H.why, n: H.fix.L.length, ctn: !!H.ctn }, fix: d.fix && d.fix.L.map(f => [f.de.id, Math.round(f.x - c.x)]), de: d.fix && d.fix.de, ctn: d.ctn && d.ctn.P.slice(0, 2), carry: it.carry || '', gv: !!d.dxf.gv, dxfH: d.dxfH && d.dxfH.h === Object.keys(window.__dbAll('plh')).find(k => k.startsWith('EST_E-03')) }; }, dxfDemo({ layout: true, sinCol: true }));
+  expect(rp.h).toEqual({ why: 'dxf', n: 2, ctn: true });
+  expect(rp.fix).toEqual([['f1', 0]]); expect(rp.de).toMatchObject({ rev: 1, dxf: 1 }); expect(rp.de.no.map(x => x.why)).toEqual(['la columna ya no está']); expect(rp.ctn).toEqual([10, 10]);
+  expect(rp.carry).toContain('pasaron 1 corrección(es), el contorno'); expect(rp.gv).toBe(true); expect(rp.dxfH).toBe(true);
   /* ficha duplicada de antes: un plano solo DXF (E04) se une con su PDF (E-04) */
   const j = await page.evaluate(async t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
     const base = 'planos/EST_E04.d/r1'; window.__ST.set(base + '/geo.json.gz', z.b);
@@ -778,5 +780,9 @@ test('etapa 3: una revisión nueva guarda lo de Alistar en el historial y lo pas
   await panel.locator('.palfx summary').click();
   await expect(panel.locator('.palfx')).toContainText('de la Rev. 1');
   await expect(panel.locator('[data-pal="carry"]')).toHaveCount(0);   /* ya tiene lo suyo */
+  /* un plano ya listo no recibe nada encima (quedaría «Listo» con correcciones que nadie revisó) */
+  const listo = await page.evaluate(async () => { const X = firebase.firestore.FieldValue.delete(); await fcol('plb').doc('EST_E03').update({ fix: X, ctn: X, amb: X, ok: { rev: 2, t: 1, by: 'x' } });
+    await new Promise(r => setTimeout(r, 50)); const r = await palCarry('EST_E03'); const d = window.__dbGet('plb', 'EST_E03'); return { skip: !!r.skip, fix: !!d.fix, btn: palCarryHtml(PLB.get('EST_E03'), true) }; });
+  expect(listo).toEqual({ skip: true, fix: false, btn: '' });
   expect(errors).toEqual([]);
 });

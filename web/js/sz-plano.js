@@ -33,10 +33,10 @@ function szplRows(pid,src){const v=src.lam.id,mpp=src.d.mpp||0;const L=szTree(pi
   for(const r of rows){const hit=L.find(o=>!used.has(o.a.id)&&szGeo(o.a,v)&&szplPip(szGeo(o.a,v),r.c.x,r.c.y));if(hit){r.a=hit.a;r.by='pos';used.add(hit.a.id)}}
   for(const r of rows){if(r.a||!r.n)continue;const k=szplKey(r.n);const hit=L.find(o=>!used.has(o.a.id)&&szplKey(o.a.name)===k);if(hit){r.a=hit.a;r.by='nom';used.add(hit.a.id)}}
   /* cambió de área en el plano (umbral del dueño: 3 % o 0,5 m²) */
-  for(const r of rows){const g=r.a&&szGeo(r.a,v);if(g&&mpp){const a0=szplArea(g)*mpp*mpp;if(Math.abs(r.m2-a0)>=Math.max(0.03*a0,0.5))r.dif=a0}}
+  for(const r of rows){const g=r.a&&r.a.pl&&r.a.pl.plb===src.p.id&&szGeo(r.a,v);if(g&&mpp){const a0=szplArea(g)*mpp*mpp;if(Math.abs(r.m2-a0)>=Math.max(0.03*a0,0.5))r.dif=a0}}
   return{rows,solo:L.filter(o=>!used.has(o.a.id))}}
 /** el ambiente del lookahead vino de este plano con un id que ya no está en la revisión vigente */
-const szplGone=(a,src)=>!!(a.pl&&a.pl.plb===src.p.id&&a.pl.amb&&!src.d.amb.some(q=>q.id===a.pl.amb));
+const szplGone=(a,src)=>!!(src.d.amb.some(q=>q.id)&&a.pl&&a.pl.plb===src.p.id&&a.pl.amb&&!src.d.amb.some(q=>q.id===a.pl.amb));
 function szplOpen(){const pid=U.piso;if(!pid||!canWrite||CS())return;const src=szplSrc(pid);if(src.err){toast(src.err);return}
   const{rows,solo}=szplRows(pid,src);const secs=szTree(pid).map(o=>o.s);const v=src.lam.id;
   const so=(sel,blank)=>`${blank?`<option value="">${blank}</option>`:''}${secs.map(s=>`<option value="${s.id}"${s.id===sel?' selected':''}>${esc(s.code)} · ${esc(s.name)}</option>`).join('')}`;
