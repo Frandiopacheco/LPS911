@@ -571,6 +571,16 @@ test('PDF + DXF: el DXF se agrega como datos del PDF del mismo código y las fic
   expect(r.mpp / (dims.mpp / 2)).toBeCloseTo(1, 2);   /* la escala exacta llevada a los píxeles del PDF */
   expect(r.cal).toMatchObject({ dxf: 1, rev: 1 }); expect(r.cal.mpp / (dims.mpp / 2)).toBeCloseTo(1, 2);   /* Medir no pide calibrar */
   expect(r.W).toBe(dims.W * 2);
+  /* etapa 3: otro DXF para la misma revisión (mismo PDF): lo de Alistar del anterior va al historial y pasa con las mismas coordenadas */
+  const rp = await page.evaluate(async t => { const P0 = PLB.get('EST_E-03'); const G = await plGeoGet(plSpecOf(P0)); const R = dxfRoles(G, P0.dxf.lay, P0.dxf.mpp); const c = dxfCen(R.col[0].p);
+    await fcol('plb').doc('EST_E-03').update({ fix: { rev: 1, L: [{ id: 'f1', k: 'colDel', x: c.x, y: c.y, by: 'x', t: 1 }] }, ctn: { rev: 1, P: [10, 10, 500, 10, 500, 400, 10, 400], H: [], a: 1 } });
+    await new Promise(r => setTimeout(r, 50));
+    const it = { file: new File([t], 'E03 v2.dxf', { type: 'application/dxf' }) }; await plDxfAttach(it, PLB.get('EST_E-03'), () => {});
+    const d = window.__dbGet('plb', 'EST_E-03'); const H = Object.values(window.__dbAll('plh')).find(h => h.plb === 'EST_E-03');
+    return { h: H && { why: H.why, n: H.fix.L.length, ctn: !!H.ctn }, fix: d.fix && d.fix.L.map(f => [f.de.id, Math.round(f.x - c.x)]), de: d.fix && d.fix.de, ctn: d.ctn && d.ctn.P.slice(0, 2), carry: it.carry || '' }; }, lay);
+  expect(rp.h).toEqual({ why: 'dxf', n: 1, ctn: true });
+  expect(rp.fix).toEqual([['f1', 0]]); expect(rp.de).toMatchObject({ rev: 1, dxf: 1 }); expect(rp.ctn).toEqual([10, 10]);
+  expect(rp.carry).toContain('pasaron 1 corrección(es), el contorno');
   /* ficha duplicada de antes: un plano solo DXF (E04) se une con su PDF (E-04) */
   const j = await page.evaluate(async t => { const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const z = await dxfGz(JSON.stringify(G), 'application/json');
     const base = 'planos/EST_E04.d/r1'; window.__ST.set(base + '/geo.json.gz', z.b);
@@ -667,5 +677,106 @@ test('PDF + DXF: «Recalcular el calce» corrige un DXF ya unido que quedó corr
   expect(Math.abs(r.x)).toBeLessThan(1.5); expect(Math.abs(r.y)).toBeLessThan(1.5);   /* quedó en (40, 28) pt × 2 */
   r.fix.forEach((v, i) => expect(Math.abs(v - [180, 156, 280, 156][i])).toBeLessThan(1.5));   /* la corrección se movió con el DXF (−17 px) */
   expect(r.mpp).toBeCloseTo(1, 3); expect(r.cal).toBeCloseTo(1, 3);
+  expect(errors).toEqual([]);
+});
+
+/* 17-11-2026, etapa 3 de «Planta digitalizada» (planos-rev.js): de una revisión a otra por los ejes, correcciones que pasan solas y se
+   verifican, ambientes con id estable y la lista de diferencias. */
+test('etapa 3: revisión nueva por los ejes, correcciones que pasan y se verifican, ambientes con id y diferencias (puras)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(t => {
+    const S = dxfToPx(dxfSheet(dxfParse(t))); const G0 = dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G0))); const mpp = S.mpp; const d0 = { lay, mpp };
+    /* la Rev. 2: el mismo dibujo 1,2 veces más grande y corrido; y otra girada 90° */
+    const G1 = dxfGeoScale(G0, 1.2, 50, -30), d1 = { lay, mpp: mpp / 1.2 };
+    const rot = G => { const H = G.H, xy = (A, i0) => A.map((v, i) => i < i0 ? v : ((i - i0) % 2 ? A[i - 1] : H - A[i + 1])); return { ...G, W: G.H, H: G.W,
+      L: G.L.map(o => ({ ...o, l: xy(o.l, 0), p: o.p.map(q => xy(q, 1)), c: o.c.map((v, i) => i % 3 === 0 ? H - o.c[i + 1] : i % 3 === 1 ? o.c[i - 1] : v), t: o.t.map(x => [x[0], H - x[2], x[1], x[3], (x[4] || 0) + 90]), d: (o.d || []).map(q => xy(q, 3)) })) }; };
+    const G2 = rot(G0);
+    const F1 = palRevFit(G0, d0, null, G1, d1), F2 = palRevFit(G0, d0, null, G2, d0);
+    const q1 = simAp(F1.T, { x: 100, y: 200 }), q2 = simAp(F2.T, { x: 100, y: 200 });
+    const out = { f1: { k: +Math.hypot(F1.T.a, F1.T.b).toFixed(4), x: +q1.x.toFixed(1), y: +q1.y.toFixed(1), n: F1.n }, f2: { x: +q2.x.toFixed(1), y: +q2.y.toFixed(1), exp: +(G0.H - 200).toFixed(1) } };
+    /* la revisión nueva sin ejes reconocibles (otra capa, otros nombres): no calza y se dice por qué */
+    const R0 = dxfRoles(G0, lay, mpp);
+    out.bad = palRevFit(G0, d0, null, G1, { lay: { ...lay, ej: '' }, mpp: d1.mpp }).err || '';
+    /* correcciones de la Rev. 1 llevadas a la 2 */
+    const col = R0.col[0].p, cc = dxfCen(col);
+    const fix0 = { rev: 1, L: [{ id: 'f1', k: 'colDel', x: cc.x, y: cc.y }, { id: 'f2', k: 'colDel', x: 5, y: 5 }, { id: 'f3', k: 'ejRen', n: R0.ej[0].n, a: 'X9' },
+      { id: 'f4', k: 'ambAdd', p: [0, 0, 100, 0, 100, 100, 0, 100], a: 'SALA' }, { id: 'f5', k: 'ejDel', n: 'NOEXISTE' }] };
+    const C = palFixCarry(fix0, F1.T, 1, G1, d1);
+    const c1 = C.L.find(f => f.de.id === 'f1'); const e1 = simAp(F1.T, cc);
+    out.carry = { n: C.L.length, ids: C.L.map(f => f.de.id).sort().join(','), no: C.no.map(x => x.why).sort().join('|'), x: +(c1.x - e1.x).toFixed(2), sala: C.L.find(f => f.k === 'ambAdd').p.slice(0, 2), de: c1.de.rev, nuevoId: c1.id !== 'f1' };
+    out.colOk = dxfRolesFix(G1, lay, d1.mpp, { L: C.L }).col.length === dxfRoles(G1, lay, d1.mpp).col.length - 1;
+    const ct = palCtnCarry({ rev: 1, P: [0, 0, 100, 0, 100, 100, 0, 100], H: [] }, F1.T, 1, 2, d1.mpp); out.ctn = { de: ct.de, rev: ct.rev, a: +(ct.a / (100 * 100 * mpp * mpp)).toFixed(3) };
+    /* ambientes: registro de la Rev. 1 contra los de la Rev. 2 */
+    const sq = (x, y, w, n) => ({ p: [x, y, x + w, y, x + w, y + w, x, y + w], n });
+    const amb2 = [sq(0, 0, 100, 'SALA'), sq(200, 0, 100, 'COCINA'), sq(400, 0, 140, 'DORMITORIO'), sq(600, 0, 100, 'ESTAR')];
+    const m = 0.05;   /* 100 px = 5 m */
+    const reg = [{ id: 'a1', n: 'SALA', a: 25, x: 50, y: 50 }, { id: 'a2', n: 'COCINITA', a: 25, x: 250, y: 50 }, { id: 'a3', n: 'DORMITORIO', a: 25, x: 450, y: 50 }, { id: 'a4', n: 'BAÑO', a: 4, x: 900, y: 50 }];
+    const p = { id: 'ARQ_X', rev: 2, disc: 'ARQ', dxf: { mpp: m }, amb: { rev: 2, de: { rev: 1 }, L: reg } };
+    const D = palAmbDiff(p, { amb: amb2 }, m); const k = D.rows.map(x => x.k + ':' + (x.id || x.n) + ':' + x.st).sort();
+    out.diff = { k, pend: D.pend };
+    /* decisiones: el BAÑO es el ESTAR, el área del dormitorio está bien */
+    const p2 = { ...p, amd: { rev: 2, L: [{ k: 'same', id: 'a4', x: 650, y: 50 }, { k: 'area', id: 'a3' }] } };
+    const D2 = palAmbDiff(p2, { amb: amb2 }, m); out.diff2 = { pend: D2.pend, k: D2.rows.map(x => x.k + ':' + (x.id || x.n)).sort() };
+    const sv = palAmbSave(p2, { amb: amb2 }, m); out.save = sv.L.map(x => x.n + '=' + x.id).sort();
+    /* «es otro ambiente»: el dormitorio pierde su id y queda como nuevo */
+    const p3 = { ...p2, amd: { rev: 2, L: [...p2.amd.L.filter(x => x.k !== 'area'), { k: 'otro', id: 'a3' }, { k: 'new', x: 450, y: 50 }] } };
+    out.otro = palAmbSave(p3, { amb: amb2 }, m).L.find(x => x.n === 'DORMITORIO').id !== 'a3' && palAmbDiff(p3, { amb: amb2 }, m).pend === 0;
+    out.umbral = [palAreaDif(25, 25.8), palAreaDif(25, 25.7), palAreaDif(100, 102.9), palAreaDif(100, 103)];
+    return out;
+  }, dxfDemo());
+  expect(r.f1.k).toBeCloseTo(1.2, 3); expect(r.f1.x).toBeCloseTo(170, 0); expect(r.f1.y).toBeCloseTo(210, 0); expect(r.f1.n).toBeGreaterThanOrEqual(3);
+  expect(r.f2.x).toBeCloseTo(r.f2.exp, 0); expect(r.f2.y).toBeCloseTo(100, 0);   /* girada 90° */
+  expect(r.bad).toContain('cruce(s) de ejes con el mismo nombre');
+  expect(r.carry.ids).toBe('f1,f3,f4'); expect(r.carry.no).toBe('el eje ya no está|la columna ya no está'); expect(r.carry.x).toBe(0);
+  expect(r.carry.sala).toEqual([50, -30]); expect(r.carry.de).toBe(1); expect(r.carry.nuevoId).toBe(true);
+  expect(r.colOk).toBe(true);
+  expect(r.ctn).toMatchObject({ de: 1, rev: 2 }); expect(r.ctn.a).toBeCloseTo(1, 1);   /* mismo tamaño real (el área se redondea a 0,01 m²) */
+  expect(r.diff.k).toEqual(['area:a3:pend', 'del:a4:pend', 'new:ESTAR:pend', 'ren:a2:ok']); expect(r.diff.pend).toBe(3);
+  expect(r.diff2.pend).toBe(0); expect(r.diff2.k).toEqual(['area:a3', 'ren:a2', 'same:a4']);
+  expect(r.save).toEqual(['COCINA=a2', 'DORMITORIO=a3', 'ESTAR=a4', 'SALA=a1']);
+  expect(r.otro).toBe(true);
+  expect(r.umbral).toEqual([true, false, false, true]);   /* 3 % o 0,5 m², el mayor */
+  expect(errors).toEqual([]);
+});
+
+test('etapa 3: una revisión nueva guarda lo de Alistar en el historial y lo pasa sola a la nueva; también un DXF que reemplaza a otro', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  const file = { name: '2459243-PTSA-XXX-P03-P2D-EST-E05-E03_ENCOFRADO TERCER PISO.dxf', mimeType: 'application/dxf', buffer: Buffer.from(dxfDemo()) };
+  await page.setInputFiles('#plfile', file);
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  /* la Rev. 1 alistada con correcciones, contorno, revisados y ambientes */
+  await page.evaluate(async () => { const p = PLB.get('EST_E03'); const G = await plGeoGet(plSpecOf(p)); const R = dxfRoles(G, p.dxf.lay, p.dxf.mpp); const c = dxfCen(R.col[0].p);
+    await fcol('plb').doc('EST_E03').update({ fix: { rev: 1, L: [{ id: 'f1', k: 'colDel', x: c.x, y: c.y, by: 'x', t: 1 }, { id: 'f2', k: 'colDel', x: 3, y: 3, by: 'x', t: 1 }] },
+      ctn: { rev: 1, P: [10, 10, 500, 10, 500, 400, 10, 400], H: [], a: 1 }, alc: { rev: 1, chk: { enc: { t: 1 } } }, amb: { rev: 1, t: 1, L: [{ id: 'a1', n: 'SALA', a: 9, x: 20, y: 20 }] },
+      ok: { rev: 1, t: 1, by: 'x', chk: { enc: { t: 1 } } } }); });
+  await page.evaluate(() => { PQ.items.length = 0; plqDraw(true); });
+  await page.setInputFiles('#plfile', file);
+  await page.click('#plst0 [data-re="0"]');
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  await expect.poll(() => page.evaluate(() => { const d = window.__dbGet('plb', 'EST_E03'); return d.rev === 2 && !!d.fix; }), { timeout: 20_000 }).toBe(true);
+  const r = await page.evaluate(() => { const d = window.__dbGet('plb', 'EST_E03'); const h = d.revs[0].h; return { h, rv: d.revs[0], H: h && window.__dbGet('plh', h), d }; });
+  expect(r.rv.fix).toBeUndefined(); expect(r.rv.ok.chk).toBeUndefined(); expect(r.rv.ok.rev).toBe(1);   /* la ficha queda liviana */
+  expect(r.H).toMatchObject({ plb: 'EST_E03', rev: 1, why: 'rev' }); expect(r.H.fix.L.length).toBe(2); expect(r.H.ctn.P.length).toBe(8); expect(r.H.alc.chk.enc).toBeTruthy(); expect(r.H.amb.L[0].id).toBe('a1'); expect(r.H.okChk.enc).toBeTruthy();
+  expect(r.d.fix.rev).toBe(2); expect(r.d.fix.L.map(f => f.de.id)).toEqual(['f1']); expect(r.d.fix.de.no.length).toBe(1); expect(r.d.fix.de.rev).toBe(1);
+  expect(r.d.ctn).toMatchObject({ rev: 2, de: 1 }); expect(r.d.amb).toMatchObject({ rev: 2, de: { rev: 1 } }); expect(r.d.amb.L[0].id).toBe('a1');
+  expect(r.d.ok).toBeUndefined();   /* sigue «Por alistar» */
+  /* la revisión anterior se sigue viendo con sus correcciones (desde el historial) */
+  const old = await page.evaluate(async () => { const p = PLB.get('EST_E03'); plSpecOf(p, 1); await plHistGet(p.revs[0].h); const sp = plSpecOf(p, 1); return { n: sp.fix && sp.fix.L.length, hl: sp.hl }; });
+  expect(old).toEqual({ n: 2, hl: false });
+  /* Alistar muestra de dónde vino cada corrección y el contorno a confirmar */
+  await page.click('#tabs [data-tab="pbib"]');
+  await page.click('.plc[data-pl="EST_E03"]');
+  await page.click('#plv [data-pv="alis"]');
+  const panel = page.locator('.plalp');
+  await expect(panel).toContainText('Viene de la Rev. 1');
+  await panel.locator('.palfx summary').click();
+  await expect(panel.locator('.palfx')).toContainText('de la Rev. 1');
+  await expect(panel.locator('[data-pal="carry"]')).toHaveCount(0);   /* ya tiene lo suyo */
   expect(errors).toEqual([]);
 });

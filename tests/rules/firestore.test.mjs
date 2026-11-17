@@ -1394,6 +1394,21 @@ test('planos: la malla de ejes ya fijada solo la cambia o borra el administrador
   await assertSucceeds(updateDoc(doc(adm, 'plb/EST_E19'), { malla: deleteField() }));                    /* «Usar como malla» otro plano */
 });
 
+test('planos: historial de Alistar (plh): lo crean quienes cargan planos, lo lee el equipo y solo el administrador lo cambia o borra (17-11-2026)', async () => {
+  const H = (x) => ({ plb: 'ARQ_AG03', rev: 1, base: 'planos/ARQ_AG03/r1', fix: { rev: 1, L: [] }, t: 1, by: 'ot@obra.pe', ...x });
+  for (const [db, id] of [[user('editor@obra.pe'), 'h1'], [user('ot@obra.pe'), 'h2'], [user(OWNER), 'h3']]) await assertSucceeds(setDoc(doc(db, 'plh/' + id), H()));
+  for (const db of [user('lector@obra.pe'), user('sc@obra.pe'), user('campo@obra.pe'), cap('cap1')]) await assertFails(setDoc(doc(db, 'plh/h9'), H()));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'plh/h8'), H({ rev: '1' })));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'plh/h7'), H({ plb: null })));
+  for (const db of [user('editor@obra.pe'), user('lector@obra.pe'), cap('cap1')]) await assertSucceeds(getDoc(doc(db, 'plh/h1')));
+  for (const db of [user('editor@obra.pe'), user('ot@obra.pe')]) {
+    await assertFails(updateDoc(doc(db, 'plh/h1'), { fix: { rev: 1, L: [{ k: 'x' }] } }));
+    await assertFails(deleteDoc(doc(db, 'plh/h1')));
+  }
+  await assertSucceeds(updateDoc(doc(user(OWNER), 'plh/h1'), { t: 2 }));
+  await assertSucceeds(deleteDoc(doc(user(OWNER), 'plh/h1')));
+});
+
 // ── ETO de subcontratistas (docs/ia/planos.md › ETO) ──
 const ETO = (x) => ({ sc: 'c-gabel', cod: 'M02', disc: 'ETO', rev: 1, base: 'etos/c-gabel/ETO_c-gabel_M02.k1/r1', W: 9000, H: 6400, Z: 4, tit: 'MAMPARAS', ...x });
 test('ETO: el SC solo lee los de su partida; el resto del equipo, todos; carga y borra solo el administrador', async () => {

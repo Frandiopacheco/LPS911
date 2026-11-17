@@ -532,6 +532,14 @@ service cloud.firestore {
       // borrar de verdad: solo el administrador (Planos › ⋯ › Eliminar o «Eliminar los de la lista», pide escribir BORRAR)
       allow delete: if isAdmin();
     }
+    // historial de Alistar por revisión (`plh`, docs/ia/planos.md «Planta digitalizada» etapa 3, 17-11-2026): copia de las correcciones,
+    // el contorno y los ambientes de una revisión que deja de ser la vigente (antes crecía dentro de `plb.revs`, límite 1 MB). Una sola
+    // escritura: lo crean quienes cargan planos; cambiarlo o borrarlo, solo el administrador.
+    match /plh/{id} {
+      allow read: if plaRead();
+      allow create: if (canEdit() || isOT()) && request.resource.data.plb is string && request.resource.data.rev is int;
+      allow update, delete: if isAdmin();
+    }
     // ETO: planos de taller aprobados de los subcontratistas (docs/ia/planos.md › ETO). El SC y su capataz solo leen los de su partida;
     // el resto del equipo que ve Planos, todos. Carga, edita y borra solo el administrador.
     function etoOk() {

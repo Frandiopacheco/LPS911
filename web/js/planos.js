@@ -337,7 +337,9 @@ async function plProcess(it,say){const t0=performance.now();
       if(Array.isArray(d.lk))res.lk=d.lk.map(self);if(Array.isArray(d.lkp))res.lkp=d.lkp.map(self);tx.update(ref,res)});
     Object.assign(old,res);return{id,rev,keep:true,secs:Math.round((performance.now()-t0)/1000),files:total,crop:!!crop,mm}}
   /* recién con todo subido se registra el plano (así nunca aparece uno a medias) */
-  const m=it.m;const prev=old&&!fresh?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||'',...(old.dxf?{dxf:old.dxf}:{}),...(old.ok&&old.ok.rev===(old.rev||1)?{ok:old.ok}:{}),...(old.fix&&old.fix.rev===(old.rev||1)?{fix:old.fix}:{})}:null;
+  const m=it.m;const prev=old&&!fresh?{rev:old.rev||1,base:old.base,W:old.W,H:old.H,Z:old.Z,mm:old.mm||null,crop:old.crop||null,fname:old.fname||'',ts:old.ts||0,byN:old.byN||'',...(old.dxf?{dxf:old.dxf}:{}),...(old.ok&&old.ok.rev===(old.rev||1)?{ok:old.ok}:{})}:null;
+  /* lo de Alistar de la revisión que se va (correcciones, contorno, revisados, ambientes) pasa al historial `plh` en el mismo lote (planos-rev.js) */
+  const B=db.batch();if(old&&!eto&&typeof plHistPut==='function'){const hid=plHistPut(B,old,fresh?'fresh':'rev');if(hid&&prev){prev.h=hid;if(prev.ok)prev.ok=plHistOk(prev.ok,hid)}}
   const doc={cod:m.cod,disc:m.disc,niv:m.niv||'',...plLvDoc(m.pisoId),tipo:m.tipo||'Otro',tit:m.tit||'',eta:m.eta||'',fname:plItName(it),fsize:it.file.size,
     rev,base,W,H,Z,T:PL_T,mm,crop:crop?{x0:+crop.x0.toFixed(2),y0:+crop.y0.toFixed(2),x1:+crop.x1.toFixed(2),y1:+crop.y1.toFixed(2)}:null,sz:bytes,rot:{cod:(it.rot&&it.rot.cod)||'',ok:!!(it.rot&&it.rot.cod&&it.rot.cod===m.cod)},revs:fresh?[]:[...((old&&old.revs)||[]),...(prev?[prev]:[])],
     by:me.email,byN:me.name||me.email,ts:NOW()};if(txm)doc.tx=txm;
@@ -350,7 +352,9 @@ async function plProcess(it,say){const t0=performance.now();
   if(old&&!fresh&&!eto&&old.pd)doc.pd=old.pd;
   /* la malla de ejes del proyecto se queda en el plano aunque llegue otra revisión: solo el administrador la cambia (planos-alistar.js plMalla) */
   if(old&&!eto){const ml=old.malla||(typeof plMallaKeep==='function'&&plMallaKeep(old,{ok:null,revs:null}).malla);if(ml)doc.malla=ml}
-  await fcol(eto?'eto':'plb').doc(id).set(doc);
+  B.set(fcol(eto?'eto':'plb').doc(id),doc);await B.commit();
+  /* DXF que reemplaza una revisión con correcciones: pasan solas a la nueva por los ejes (planos-rev.js); si no calzan, se avisa */
+  if(dx&&old&&!fresh&&!eto&&typeof palCarry==='function'){try{const r=await palCarry(id);const t=palCarryMsg(m.cod,r);if(t){it.carry=t;toast(t)}}catch(e){console.warn('pasar correcciones',e)}}
   /* PDF del mismo código que un plano solo DXF: el DXF pasa a ser los datos de esta revisión (si era otra ficha, se archiva) */
   if(it.join&&!dx){const D=PLB.get(it.join);if(D){const dsp=D.id===id?plSpecOf({...D,revs:doc.revs},prev&&prev.rev):plSpecOf(D);const P={...doc,id};
     try{say('Uniendo con el DXF…');await plDxfJoin(D.id===id?{...D,...(prev||{}),revs:doc.revs}:D,dsp,P,D.id!==id)}catch(e){console.error('unir DXF',e);it.joinErr=e.message}}}
@@ -706,7 +710,7 @@ function plvZoom(k){if(!PLV||!PLV.tv)return;const c=PLV.box.querySelector('.plvc
 function plClose(silent,fromPop,keepHist){if(!PLV)return;if(!fromPop&&!keepHist)plHistDrop();if(!keepHist)plWake(false);plmReset();plkReset();pldReset();palReset();if(PLV.tv)PLV.tv.destroy();if(PLV.dock)plDockBody(false);PLV.box.remove();const r=PLV.ret;const lk=PLV.canDock;PLV=null;if(lk)lkPlanoBtn();if(U.tab==='pbib'&&!keepHist)requestRender();   /* «Recientes» de la biblioteca */if(!silent&&r&&r.isConnected)try{r.focus()}catch(e){}}
 function plStep(d){if(!PLV)return;const L=PLV.list.filter(i=>PLB.has(i));const i=L.indexOf(PLV.id);if(i<0||L.length<2)return;const n=L[(i+d+L.length)%L.length];PLV.id=n;PLV.rev=PLB.get(n).rev||1;PLV.back=[];plvDraw()}
 function plSpecOf(p,rev){if(!rev||rev===(p.rev||1))return{base:p.base,W:p.W,H:p.H,Z:p.Z,T:p.T||PL_T,crop:p.crop||null,fname:p.fname,ts:p.ts,byN:p.byN,cur:true,rev:p.rev||1,dxf:p.dxf||null,fix:p.fix&&p.fix.rev===(p.rev||1)?p.fix:null};
-  const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,crop:r.crop||null,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev,dxf:r.dxf||null,fix:r.fix||null}:plSpecOf(p,0)}
+  const r=(p.revs||[]).find(x=>x.rev===rev);return r?{base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,crop:r.crop||null,fname:r.fname,ts:r.ts,byN:r.byN,cur:false,rev:r.rev,dxf:r.dxf||null,fix:r.fix||(r.h&&typeof plHistNow==='function'?((plHistNow(r.h)||{}).fix||null):null),hl:!!r.h&&typeof plHistNow==='function'&&plHistNow(r.h)===undefined}:plSpecOf(p,0)}
 function plvDraw(){const p=PLB.get(PLV.id);if(!p){plClose();return}const sp=plSpecOf(p,PLV.rev);const L=PLV.list.filter(i=>PLB.has(i));const n=L.length,i=L.indexOf(PLV.id);
   const revs=[{rev:p.rev||1,cur:true},...(p.revs||[]).slice().reverse()];
   const sib=p.eto?[]:plSameSpot(p),up=p.eto?null:plFloorStep(p,1),dn=p.eto?null:plFloorStep(p,-1);const pc=q=>esc(plLvCode(plLvOf(q)));

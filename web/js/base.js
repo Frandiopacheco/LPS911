@@ -30,7 +30,7 @@ const DNS=(()=>{try{return localStorage.getItem('lps.ns')==='cs'?'cs_':''}catch(
 const CS=()=>DNS==='cs_';
 /* compartidas entre módulos (mismo nombre en Last Planner y Casco): equipo, tareo, módulo Planos y avisos. La misma lista está en
    scripts/reglas-casco.mjs (reglas) y functions/index.js (servidor) */
-const DSHARED=new Set(['members','inv','clock','push','pushp','pushlog','plb','eto','p3d','hhpc','tareo','tfot','tpub','tpubidx','tpexc','tpauto','tper','tperbk','tperp','tpc','tpcbk','tcfg']);
+const DSHARED=new Set(['members','inv','clock','push','pushp','pushlog','plb','plh','eto','p3d','hhpc','tareo','tfot','tpub','tpubidx','tpexc','tpauto','tper','tperbk','tperp','tpc','tpcbk','tcfg']);
 const store={get(k,d){try{const v=localStorage.getItem('lps911.'+(CS()?'cs.':'')+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('lps911.'+(CS()?'cs.':'')+k,JSON.stringify(v))}catch(e){}}};
 
 /* ---------- estado ---------- */

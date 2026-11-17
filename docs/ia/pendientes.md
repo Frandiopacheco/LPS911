@@ -41,7 +41,9 @@ Hoy los ambientes se escriben en el lookahead y luego se dibujan en Sectorizaci�
 - Después: sugerir el tipo de ambiente por el nombre («SH…» → baño) para la Matriz.
 
 ## Planta digitalizada (17-11-2026, decidido con el dueño; va antes que lo demás)
-Decisiones y etapas en `planos.md`, «Planta digitalizada: la base de todo». Etapa 1 hecha el 17-11-2026: malla protegida y `plDxfLam` fuera de Casco. Sacar `fix` y `revs` de la ficha pasó a la etapa 3. Etapa 2 hecha el mismo día (`plPxMalla`, `plLamT`; la capa del Plan diario y Casco se alinean solos por la malla). Lo siguiente es la etapa 3: ambientes con id estable en metros y revisiones conciliadas, con `fix`/`revs` fuera de la ficha.
+Decisiones y etapas en `planos.md`, «Planta digitalizada: la base de todo». Etapa 1 hecha el 17-11-2026: malla protegida y `plDxfLam` fuera de Casco. Sacar `fix` y `revs` de la ficha pasó a la etapa 3. Etapa 2 hecha el mismo día (`plPxMalla`, `plLamT`; la capa del Plan diario y Casco se alinean solos por la malla). Etapa 3 hecha el 17-11-2026 (`planos-rev.js`): historial `plh` fuera de la ficha, las correcciones pasan solas a la revisión nueva por los ejes, ambientes con id estable y lista de diferencias; Sectorización empareja por id. Lo siguiente es la etapa 4 (muros y vanos).
+- **Producción:** Planos está en `produccion` pero esta etapa no: si pasa, hay que agregar allí el bloque `plh` de las reglas (sin la sección CASCO) y `plh` en `DSHARED`. Mientras tanto, los cherry-pick de otras correcciones de Planos pueden chocar en `planos.js`, `planos-dxf.js` y `planos-alistar.js`.
+- **3b (por hacer):** al llegar una revisión nueva, pasar la lámina base del Plan diario/Sectorización a esa revisión con alineación automática (`palRevFit`), para que los ids de ambientes sirvan sin «Reemplazar» a mano.
 
 ## Ideas del dueño para más adelante (de su memoria del chat, oct 2026)
 
