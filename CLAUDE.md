@@ -169,7 +169,7 @@ Mucho de lo que se hace ahora (Casco, Planos con DXF y Alistar, ambientes desde 
 - **Aditivo y opcional:** una función nueva no cambia lo que ya existe hasta que alguien la usa (p. ej. zonas generales: nada cambia hasta marcar un piso; «Traer ambientes del plano»: solo aparece con una planta DXF alistada). Datos nuevos = campos nuevos opcionales; nunca reinterpretar los existentes ni borrar.
 - **Sin migraciones a escondidas:** lo ya cargado (láminas, planos, ambientes, PPC) queda como está; si algo nuevo necesita rehacerse, lo hace el usuario a propósito (p. ej. «Cargar de nuevo» un DXF).
 - **Reglas:** si un campo nuevo lo exigen o lo restringen las reglas, revisar que la obra en curso siga escribiendo igual.
-- **Dependencias:** lo que podría pasar a la obra no debe depender de archivos de Casco (`casco*.js`), porque Casco no va a producción. Ej.: `sz-plano.js` usa `csDxf` de `casco-dxf.js`: antes de pasarlo habría que mover esa función a `planos-dxf.js`.
+- **Dependencias:** lo que podría pasar a la obra no debe depender de archivos de Casco (`casco*.js`), porque Casco no va a producción. Ej.: la geometría DXF de una lámina (`plDxfLam`) estaba en `casco-dxf.js` como `csDxf` y se movió a `planos-dxf.js` (17-11-2026) para que `sz-plano.js` no dependa de Casco.
 - **Qué de lo hecho sirve hoy a la obra** (para pasar con su aprobación, por cherry-pick): ver `docs/ia/pendientes.md` «Candidatos a producción».
 
 ## Trabajar desde Claude Code (nube, escritorio o celular)

@@ -367,8 +367,16 @@ function dxfLayMem(disc,Ls,lay,skip){if(typeof PLB==='undefined'||!disc)return n
   if(!best)return null;const L=best.dxf.lay;const o={...lay};for(const k of['ej','col','mur','amb','tx'])if(L[k]&&names.has(L[k]))o[k]=L[k];
   const v=(L.vig||[]).filter(n=>names.has(n));if(v.length)o.vig=v;return{lay:o,from:best.cod}}
 /** guardar las capas (u otros campos de dxf) a mano: quedan como capas revisadas del proyecto; un plano ya alistado vuelve a «Por alistar» */
-async function plDxfLaySet(p,up,msg){const was=typeof plUsable==='function'&&plUsable(p);up={...up,'dxf.layH':{by:me.email,t:NOW()}};if(was)up.ok=firebase.firestore.FieldValue.delete();
+async function plDxfLaySet(p,up,msg){const was=typeof plUsable==='function'&&plUsable(p);up={...up,'dxf.layH':{by:me.email,t:NOW()}};if(was)up.ok=firebase.firestore.FieldValue.delete();if(typeof plMallaKeep==='function')up=plMallaKeep(p,up);
   try{await plCol(p).doc(p.id).update(up);toast(was?`${msg} El plano volvió a «Por alistar»: revísalo de nuevo.`:msg);return true}catch(err){toast('No se pudo guardar: '+(err.code||err.message||err));return false}}
+/* ---------- geometría de una lámina vinculada a un plano DXF alistado (17-11-2026: salió de casco-dxf.js para que no dependa de Casco) ---------- */
+/** geometría DXF de la lámina l (Casco o Last Planner, con `l.plb {id, rev}` y `l.w`), en coordenadas de esa lámina, con las correcciones de Alistar: {ej, col, ln, tx, cnt, p (plano), sp (revisión), mpp} o null (sin DXF o aún cargando) */
+const PLDXL=new Map();
+function plDxfLam(l){if(!l||!l.plb||typeof PLB==='undefined')return null;const p=PLB.get(l.plb.id);if(!p)return null;const sp=plSpecOf(p,l.plb.rev);if(!sp.dxf||!(sp.W>0)||!(l.w>0)||!plRevOk(p,sp.rev))return null;   /* solo alistado */
+  const G=plGeoNow(sp);if(!G)return null;const lay=sp.dxf.lay||{},mpp=sp.dxf.mpp;const fx=sp.fix||null;const key=[plGeoKey(sp),JSON.stringify(lay),mpp,l.w,fx?fx.L.length+':'+((fx.L[fx.L.length-1]||{}).id||''):''].join('|');const c=PLDXL.get(l.id);if(c&&c.key===key)return c.v;
+  const R=dxfRolesFix(G,lay,mpp,fx);const f=l.w/sp.W;   /* con las correcciones de Alistar */const S=A=>A.map(v=>Math.round(v*f*10)/10);
+  const v={ej:R.ej.map(e=>({n:e.n,p:S(e.p)})),amb:(R.amb||[]).map(a=>({n:a.n,p:S(a.p)})),col:R.col.map(q=>({p:S(q.p)})),ln:S(R.ln),tx:R.tx.map(t=>({...t,x:t.x*f,y:t.y*f})),cnt:R.cnt,p,sp,mpp:mpp/f};
+  PLDXL.set(l.id,{key,v});return v}
 /** textos cortos de una revisión DXF para los vínculos (planos-vinculos.js) */
 async function plGeoTexts(sp){const G=await plGeoGet(sp);if(!G)return[];const out=[];for(const o of G.L)for(const t of o.t){const s=String(t[0]).trim();if(s&&s.length<=8)out.push({x:t[1],y:t[2],h:t[3],n:s.length})}return out}
 
@@ -516,7 +524,7 @@ async function plJoinOwn(D,rv){const r=(D.revs||[]).find(x=>x.rev===rv&&!x.dxf);
   const M=await plDxfMap({...r,cod:D.cod},dsp.W,dsp.H,dsp.dxf.crop!==false,G0);   /* comprueba antes de escribir nada */
   const cur={rev:rc,base:D.base,W:D.W,H:D.H,Z:D.Z,mm:D.mm||null,crop:D.crop||null,fname:D.fname||'',ts:D.ts||0,byN:D.byN||'',dxf:D.dxf,...(D.ok&&D.ok.rev===rc?{ok:D.ok}:{}),...(D.fix&&D.fix.rev===rc?{fix:D.fix}:{})};
   const X=firebase.firestore.FieldValue.delete();const nw={rev:rc+1,base:r.base,W:r.W,H:r.H,Z:r.Z,T:PL_T,mm:r.mm||null,crop:r.crop||null,fname:r.fname||'',ts:NOW(),by:me.email,byN:me.name||me.email,revs:[...(D.revs||[]),cur]};
-  await plCol(D).doc(D.id).update({...nw,dxf:X,cal:X,ok:X,fix:X,alc:X,ctn:X,tx:X});
+  await plCol(D).doc(D.id).update(plMallaKeep(D,{...nw,dxf:X,cal:X,ok:X,fix:X,alc:X,ctn:X,tx:X}));
   await plDxfJoin(D,dsp,{...D,...nw,dxf:null,id:D.id},false,M);return rc+1}
 /** aviso de la biblioteca: un botón por plano con el PDF y el DXF por separado */
 function plJoinCallout(){const J=plJoinPend().filter(x=>plEdOf(x.D));if(!J.length)return'';

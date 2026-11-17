@@ -185,7 +185,9 @@ test('alistar: una planta DXF recién cargada no se puede vincular; se verifica 
   await panel.locator('[data-pal="ok"]').click();
   await expect.poll(() => page.evaluate(() => !!PLB.get('EST_E03').ok)).toBe(true);
   const d = await page.evaluate(() => window.__dbGet('plb', 'EST_E03'));
-  expect(d.ok).toMatchObject({ rev: 1, malla: true }); expect(d.ok.by).toBeTruthy(); expect(d.ok.ej.map(e => e.n)).toEqual(['A', 'B', 'C', 'D', 'E', '1', '2', '3']);
+  expect(d.ok).toMatchObject({ rev: 1, malla: true }); expect(d.ok.by).toBeTruthy();
+  /* la malla vive en plb.malla (17-11-2026), no en ok: sobrevive a «Volver a revisar» y a las revisiones nuevas */
+  expect(d.malla).toMatchObject({ rev: 1 }); expect(d.malla.ej.map(e => e.n)).toEqual(['A', 'B', 'C', 'D', 'E', '1', '2', '3']); expect(d.ok.ej).toBeUndefined();
   expect(Object.keys(d.ok.chk).sort()).toEqual(['capas', 'col', 'datos', 'ejes', 'enc', 'escala', 'malla', 'tx']);
   await expect(panel).toContainText('✓ Listo');
   await expect(page.locator('#plv [data-pv="alis"]')).toHaveText('✓ Listo');
@@ -204,6 +206,7 @@ test('alistar: una planta DXF recién cargada no se puede vincular; se verifica 
   await expect.poll(() => page.evaluate(() => (PLB.get('EST_E03').ctn.H || []).length)).toBe(1);
   const ct = await page.evaluate(() => { const p = PLB.get('EST_E03'); return { a: p.ctn.a, ok: !!p.ok, bruto: palArea(p.ctn.P) * p.dxf.mpp ** 2, h: palArea(p.ctn.H[0].p) * p.dxf.mpp ** 2 }; });
   expect(ct.ok).toBe(false); /* volvió a «Por alistar» */
+  expect(await page.evaluate(() => { const M = plMalla(); return M && M.id + ':' + M.vieja; })).toBe('EST_E03:false'); /* la malla no se pierde */
   expect(ct.a).toBeCloseTo(ct.bruto - ct.h, 1); /* el hueco se resta */
   await expect(panel.locator('.palit').filter({ hasText: 'Contorno' })).toContainText('menos 1 hueco(s)');
   await panel.locator('[data-pal="hdel:0"]').click();
@@ -363,6 +366,8 @@ test('cargar planos: el mismo archivo ya cargado se vuelve a procesar como revis
   await page.setInputFiles('#plfile', file);
   await page.click('#plqbar [data-q="go"]');
   await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
+  /* una malla antigua (en ok, como antes del 17-11-2026): al llegar la Rev. 2 pasa a plb.malla y se queda */
+  await page.evaluate(async () => { await fcol('plb').doc('EST_E03').update({ ok: { rev: 1, malla: true, t: 1, by: 'x', ej: [{ n: 'A', p: [0, 0, 0, 10] }, { n: '1', p: [0, 0, 10, 0] }] } }); });
   await page.evaluate(() => { PQ.items.length = 0; plqDraw(true); });
   await page.setInputFiles('#plfile', file);
   await expect(page.locator('#plst0')).toContainText('Ya está cargado (mismo archivo)');
@@ -371,6 +376,9 @@ test('cargar planos: el mismo archivo ya cargado se vuelve a procesar como revis
   await page.click('#plqbar [data-q="go"]');
   await expect(page.locator('#plst0')).toContainText('Listo', { timeout: 90_000 });
   await expect.poll(() => page.evaluate(() => window.__dbGet('plb', 'EST_E03').rev)).toBe(2);
+  const m = await page.evaluate(() => { const d = window.__dbGet('plb', 'EST_E03'); const M = plMalla(); return { d: d.malla, id: M && M.id, rev: M && M.rev, vieja: M && M.vieja }; });
+  expect(m.d.ej.length).toBe(2); expect(m.d.rev).toBe(1);
+  expect(m).toMatchObject({ id: 'EST_E03', rev: 1, vieja: true }); /* sigue siendo la malla, de la Rev. 1, hasta que el administrador la actualice */
   expect(errors).toEqual([]);
 });
 
@@ -392,6 +400,39 @@ test('planos DXF: el grosor de las líneas sale de la escala del plano (textos d
 
 /* 11-11-2026 (decidido con el dueño): la arquitectura se calibra con los ejes de estructura y usa esos ejes; el dueño revisa los ambientes
    identificados (no se comparan con el lookahead); el contorno es opcional; sus ejes girados no bloquean. */
+test('alistar › malla de ejes: nunca cambia sola (mallas antiguas en ok o en revs, revisión nueva del mismo plano)', async ({ page }) => {
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  const r = await page.evaluate(t => {
+    const ej = [{ n: 'A', p: [0, 0, 0, 10] }, { n: '1', p: [0, 0, 10, 0] }];
+    const keep = new Map(PLB); const run = docs => { PLB.clear(); for (const d of docs) PLB.set(d.id, d); const M = plMalla(); return M && { id: M.id, rev: M.rev, vieja: M.vieja }; };
+    const A = { id: 'X1', cod: 'E01', rev: 2, ok: { rev: 2, malla: true, ej, t: 1 } };
+    const B = { id: 'X2', cod: 'E02', rev: 3, revs: [{ rev: 2, ok: { rev: 2, malla: true, ej, t: 5 } }] };
+    const C = { id: 'X3', cod: 'E03', rev: 4, malla: { ej, rev: 3, t: 1 } };
+    const out = { a: run([A]), b: run([B]), c: run([A, B, C]), arch: run([{ ...C, arch: { t: 1 } }]), none: run([{ id: 'X4', cod: 'E04', rev: 1, ok: { rev: 1, malla: false } }]) };
+    const k = plMallaKeep(A, { ok: 'borrar' }); out.keep = k.malla && { n: k.malla.ej.length, rev: k.malla.rev }; out.keepNo = 'malla' in plMallaKeep(C, { ok: 'borrar' });
+    out.es = [palEsMalla({ id: 'X3', rev: 3, vieja: true }, C), palEsMalla({ id: 'X3', rev: 4, vieja: false }, C)];
+    /* la Rev. 2 de la planta que fijó la malla en su Rev. 1: se compara con la malla y lo avisa */
+    const S = dxfToPx(dxfSheet(dxfParse(t))); const G = dxfGeoOf(S); const lay = dxfGuess(dxfLayers(dxfGeoF(G)));
+    const p = { id: 'EST_X', cod: 'E03', disc: 'EST', tipo: 'Planta', pisoId: 'P3', rev: 2, mm: S.mm, dxf: { k: S.k, mpp: S.mpp, lay, src: S.src } };
+    const mine = dxfCheck({ p: { ...p, rev: 1 }, G, lay, mpp: S.mpp, malla: null, ctn: null }).mine;
+    const C2 = dxfCheck({ p, G, lay, mpp: S.mpp, malla: { id: 'EST_X', cod: 'E03', ej: mine, rev: 1, vieja: true }, ctn: null });
+    const C1 = dxfCheck({ p, G, lay, mpp: S.mpp, malla: { id: 'EST_X', cod: 'E03', ej: mine, rev: 2, vieja: false }, ctn: null });
+    out.m2 = C2.it.find(x => x.id === 'malla'); out.m1 = C1.it.find(x => x.id === 'malla');
+    PLB.clear(); for (const [i, d] of keep) PLB.set(i, d);
+    return out;
+  }, dxfDemo());
+  expect(r.a).toEqual({ id: 'X1', rev: 2, vieja: false });   /* antigua en ok de la revisión vigente */
+  expect(r.b).toEqual({ id: 'X2', rev: 2, vieja: true });    /* antigua y el plano ya pasó a la Rev. 3: sigue siendo la malla */
+  expect(r.c).toEqual({ id: 'X3', rev: 3, vieja: true });    /* la de plb.malla gana a las antiguas */
+  expect(r.arch.id).toBe('X3');                              /* archivar el plano no cambia la malla */
+  expect(r.none).toBeNull();
+  expect(r.keep).toEqual({ n: 2, rev: 2 }); expect(r.keepNo).toBe(false);
+  expect(r.es).toEqual([false, true]);
+  expect(r.m2.st).toBe('ok'); expect(r.m2.msg).toContain('Coincide con la malla'); expect(r.m2.msg).toContain('sigue siendo la de la Rev. 1');
+  expect(r.m1.msg).toContain('Este plano fija la malla');
+  expect(errors).toEqual([]);
+});
+
 test('alistar › lista de ambientes: cada fila se corrige sola aunque un ambiente esté dentro de otro (puras)', async ({ page }) => {
   const errors = await openApp(page, { as: 'admin', editar: false });
   const r = await page.evaluate(t => {
