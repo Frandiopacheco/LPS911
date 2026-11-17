@@ -136,7 +136,8 @@ test('alistar: la verificación del DXF (escala por cotas, ejes, malla, contorno
     return { s1: st(c1), esc: c1.by.escala.msg, ejes: c1.by.ejes.msg, col: c1.by.col.msg, ready1: palState(c1.C.it, {}).ready, ready2: palState(c2.C.it, allConf).ready, s2: st(c2),
       malla: cM.by.malla, mallaOk: cMok.by.malla, unid: cU.by.escala, piso: cP.by.datos, mine: c1.C.mine.length };
   }, [dxfDemo(), dxfDemo({ k: 100 })]);
-  expect(r.s1).toEqual({ datos: 'warn', escala: 'warn', ejes: 'warn', malla: 'warn', capas: 'warn', col: 'warn', ctn: 'err', tx: 'warn', enc: 'warn' });
+  /* capas confirmadas por la geometría y rótulos: ✓ solos (17-11-2026); columnas ⚠ (solo en el eje 2: muchos cruces sin columna) y encuadre ⚠ (hay un objeto lejano fuera) */
+  expect(r.s1).toEqual({ datos: 'warn', escala: 'warn', ejes: 'warn', malla: 'warn', capas: 'ok', col: 'warn', ctn: 'err', tx: 'ok', enc: 'warn' });
   expect(r.esc).toContain('4 de 5 cotas coinciden'); expect(r.esc).toContain('1 cota(s) con el texto escrito a mano no coinciden');
   expect(r.ejes).toContain('1 cota(s) entre ejes no coinciden'); expect(r.ejes).toContain('4 cota(s) entre ejes coinciden');
   expect(r.col).toContain('5 columnas'); expect(r.col).toContain('4 de 0.40×0.40');
@@ -188,7 +189,7 @@ test('alistar: una planta DXF recién cargada no se puede vincular; se verifica 
   expect(d.ok).toMatchObject({ rev: 1, malla: true }); expect(d.ok.by).toBeTruthy();
   /* la malla vive en plb.malla (17-11-2026), no en ok: sobrevive a «Volver a revisar» y a las revisiones nuevas */
   expect(d.malla).toMatchObject({ rev: 1 }); expect(d.malla.ej.map(e => e.n)).toEqual(['A', 'B', 'C', 'D', 'E', '1', '2', '3']); expect(d.ok.ej).toBeUndefined();
-  expect(Object.keys(d.ok.chk).sort()).toEqual(['capas', 'col', 'datos', 'ejes', 'enc', 'escala', 'malla', 'tx']);
+  expect(Object.keys(d.ok.chk).sort()).toEqual(['col', 'datos', 'ejes', 'enc', 'escala', 'malla']);   /* capas y rótulos quedaron ✓ solos */
   await expect(panel).toContainText('✓ Listo');
   await expect(page.locator('#plv [data-pv="alis"]')).toHaveText('✓ Listo');
   expect(await page.evaluate(() => plMalla() && plMalla().id)).toBe('EST_E03');
@@ -784,5 +785,54 @@ test('etapa 3: una revisión nueva guarda lo de Alistar en el historial y lo pas
   const listo = await page.evaluate(async () => { const X = firebase.firestore.FieldValue.delete(); await fcol('plb').doc('EST_E03').update({ fix: X, ctn: X, amb: X, ok: { rev: 2, t: 1, by: 'x' } });
     await new Promise(r => setTimeout(r, 50)); const r = await palCarry('EST_E03'); const d = window.__dbGet('plb', 'EST_E03'); return { skip: !!r.skip, fix: !!d.fix, btn: palCarryHtml(PLB.get('EST_E03'), true) }; });
   expect(listo).toEqual({ skip: true, fix: false, btn: '' });
+  expect(errors).toEqual([]);
+});
+
+/* 17-11-2026, Alistar rápido (decidido con el dueño): la verificación no se rehace con cada toque ni cuando cambia otro plano; «Revisé lo demás»
+   confirma de una vez lo ⚠ (menos datos del plano y contorno); «Siguiente» abre el próximo plano por alistar */
+test('alistar rápido: sin recalcular en cada toque, «Revisé lo demás» y «Siguiente por alistar»', async ({ page }) => {
+  test.setTimeout(150_000);
+  const errors = await openApp(page, { as: 'admin', editar: false });
+  await page.evaluate(memStorage);
+  await page.evaluate(() => goMod('pla'));
+  await page.click('#tabs [data-tab="pcar"]');
+  const f = c => ({ name: `2459243-PTSA-XXX-P03-P2D-EST-E05-${c}_ENCOFRADO TERCER PISO.dxf`, mimeType: 'application/dxf', buffer: Buffer.from(dxfDemo()) });
+  await page.setInputFiles('#plfile', [f('E03'), f('E04')]);
+  await page.click('#plqbar [data-q="go"]');
+  await expect(page.locator('#plst1')).toContainText('Listo', { timeout: 120_000 });
+  await page.click('#tabs [data-tab="pbib"]');
+  await page.click('.plc[data-pl="EST_E03"]');
+  await page.click('#plv [data-pv="alis"]');
+  const panel = page.locator('.plalp');
+  await expect(panel).toContainText('Alistar E03');
+  await expect(panel.locator('[data-pal="next"]')).toContainText('Siguiente: E04');
+  /* contar las verificaciones desde aquí */
+  await page.evaluate(() => { window.__nChk = 0; const o = window.dxfCheck; window.dxfCheck = (...a) => { window.__nChk++; return o(...a); }; panel0 = document.querySelector('.plalp .plalh'); });
+  await panel.locator('[data-pal="show:ej"]').click(); await panel.locator('[data-pal="show:ej"]').click();
+  await page.evaluate(() => fcol('plb').doc('EST_E04').update({ tit: 'OTRO TÍTULO' }));
+  await expect.poll(() => page.evaluate(() => PLB.get('EST_E04').tit)).toBe('OTRO TÍTULO');
+  expect(await page.evaluate(() => ({ n: window.__nChk, mismo: document.querySelector('.plalp .plalh') === panel0, on: PAL.show.ej }))).toEqual({ n: 0, mismo: true, on: true });
+  /* «Revisé lo demás»: todo lo ⚠ menos datos y contorno */
+  await expect(panel.locator('[data-pal="chkall"]')).toBeVisible();
+  await panel.locator('[data-pal="chkall"]').click();
+  /* malla y escala (y datos y contorno) se confirman uno por uno */
+  await expect.poll(() => page.evaluate(() => Object.keys((PLB.get('EST_E03').alc || {}).chk || {}).sort().join())).toBe('col,ejes,enc');
+  expect(await page.evaluate(() => window.__nChk)).toBe(0);   /* guardar los revisados no cambia la verificación */
+  await expect(panel.locator('[data-pal="chkall"]')).toHaveCount(0);
+  /* lo que sí cambia la verificación la rehace: sin la capa de rótulos, «Rótulos» pasa a ⚠ */
+  await page.evaluate(() => { const p = PLB.get('EST_E03'); return fcol('plb').doc('EST_E03').update({ 'dxf.lay': { ...p.dxf.lay, tx: '' } }); });
+  await expect.poll(() => page.evaluate(() => window.__nChk)).toBeGreaterThan(0);
+  await expect(panel.locator('.palit.warn', { hasText: 'Rótulos' })).toBeVisible();
+  /* otro plano deja de estar por alistar (archivado): el botón «Siguiente» se actualiza solo, sin volver a verificar este plano */
+  const n0 = await page.evaluate(() => window.__nChk);
+  await page.evaluate(() => fcol('plb').doc('EST_E04').update({ arch: { t: 1, by: 'x', n: 'x' } }));
+  await expect(panel.locator('[data-pal="next"]')).toHaveCount(0);
+  await page.evaluate(() => fcol('plb').doc('EST_E04').update({ arch: firebase.firestore.FieldValue.delete() }));
+  await expect(panel.locator('[data-pal="next"]')).toContainText('Siguiente: E04');
+  expect(await page.evaluate(() => window.__nChk)).toBe(n0);
+  /* siguiente por alistar */
+  await panel.locator('[data-pal="next"]').click();
+  await expect(panel).toContainText('Alistar E04');
+  await expect(panel.locator('[data-pal="next"]')).toContainText('Siguiente: E03');
   expect(errors).toEqual([]);
 });
