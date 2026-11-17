@@ -2,6 +2,8 @@
 #   rama main       → proyecto de pruebas (lps911-pruebas)
 #   rama produccion → proyecto real de la obra
 # La página la publica GitHub en Firebase Hosting (firebase deploy --only hosting) solo después de instalar bien reglas y tareas en Firebase.
+# Máquinas fijas en ubuntu-24.04: en nov 2026 ubuntu-latest pasó a 26.04 y Playwright 1.56 no instala Chromium ahí
+# (todas las pruebas de la interfaz fallaban en segundos). Cambiarlo solo junto con una versión de Playwright que lo soporte.
 name: Revisar y publicar
 
 on:
@@ -17,7 +19,7 @@ concurrency:
 jobs:
   revisar:
     name: Revisar (sintaxis, tareas del servidor, reglas)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +47,7 @@ jobs:
     name: ¿Ya se probó este mismo código?
     # al unir un pull request a main, el código suele ser idéntico (mismo árbol) al que ya pasó las pruebas en el PR:
     # en ese caso no se repiten. También decide si hace falta la prueba de 16 usuarios y reinstalar Firebase.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: { actions: read, contents: read }
     outputs:
@@ -96,7 +98,7 @@ jobs:
     # se reparten en 3 máquinas a la vez (antes una sola tardaba 4–6 min)
     needs: [previo]
     if: github.ref_name != 'produccion' && github.base_ref != 'produccion' && needs.previo.outputs.ok != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -127,7 +129,7 @@ jobs:
     name: Ciclo diario con 16 usuarios a la vez (10 SC, 5 ingenieros y el administrador)
     needs: [previo]
     if: github.ref_name != 'produccion' && github.base_ref != 'produccion' && needs.previo.outputs.ok != 'true' && needs.previo.outputs.ciclo != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -156,7 +158,7 @@ jobs:
     # deja constancia (por árbol de archivos) de que este código pasó todas las pruebas de la interfaz; «previo» la busca al unir a main
     needs: [previo, interfaz, ciclo]
     if: always() && needs.interfaz.result == 'success' && (needs.ciclo.result == 'success' || (needs.ciclo.result == 'skipped' && needs.previo.outputs.ciclo == 'false'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - run: echo "${{ github.sha }}" > ok.txt
@@ -171,7 +173,7 @@ jobs:
     name: Instalar en Firebase
     needs: [revisar, previo, interfaz, ciclo]
     if: always() && needs.revisar.result == 'success' && ((needs.interfaz.result == 'success' && (needs.ciclo.result == 'success' || (needs.ciclo.result == 'skipped' && needs.previo.outputs.ciclo == 'false'))) || (needs.interfaz.result == 'skipped' && needs.ciclo.result == 'skipped' && (github.ref_name == 'produccion' || needs.previo.outputs.ok == 'true'))) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref_name == 'main' || github.ref_name == 'produccion')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       SA: ${{ github.ref_name == 'produccion' && secrets.FIREBASE_SA_PRODUCCION || secrets.FIREBASE_SA_PRUEBAS }}
@@ -250,7 +252,7 @@ jobs:
     # Va después de sus reglas y tareas del servidor: si la instalación en Firebase falla, no se publica.
     needs: [revisar, previo, interfaz, ciclo, instalar]
     if: always() && needs.instalar.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref_name == 'main' || github.ref_name == 'produccion')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       SA: ${{ github.ref_name == 'produccion' && secrets.FIREBASE_SA_PRODUCCION || secrets.FIREBASE_SA_PRUEBAS }}
@@ -300,7 +302,7 @@ jobs:
     # Lo que une GitHub con su token no dispara «push»: por eso después se lanza este mismo flujo en main (instala y publica).
     needs: [revisar, previo, interfaz, ciclo, aprobado]
     if: always() && github.event_name == 'pull_request' && github.base_ref == 'main' && needs.revisar.result == 'success' && needs.aprobado.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: { contents: write, pull-requests: write, actions: write }
     env: { GH_TOKEN: '${{ github.token }}', N: '${{ github.event.pull_request.number }}', R: '${{ github.repository }}' }
