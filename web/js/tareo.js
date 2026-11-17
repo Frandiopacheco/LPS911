@@ -389,8 +389,8 @@ function toAccion(x){const ofi=toReabOk(),pr=!ofi&&typeof trProdOk==='function'&
 function toRowHtml(x,f){const st=toStg(x);const late=toLate(x,f);const[ak,al,ap]=toAccion(x);
   const lateT=late?`<span class="tr-tag">No enviado a las ${esc(TC().limEnv)}</span>`:'';
   const cua=x.cuas.length?`<small class="td-cua" title="${esc(x.cuas.join(', '))}">${esc(x.cuas.slice(0,2).join(' · '))}${x.cuas.length>2?` +${x.cuas.length-2}`:''}</small>`:'';
-  const hab=!x.t&&TD.ok&&typeof toHabOk==='function'&&toHabOk()&&toHabDia(f);/* día que ya salió de su celular: «Habilitar» (tareo-rev.js) */
-  const act=`<td class="td-act">${hab?`<button class="ib pri" data-toa="hab" data-cap="${esc(x.cap)}" title="Crea su tareo de este día reabierto para que lo llene desde su celular">Habilitar</button>`:''}<button class="ib${ap&&!hab?' pri':''}" data-toa="${ak}" data-id="${esc(x.id)}" data-cap="${esc(x.cap)}">${esc(al)}</button></td>`;
+  const hab=(!x.t||toHabBor(x.t))&&TD.ok&&typeof toHabOk==='function'&&toHabOk()&&toHabDia(f);/* día que ya salió de su celular: «Habilitar» (tareo-rev.js) */
+  const act=`<td class="td-act">${hab?`<button class="ib pri" data-toa="hab" data-cap="${esc(x.cap)}" title="Le reabre su tareo de este día (o se lo crea si no lo tiene) para que lo llene desde su celular">Habilitar</button>`:''}<button class="ib${ap&&!hab?' pri':''}" data-toa="${ak}" data-id="${esc(x.id)}" data-cap="${esc(x.cap)}">${esc(al)}</button></td>`;
   if(!x.t)return`<tr class="td-r t-off${late?' td-late':''}" data-tcap="${esc(x.cap)}" data-stg="sin"><td class="td-cap" data-l="Capataz"><span class="td-nm">${esc(x.name)}</span>${cua}</td>
     <td class="td-st" data-l="Estado">${toChip(null)}${lateT}</td><td class="td-as" colspan="4"><span class="note">${x.n} ${x.n===1?'obrero asignado':'obreros asignados'}, sin tareo</span></td>${act}</tr>`;
   const s=x.s;const tot=s.pres+s.fal+s.sm||1;const env=['env','rev','pub'].includes(x.t.st);
@@ -410,8 +410,8 @@ function toAvisos(f,L){const docs=[...TD.docs.values()];const ed=toReabOk();let 
   if(cf.length)h+=`<div class="callout td-al td-al-bad" id="trConf" role="alert"><div class="td-alh"><b>${cf.length} ${cf.length===1?'obrero figura':'obreros figuran'} en dos tareos del día</b><span class="note">Un obrero va en un solo tareo por día. Hasta resolverlo no se pueden marcar revisados.</span></div>
     <ul class="td-dup">${cf.map(x=>`<li data-dni="${esc(x.dni)}"><span class="td-dn"><b>${esc(x.nom)}</b> <span class="mono note">${esc(x.dni)}</span></span>${x.ts.map(y=>{const can=ed&&['env','rev'].includes(y.st);
       return`<span class="td-dt" data-trqt="${esc(y.id)}">${esc(y.name)} · ${esc(trAsTx(y))} · <span class="note">${esc((TO_ST[y.st]||[y.st])[0])}</span>${can?` <button class="ib" data-trq="${esc(y.id)}" data-dni="${esc(x.dni)}">Quitar de este tareo</button>`:ed?' <span class="note">(lo quita el capataz)</span>':''}</span>`}).join('')}</li>`).join('')}</ul></div>`;
-  const sinT=TD.ok&&!tNoLab(f)&&typeof toHabOk==='function'&&toHabOk()&&toHabDia(f)?L.filter(x=>!x.t):[];
-  if(sinT.length)h+=`<div class="callout td-al td-al-warn" id="trHab"><div class="td-alh"><b>${sinT.length} ${sinT.length===1?'capataz no hizo':'capataces no hicieron'} su tareo este día</b><span class="note">Su celular ya no ofrece esta fecha (solo hoy, ayer y anteayer). Habilítalo y le aparece en «Por corregir» para llenarlo y enviarlo.</span></div>
+  const sinT=TD.ok&&!tNoLab(f)&&typeof toHabOk==='function'&&toHabOk()&&toHabDia(f)?L.filter(x=>!x.t||toHabBor(x.t)):[];
+  if(sinT.length)h+=`<div class="callout td-al td-al-warn" id="trHab"><div class="td-alh"><b>${sinT.length} ${sinT.length===1?'capataz no envió':'capataces no enviaron'} su tareo este día</b><span class="note">Su celular ya no ofrece esta fecha (solo hoy, ayer y anteayer). Habilítalo y le aparece en «Por corregir» para llenarlo y enviarlo; un borrador conserva lo que ya llenó.</span></div>
     <span class="td-alb"><button class="ib pri" data-tohab="all">${sinT.length===1?'Habilitar':`Habilitar a los ${sinT.length}`}</button></span></div>`;
   const late=L.filter(x=>toLate(x,f));
   if(late.length)h+=`<div class="callout td-al td-al-warn" id="trLate"><div class="td-alh"><b>${late.length} ${late.length===1?'capataz no envió':'capataces no enviaron'} su tareo a las ${esc(TC().limEnv)}</b><span class="note td-ln">${late.map(x=>esc(x.name)).join(', ')}</span></div>
@@ -479,7 +479,7 @@ function renderTDia(main){if(me&&me.role==='tcap'){toUnsub();return renderTCap(m
     const a=e.target.closest('[data-toa]');if(a){if(a.dataset.toa==='hab'){toHabilitar([a.dataset.cap],f);return}if(a.dataset.toa==='rec'){const x=L.find(y=>(a.dataset.id&&y.id===a.dataset.id)||(!a.dataset.id&&!y.t&&y.cap===a.dataset.cap));if(x)toCopy(toRecTxt([x],f),'Recordatorio copiado: pégalo en WhatsApp.')}else toDetalle(a.dataset.id);return}
     if(e.target.closest('.td-ox'))return;const r=e.target.closest('tr[data-to]');if(r)toDetalle(r.dataset.to)};
   $('#trFlt').onclick=e=>{const b=e.target.closest('[data-trflt]');if(b){const k=b.dataset.trflt;TD.flt=TD.flt===k&&k!=='all'?'all':k;requestRender()}};
-  const hb=$('#trHab [data-tohab]');if(hb)hb.onclick=()=>toHabilitar(L.filter(x=>!x.t).map(x=>x.cap),f);
+  const hb=$('#trHab [data-tohab]');if(hb)hb.onclick=()=>toHabilitar(L.filter(x=>!x.t||toHabBor(x.t)).map(x=>x.cap),f);
   main.querySelectorAll('.td-al [data-toal]').forEach(b=>b.onclick=()=>{if(b.dataset.toal==='ver'){TD.flt=TD.flt==='late'?'all':'late';requestRender()}else toCopy(toRecTxt(L.filter(x=>toLate(x,f)),f),'Recordatorio copiado: pégalo en WhatsApp.')});
   main.querySelectorAll('details[data-tk]').forEach(d=>d.ontoggle=()=>{(TD.dOpen=TD.dOpen||{})[d.dataset.tk]=d.open});
   const sn=$('#trSin');if(sn){sn.onclick=e=>{const fa=e.target.closest('[data-trfal]');if(fa){trFalta(fa.dataset.trfal);return}
