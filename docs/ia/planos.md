@@ -212,6 +212,29 @@ Flujo: niveles → cargar planos (plantas EST y ARQ en DXF) → **alistar** → 
 - Con la E-19 real: escala ✓ (324 de 324 cotas), ejes ⚠ (1 y 14 inclinados 0,52° y 0,50°; 44 cotas entre ejes coinciden), 82 columnas (66 de 0.60×0.60, 13 fuera de un cruce), 146 rótulos, contorno por trazar.
 - Pruebas: `planos-dxf.spec.js` › «alistar: …» (verificación pura con cotas, malla corrida, unidades equivocadas y sin nivel; y el flujo completo en el visor hasta fijar la malla) y «alistar › correcciones: …» (puras y en el visor con `dxfDemo({girado:true})`: eje E girado 0,64° y una línea de ejes sin nombre). `casco-dxf.spec.js` comprueba que Casco usa los ejes corregidos.
 
+## Alistar mejorado: rápido, varios planos y sin depender de las capas (17-11-2026, decidido con el dueño)
+
+El dueño pidió una interfaz menos básica, pensada para varios pisos y tipos de planta, más rápida y que no dependa solo de las capas del DXF (el proyectista puede poner columnas y vigas en una sola capa). Análisis del asesor y decisiones:
+- **En el sistema, no con una rutina en CAD** (AutoLISP exigiría licencia y alguien que la corra en cada revisión, y no ve la malla, las correcciones ni las revisiones). Lo único de CAD, separar un DXF con varias plantas, también se hará aquí (etapa A4).
+- **Capa = pista, geometría = confirmación.** Lo que la geometría reconozca (columnas por forma y cruces de ejes, vigas como pares de líneas paralelas entre columnas, placas sobre ejes) se ofrece como **sugerencia agrupada** y, al aceptarla, se guarda como **corrección por regla** en `fix` (como `colDelSz`; nunca una por entidad): un plano «Listo» no cambia solo.
+- **Planta típica: un DXF por nivel** (decisión del dueño), con «Copiar el alistado de…» a otro plano con los mismos ejes (reusa `palRevFit`/`palFixCarry`).
+- **Menos «Revisado»** (aprobado): lo que la geometría confirma queda ✓ solo; lo demás se confirma junto con «Revisé lo demás»; datos del plano y contorno, siempre uno por uno.
+- No hay DXF reales con columnas y vigas en una sola capa a mano: los detectores se calibran con variantes de `dxf-demo.js` por ahora.
+
+**Etapas (un PR cada una):**
+1. ✓ (17-11-2026) **Alistar rápido y con menos clics:**
+   - `palCheck`: la verificación (`dxfCheck`) en caché por plano (`PALCK`, clave: geometría, `dxf`, datos del plano, correcciones, contorno, malla, si hay estructuras en DXF); el panel usa una copia de la lista de ítems (`palAmbItem` agrega el suyo).
+   - `palSync` solo rehace el panel si cambió el documento de ese plano o la malla (`palSig`: huella JSON por versión del documento, `WeakMap`; también da el tamaño `palKB`). Medir llama `palSync(true)` al salir.
+   - Los chips «Ver encima» solo redibujan el plano (`PLV.tv.tick()`).
+   - **✓ solos:** columnas (todas en un cruce de ejes y ≤ 3 tamaños), rótulos (si hay), encuadre (sin objetos lejanos fuera), capas (hay ejes y, en estructuras, columnas y caras suficientes).
+   - **«Revisé lo demás (n)»** (`palRest`, `chkall`): marca los ⚠ restantes en `alc.chk` con `lote:1`, menos `datos` y `ctn`.
+   - **«Siguiente: <código> ›»** (`palNextOf`, `palNext`): el próximo plano por alistar (por nivel, especialidad y código) sin cerrar el visor ni Alistar.
+   - Corregido: al terminar de bajar la geometría, Alistar la buscaba con la clave equivocada (`sp.base` en vez de `plGeoKey`) y quedaba en «Cargando…» hasta el siguiente cambio de la base.
+   - Prueba: `planos-dxf.spec.js` «alistar rápido…».
+2. Columnas y vigas aunque compartan capa: detectores puros con cuadrícula espacial, sugerencias agrupadas como corrección por regla, y guardar en la geometría de los DXF nuevos la marca de achurado, el nombre del bloque y el color (sin migrar los ya cargados).
+3. Tablero de digitalización: niveles × EST/ARQ con el estado de cada plano, verificación en segundo plano (`requestIdleCallback`), «Copiar el alistado de…».
+4. Carga de varios DXF sin bloquear la pantalla (Web Worker; ojo con `check.mjs`, `ASSETS` y huellas de `build.mjs`) y dividir un DXF con varias plantas.
+
 ## Planta digitalizada: la base de todo (17-11-2026, decidido con el dueño; por hacer)
 
 La mayoría de los planos sigue en **PDF**, como hasta ahora. Algunas plantas se **digitalizan al máximo** (PDF + DXF, Alistar), porque sobre ellas se apoya todo lo demás: Sectorización, frentes, Plan diario, Campo y Metrados. Esto se resuelve **antes de seguir con lo demás**.
