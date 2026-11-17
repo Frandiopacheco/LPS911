@@ -634,3 +634,32 @@ test('auditoría 21-10: la fila agregada guarda en el historial lo que trae; Ent
   expect(r.dom).toEqual(['07:30', '15:00', 6.5]); // la hoja de la oficina ya tiene horario que mostrar y comparar
   noErrors(errors, 'historial fila agregada');
 });
+
+test('Habilitar tareo atrasado (17-11-2026): crea el tareo reabierto vacío y no pisa uno existente', async ({ page }) => {
+  const dAdd = (s, n) => { const d = new Date(s + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const D = dAdd(HOY, -3), D2 = dAdd(HOY, -2); // HOY es jueves: D lunes (laborable), D2 martes
+  const B = D + '_tcap2@obra.pe';
+  const extra = [...SOLO, ['tareo', B, { date: D, cap: 'tcap2@obra.pe', capN: 'Bruno Segundo', st: 'bor', modo: 'hrs', pcs: [], rows: { 44444444: row('DELTA') }, foto: [], hist: [], by: 'tcap2@obra.pe', ts: 1 }]];
+  const errors = await openApp(page, { as: 'tasis', editar: false, extra });
+  await tab(page, 'tdia');
+  // anteayer: el capataz aún lo abre desde su celular, no hace falta habilitar
+  await page.evaluate(d => { TD.f = d; render(); }, D2);
+  await expect(page.locator('#trHab')).toHaveCount(0);
+  await expect(page.locator('[data-toa="hab"]')).toHaveCount(0);
+  await page.evaluate(d => { TD.f = d; render(); }, D);
+  await expect(page.locator('#trHab')).toContainText('2 capataces');
+  await expect(page.locator('tr[data-tcap="tcap3@obra.pe"] [data-toa="hab"]')).toHaveCount(1);
+  page.once('dialog', dg => dg.accept('Feriado por la llegada del Papa'));
+  await page.locator('#trHab [data-tohab]').click();
+  for (const cap of ['tcap@obra.pe', 'tcap3@obra.pe']) {
+    await expect.poll(async () => (await dbT(page, D + '_' + cap))?.st).toBe('reab');
+    const t = await dbT(page, D + '_' + cap);
+    expect(t).toMatchObject({ date: D, cap, st: 'reab', modo: 'hrs', rows: {}, reab: { mot: 'Feriado por la llegada del Papa' } });
+    expect(t.hist).toHaveLength(1);
+    expect(t.hist[0]).toMatchObject({ a: 'reab', mot: 'Feriado por la llegada del Papa' });
+  }
+  // el borrador de Bruno queda intacto
+  expect(await dbT(page, B)).toMatchObject({ st: 'bor', rows: { 44444444: { ape: 'DELTA' } } });
+  await expect(page.locator('#trHab')).toHaveCount(0);
+  noErrors(errors, 'habilitar');
+});
