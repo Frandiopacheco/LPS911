@@ -1166,7 +1166,7 @@ test('tareo jefe: el editor con tpub coteja, corrige, marca y quita revisado, re
   await assertSucceeds(updateDoc(doc(p, id), { hist: [...H0, { t: 8, by: 'u_tcap1', a: 'env' }], st: 'env' }));
 });
 
-test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; no se borra; la foto semanal no cambia', async () => {
+test('matriz de ambientes: la lee LPS; editan admin, editores (y el campo solo estados) con su correo; no se borra; la foto semanal no cambia', async () => {
   const ed = user('editor@obra.pe'), ow = user(OWNER), sc = user('sc@obra.pe'), lec = user('lector@obra.pe');
   await assertSucceeds(setDoc(doc(ow, 'mcat/k001'), { name: 'Espejos', sc: 'c-gabel', cl: 't', al: ['espejos'], ord: 10 }));
   await assertSucceeds(setDoc(doc(ed, 'mtipo/tp01'), { name: 'SS.HH.', acts: ['k001'], order: 10 }));
@@ -1178,7 +1178,15 @@ test('matriz de ambientes: la lee LPS; editan admin y editores con su correo; no
   // estado por ambiente: con el correo de quien escribe
   await assertSucceeds(setDoc(doc(ed, 'mamb/a1'), { tipo: 'tp01', c: { k001: 't' }, by: 'editor@obra.pe', t: 1 }, { merge: true }));
   await assertFails(setDoc(doc(ed, 'mamb/a1'), { c: { k001: 'p' }, by: 'otro@obra.pe', t: 2 }, { merge: true }));
-  await assertFails(setDoc(doc(user('campo@obra.pe'), 'mamb/a1'), { c: { k001: 'p' }, by: 'campo@obra.pe', t: 2 }, { merge: true }));
+  // ingeniero de campo (nov 2026): cambia estados a su nombre, pero no el tipo ni la revisión
+  const ca = user('campo@obra.pe');
+  await assertSucceeds(setDoc(doc(ca, 'mamb/a1'), { c: { k001: 'p' }, m: { k001: { by: 'campo@obra.pe', t: 2 } }, by: 'campo@obra.pe', n: 'Campo', t: 2 }, { merge: true }));
+  await assertSucceeds(setDoc(doc(ca, 'mamb/a9'), { c: { k001: 'p' }, by: 'campo@obra.pe', n: 'Campo', t: 2 }));
+  await assertFails(setDoc(doc(ca, 'mamb/a1'), { c: { k001: 't' }, by: 'editor@obra.pe', t: 3 }, { merge: true }));
+  await assertFails(setDoc(doc(ca, 'mamb/a1'), { tipo: 'otro', by: 'campo@obra.pe', t: 3 }, { merge: true }));
+  await assertFails(setDoc(doc(ca, 'mamb/a1'), { rv: { d: '2026-10-08' }, by: 'campo@obra.pe', t: 3 }, { merge: true }));
+  await assertFails(setDoc(doc(ca, 'mamb/a8'), { tipo: 'tp01', c: {}, by: 'campo@obra.pe', t: 3 }));
+  await assertFails(setDoc(doc(user('veedor@obra.pe'), 'mamb/a1'), { c: { k001: 'p' }, by: 'veedor@obra.pe', t: 2 }, { merge: true }));
   await assertFails(setDoc(doc(sc, 'mamb/a2'), { c: { k001: 'p' }, by: 'sc@obra.pe', t: 2 }));
   await assertSucceeds(getDoc(doc(lec, 'mamb/a1')));
   await assertFails(deleteDoc(doc(ow, 'mamb/a1')));

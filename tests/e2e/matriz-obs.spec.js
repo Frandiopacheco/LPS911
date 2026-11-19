@@ -31,7 +31,7 @@ const DATOS = [
 const OBS1 = ['mobs', 'ob1', { amb: 'a1', cat: 'k1', sc: 'c1', pid: 'p1', num: 1, desc: 'Corregir sello del registro', pt: { x: 200, y: 150, v: 'L1' }, ph: [], st: 'ab', by: 'campo@obra.pe', n: 'Carlos Campo', t: 1 }];
 
 async function grafico(page) {
-  await page.evaluate(() => { U.piso = 'p1'; U.mxV = 'pla'; U.mxPlOb = true; render(); });
+  await page.evaluate(() => { U.piso = 'p1'; U.mxV = 'pla'; U.mxPlOb = false; U.mxPlEd = true; MOBTAB = 'act'; render(); });
   await expect(page.locator('#mxplmap .pvs')).toBeVisible();
   await page.waitForFunction(() => { const h = document.querySelector('#mxplmap'); return h && h._v && h._v.z > 0; });
   await page.waitForTimeout(300);
@@ -50,6 +50,7 @@ test('el ingeniero de campo registra una observación tocando el plano: número 
   await grafico(page);
   await tocar(page, 200, 200);
   const sh = page.locator('#mobsheet');
+  await sh.locator('[data-mobtab="obs"]').click();
   await expect(sh).toContainText('Nueva observación A-1-1');
   await sh.locator('[data-mobc="k1"]').click();
   await sh.locator('#mobdesc').fill('Corregir sello en la ventana');
@@ -85,6 +86,7 @@ test('el SC solo registra en su partida y levanta las suyas; levantada, la activ
   expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe('ok');
   /* nueva: solo actividades de su partida (no Tarrajeo de muros, que es de otro SC) */
   await tocar(page, 200, 220);
+  await sh.locator('[data-mobtab="obs"]').click();
   await expect(sh).toContainText('Nueva observación A-1-3');
   await expect(sh.locator('[data-mobc="k1"]')).toHaveCount(1);
   await expect(sh.locator('[data-mobc="k2"]')).toHaveCount(0);
@@ -98,6 +100,7 @@ test('el SC solo registra en su partida y levanta las suyas; levantada, la activ
 test('una terminada con observación abierta no avisa «terminada y aún programada»; la ficha de la celda la lista y registra sin plano', async ({ page }) => {
   const OBS2 = ['mobs', 'ob2', { amb: 'a1', cat: 'k2', sc: 'c3', pid: 'p1', num: 1, desc: 'Resanar esquina', pt: null, ph: [], st: 'ab', by: 'campo@obra.pe', n: 'Carlos Campo', t: 1 }];
   const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: [...DATOS, OBS2] });
+  await page.waitForFunction(() => MX.ld.amb && MX.ld.cat && MX.obs.size > 0);
   /* t0 (Tarrajeo de muros, A-1) sigue programada días después de hoy y la Matriz dice Terminado: con la observación abierta no avisa */
   expect(await page.evaluate(() => mxRowWarn(S.act.get('t0')))).toBe(null);
   expect(await page.evaluate(() => { const L = [...MX.obs.values()]; MX.obs.clear(); MX.v++; const w = mxRowWarn(S.act.get('t0')); L.forEach(n => MX.obs.set(n.id, n)); MX.v++; return w; })).toBe('t');
@@ -133,4 +136,31 @@ test('Lookahead: la terminada con observación abierta sale como fantasma «1 ob
   await expect(page.locator('#pop')).toContainText('A-1-1');
   await expect(page.locator('#pop')).toContainText('Corregir sello del registro');
   noErrors(errors, 'fantasma de observaciones');
+});
+
+test('✏️ Registrar: el ingeniero de campo toca un ambiente, agrega una actividad (Pendiente) y cambia un estado; 👁 Ver no abre la hoja', async ({ page }) => {
+  const errors = await openApp(page, { as: 'campo', tab: 'mat', extra: [...DATOS, ['mcat', 'k3', { name: 'Rejillas de ventilación', sc: 'c2', cl: 't', al: ['rejillas de ventilacion'], ord: 30 }]] });
+  /* Ver: tocar el plano no abre nada */
+  await page.evaluate(() => { U.piso = 'p1'; U.mxV = 'pla'; U.mxPlOb = true; U.mxPlEd = false; render(); });
+  await expect(page.locator('#mxplmap .pvs')).toBeVisible();
+  await page.waitForFunction(() => { const h = document.querySelector('#mxplmap'); return h && h._v && h._v.z > 0; });
+  await page.waitForTimeout(300);
+  await tocar(page, 200, 200);
+  await expect(page.locator('#mobsheet')).toHaveCount(0);
+  /* Registrar */
+  await page.click('[data-mxpled="1"]');
+  await page.waitForTimeout(300);
+  await tocar(page, 200, 200);
+  const sh = page.locator('#mobsheet');
+  await expect(sh.locator('[data-mobtab="act"]')).toHaveClass(/on/);
+  await sh.locator('[data-moba="addon"]').click();
+  await sh.locator('#mobaq').fill('rejillas');
+  await sh.locator('[data-mobadd="k3"]').click();
+  await expect.poll(() => page.evaluate(() => (window.__dbGet('mamb', 'a1') || {}).c)).toMatchObject({ k3: 'p' });
+  expect(await page.evaluate(() => window.__dbGet('mamb', 'a1').by)).toBe('campo@obra.pe');
+  /* cambia Redes empotradas a En curso desde la hoja */
+  await sh.locator('.mxrdone summary').click(); // Redes empotradas está Terminado: va en el grupo plegado
+  await sh.locator('[data-mobrc="k1"] [data-mobst="c"]').click();
+  await expect.poll(() => page.evaluate(() => window.__dbGet('mamb', 'a1').c.k1)).toBe('c');
+  noErrors(errors, 'registrar actividades en el plano');
 });
