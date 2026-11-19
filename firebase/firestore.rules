@@ -760,6 +760,30 @@ service cloud.firestore {
       allow update: if canEdit();
       allow delete: if false;
     }
+    // Observaciones de la Matriz (punch list, nov 2026, docs/ia/matriz.md «Observaciones»): un detalle por levantar en una
+    // actividad de un ambiente (punto en el plano, texto y foto opcional). Las registran y levantan los ingenieros (canDaily)
+    // y el SC en su partida (sc de la observación). Nadie cambia el autor. El SC no cambia ambiente, actividad, partida ni
+    // número; solo corrige el texto, el punto y las fotos de las suyas, y solo anula las suyas. Anular = st 'anu'; borrar, el administrador.
+    function mobShape(d) {
+      return d.get('amb', '') is string && d.get('amb', '') != '' && d.get('cat', '') is string && d.get('cat', '') != ''
+        && d.get('sc', '') is string && d.get('desc', '') is string && d.get('desc', '').size() <= 600
+        && d.get('st', '') in ['ab', 'lev', 'anu'];
+    }
+    match /mobs/{id} {
+      allow read: if lpsMember();
+      allow create: if mobShape(request.resource.data) && request.resource.data.get('by', '') == mid() && request.resource.data.st == 'ab'
+        && (canDaily() || (isSC() && request.resource.data.sc in scsOf()));
+      allow update: if mobShape(request.resource.data) && request.resource.data.get('by', '') == resource.data.get('by', '')
+        && (canDaily()
+          || (isSC() && resource.data.get('sc', '') in scsOf()
+            && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st', 'lev', 'reab', 'u'])
+              || (resource.data.get('by', '') == mid()
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st', 'lev', 'reab', 'anu', 'ph', 'desc', 'pt', 'u'])))
+            && (request.resource.data.st != 'anu' || resource.data.get('by', '') == mid())
+            // lo que anuló el ingeniero no lo reabre el SC
+            && (resource.data.get('st', '') != 'anu' || resource.data.get('by', '') == mid())));
+      allow delete: if isAdmin();
+    }
     // Foto semanal de la matriz: se crea con el correo de quien la guarda; no se cambia ni se borra
     match /mver/{id} {
       allow read: if lpsMember();
@@ -1269,6 +1293,26 @@ service cloud.firestore {
         && (canEdit_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs()));
       allow update: if canEdit_cs();
       allow delete: if false;
+    }
+    function mobShape_cs(d) {
+      return d.get('amb', '') is string && d.get('amb', '') != '' && d.get('cat', '') is string && d.get('cat', '') != ''
+        && d.get('sc', '') is string && d.get('desc', '') is string && d.get('desc', '').size() <= 600
+        && d.get('st', '') in ['ab', 'lev', 'anu'];
+    }
+    match /cs_mobs/{id} {
+      allow read: if lpsMember_cs();
+      allow create: if mobShape_cs(request.resource.data) && request.resource.data.get('by', '') == mid_cs() && request.resource.data.st == 'ab'
+        && (canDaily_cs() || (isSC_cs() && request.resource.data.sc in scsOf_cs()));
+      allow update: if mobShape_cs(request.resource.data) && request.resource.data.get('by', '') == resource.data.get('by', '')
+        && (canDaily_cs()
+          || (isSC_cs() && resource.data.get('sc', '') in scsOf_cs()
+            && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st', 'lev', 'reab', 'u'])
+              || (resource.data.get('by', '') == mid_cs()
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st', 'lev', 'reab', 'anu', 'ph', 'desc', 'pt', 'u'])))
+            && (request.resource.data.st != 'anu' || resource.data.get('by', '') == mid_cs())
+            // lo que anuló el ingeniero no lo reabre el SC
+            && (resource.data.get('st', '') != 'anu' || resource.data.get('by', '') == mid_cs())));
+      allow delete: if isAdmin_cs();
     }
     match /cs_mver/{id} {
       allow read: if lpsMember_cs();

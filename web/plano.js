@@ -1300,6 +1300,8 @@ function ambMap(host,o){const bs=basesOf(o.pid);
   for(const g of o.guides||[]){const P=unflat(g.pts);if(P.length<2)continue;svg+=`<line x1="${P[0].x}" y1="${P[0].y}" x2="${P[1].x}" y2="${P[1].y}" stroke="${g.c||'#7C3AED'}" stroke-width="${g.w||1.2}" stroke-opacity="${g.op??.6}"${g.dash?` stroke-dasharray="${g.dash}"`:''} vector-effect="non-scaling-stroke" pointer-events="none"/>`;if(g.lbl){const p=P[0];labels.push({id:'g:'+g.lbl,x:p.x,y:p.y,t:g.lbl,c:g.c||'#C2410C',f:'#fff',cls:'szg'})}}
   /* o.dots = [{x,y,c,r}]: puntos sobre el plano (Casco › juntas de viga en el tercio central, casco-met-plano.js); r en unidades de la lámina */
   const rD=Math.max(base.w||0,base.h||0)/170||6;for(const d of o.dots||[])svg+=`<circle cx="${d.x}" cy="${d.y}" r="${d.r||rD}" fill="${d.c||'#111'}" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+  /* o.pins = [{id,x,y,t,c,sel,tip}]: puntos numerados que se tocan (Matriz › Gráfico › Observaciones, matriz-obs.js); el toque llega a onPick con su id */
+  for(const p of o.pins||[])labels.push({id:p.id,x:p.x,y:p.y,t:p.t,c:p.c,f:'#fff',nb:true,tip:p.tip||'',cls:'mobpin'+(p.sel?' sel':'')+(p.cls?' '+p.cls:'')});
   if(M!==I){svg=`<g transform="${cssM(M)}">${svg}</g>`;labels.forEach(l=>{const p=ap(M,l);l.x=p.x;l.y=p.y})}
   if(v._svgH!==svg){v.svg.innerHTML=svg;v._svgH=svg}v.labels=labels;host._hL=o.edit&&!o.draw?ambHandles(unflat(o.edit.pts),o.edit.noMid):[];v.handles=hDisp(host._hL,M);v.apply();return base}
 /** puntos de ajuste llevados a la pantalla (o.M) */

@@ -24,7 +24,7 @@ function tabAllowed(t){if(!me)return false;
 /** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
 function tabPrimary(){if(!me)return[];if(offLps())return tabOrder().filter(tabAllowed);const r=me.role;
   const M={admin:['dash','look','mat','restr','plan','mapa','campo','lib','ind','prod','cli','met'],editor:['dash','look','mat','restr','plan','mapa','campo','lib','ind','prod','met'],
-    campo:['dash','campo','mapa','restr','plan','lib','ind','prod'],sc:['look','cap','mapa','restr','lib','ind','prod'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
+    campo:['dash','campo','mapa','mat','restr','plan','lib','ind','prod'],sc:['look','cap','mapa','mat','restr','lib','ind','prod'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   /* Casco: la Sectorización se usa a diario (frentes, sectores, niveles), va en la barra y no en «Más» (29-10-2026, con el dueño) */
   const set=new Set(['hoy',...(M[r]||M.lector),...(CS()&&(r==='admin'||r==='editor')?['planos']:[])]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
