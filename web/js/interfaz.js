@@ -24,7 +24,7 @@ function tabAllowed(t){if(!me)return false;
 /** Pestañas principales de cada rol (van en la barra); el resto queda en "Más" */
 function tabPrimary(){if(!me)return[];if(offLps())return tabOrder().filter(tabAllowed);const r=me.role;
   const M={admin:['dash','look','mat','restr','plan','mapa','campo','lib','ind','prod','cli'],editor:['dash','look','mat','restr','plan','mapa','campo','lib','ind','prod'],
-    campo:['dash','campo','mapa','restr','plan','lib','ind','prod'],sc:['look','cap','mapa','restr','lib','ind','prod'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
+    campo:['dash','campo','mapa','mat','restr','plan','lib','ind','prod'],sc:['look','cap','mapa','mat','restr','lib','ind','prod'],veedor:['campo','mapa','ind','restr','look'],lector:['dash','look','restr','plan','lib','ind'],
     area:isCalArea()?['lib','restr','look','mapa','ind']:['restr','look','plan','lib','ind'],capataz:['cap']};
   const set=new Set(['hoy',...(M[r]||M.lector)]);return TAB_ORDER.filter(t=>set.has(t)&&tabAllowed(t))}
 function tabSecondary(){const p=new Set(tabPrimary());return tabOrder().filter(t=>!p.has(t)&&tabAllowed(t))}

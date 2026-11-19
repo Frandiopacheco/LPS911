@@ -32,6 +32,16 @@ service firebase.storage {
       // eliminar un plano con todos sus archivos: solo el administrador
       allow delete: if isOwner() || (verified() && isMember() && role() == 'admin');
     }
+    // Fotos de las observaciones de la Matriz (punch list, nov 2026; docs/ia/matriz.md «Observaciones»): mobs/<observación>/<foto>.jpg.
+    // Las ve el equipo de Last Planner; suben los ingenieros (admin, editor, campo) y los subcontratistas (qué observación
+    // pueden tocar lo controla Firestore); una foto no se reemplaza; borra solo el administrador.
+    match /mobs/{id}/{file} {
+      allow read: if isOwner() || (isMember() && !(role() in ['tcap', 'tasis', 'tcos', 'trh']));
+      allow create: if (isOwner() || (isMember() && role() in ['admin', 'editor', 'campo', 'sc']))
+        && request.resource.size < 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/jpeg|image/webp|image/png');
+      allow delete: if isOwner() || (verified() && isMember() && role() == 'admin');
+    }
     // Modelo 3D (beta): modelos/<especialidad>/r<rev>.frag — mismos permisos que los planos
     match /modelos/{rest=**} {
       allow read: if isOwner() || (isMember() && !(role() in ['tcap', 'tasis', 'tcos']));

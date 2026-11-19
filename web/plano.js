@@ -1284,6 +1284,8 @@ function ambMap(host,o){const bs=basesOf(o.pid);
     const ce=centroid(P),bb=bboxOf(P);labels.push({id:z.id,x:ce.x,y:ce.y,t:z.label,area:bb.w*bb.h,c:z.sel?'#111':z.c,f:'#fff',cls:'sza'+(z.sel?' sel':'')})}
   if(o.tmp&&o.tmp.length){svg+=`<polyline points="${ptsS(o.tmp)}" fill="rgba(31,95,122,.18)" stroke="#1F5F7A" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     o.tmp.forEach((p,i)=>svg+=`<circle cx="${p.x}" cy="${p.y}" r="${i?4:6}" fill="${i?'#1F5F7A':'#fff'}" stroke="#1F5F7A" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`)}
+  /* o.pins = [{id,x,y,t,c,sel,tip}]: puntos numerados que se tocan (Matriz › Gráfico › Observaciones, matriz-obs.js); el toque llega a onPick con su id */
+  for(const p of o.pins||[])labels.push({id:p.id,x:p.x,y:p.y,t:p.t,c:p.c,f:'#fff',nb:true,tip:p.tip||'',cls:'mobpin'+(p.sel?' sel':'')+(p.cls?' '+p.cls:'')});
   if(v._svgH!==svg){v.svg.innerHTML=svg;v._svgH=svg}v.labels=labels;v.handles=o.edit&&!o.draw?ambHandles(unflat(o.edit.pts)):[];v.apply();return base}
 /* puntos para ajustar la forma: esquinas y, entre ellas, puntos para agregar una esquina */
 function ambHandles(P){const H=P.map(p=>({x:p.x,y:p.y}));P.forEach((p,i)=>{const q=P[(i+1)%P.length];H.push({x:(p.x+q.x)/2,y:(p.y+q.y)/2,mid:i,cls:'mid'})});return H}

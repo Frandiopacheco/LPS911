@@ -2,9 +2,12 @@
 /* LPS 911 · Matriz › Gráfico (antes «Plano»; oct 2026, decidido con el dueño; sin códigos sobre el plano y más transparente): sobre la lámina base del piso (las formas de Sectorización),
    resalta los ambientes donde una actividad (o toda la partida de un SC) está Pendiente (rojo) o En curso (ámbar), según la
    Matriz tal cual (lo «sin validar» también cuenta). Lo demás va sin color. Solo lectura: no cambia la Matriz.
+   Modo «📍 Observaciones» (nov 2026): pines de las observaciones (punch list) y tocar un ambiente registra una (matriz-obs.js).
    Se arma una vez (el visor de la lámina no se destruye) y luego solo se actualizan sus partes.
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
-const MXPL={sel:'',vista:''};
+const MXPL={sel:'',vista:'',ob:'',obSc:''};
+/* modo «Observaciones» (U.mxPlOb, matriz-obs.js): naranja = ambiente con observaciones abiertas */
+const MXPL_OB='#E8590C';
 const MXPL_C={p:'#D64545',c:'#E0A01B',x:'#9AA3A8'};
 /* actividades que existen en los ambientes del piso (oct 2026, pedido del dueño: la lista del Gráfico solo trae las del piso elegido);
    null = sin piso elegido: no se filtra */
@@ -28,15 +31,25 @@ function renderMxPla(main,head){const pid=U.piso;const onF=mxPlFloor(pid);const 
   if(U.mxPlCat!=='*'&&!cats.some(c=>c.id===U.mxPlCat))U.mxPlCat=(cats[0]||{}).id||'';
   if(!$('#mxplmap',main)){main.innerHTML=`<div class="scroll"><div class="wrap mxwrap"><div id="mxplh"></div><div id="mxplf" class="fbar mxplf"></div><div id="mxplmsg"></div>
      <div class="mxplb" id="mxplb"><section class="mxplmw"><div class="szmap mxplmap" id="mxplmap"></div></section><aside class="mxpls" id="mxpls"></aside></div></div></div>`;
-    main.onchange=e=>{const t=e.target;if(t.id==='mxplsc'){U.mxPlSc=t.value;U.mxPlCat='';MXPL.sel='';saveUI();render()}else if(t.id==='mxplcat'){U.mxPlCat=t.value;MXPL.sel='';saveUI();render()}else if(t.id==='mxplv'){MXPL.vista=t.value;render()}};
+    main.onchange=e=>{const t=e.target;if(t.id==='mxplosc'){MXPL.obSc=t.value;MXPL.ob='';render();return}if(t.id==='mxplsc'){U.mxPlSc=t.value;U.mxPlCat='';MXPL.sel='';saveUI();render()}else if(t.id==='mxplcat'){U.mxPlCat=t.value;MXPL.sel='';saveUI();render()}else if(t.id==='mxplv'){MXPL.vista=t.value;render()}};
     main.onclick=e=>{const b=e.target.closest('[data-mxpla]');if(b){MXPL.sel=MXPL.sel===b.dataset.mxpla?'':b.dataset.mxpla;render();return}
-      const m=e.target.closest('[data-mxplmode]');if(m){U.mxPlCat=m.dataset.mxplmode==='all'?'*':((cats[0]||{}).id||'');MXPL.sel='';saveUI();render()}}}
+      const o=e.target.closest('[data-mobo]');if(o){MXPL.ob=o.dataset.mobo;mobOpen(o.dataset.mobo);render();return}
+      const m=e.target.closest('[data-mxplmode]');if(m){const k=m.dataset.mxplmode;U.mxPlOb=k==='ob';if(k!=='ob'){const cs=U.mxPlSc?mxPlCats(U.mxPlSc,mxPlFloor(U.piso)):[];U.mxPlCat=k==='all'?'*':((cs[0]||{}).id||'')}MXPL.sel='';MXPL.ob='';saveUI();render()}}}
   const hh=mxHd(head,mxViewSeg());const he=$('#mxplh',main);if(he.dataset.h!==hh){he.innerHTML=hh;he.dataset.h=hh;mxWire(main)}
   const API=window.__plano&&window.__plano.ambMap?window.__plano:null;if(!API)loadPlanoMod().then(()=>{if(U.tab==='mat'&&U.mxV==='pla')requestRender()}).catch(()=>{});
   const{bs,v}=pid&&API?mxPlBase(pid):{bs:[],v:''};
-  const all=U.mxPlCat==='*';
+  const all=U.mxPlCat==='*';const obM=!!U.mxPlOb&&typeof mobIdx==='function';
+  const seg=`<span class="seg" role="group" aria-label="Qué mostrar"><button data-mxplmode="one" class="${all||obM?'':'on'}">Una actividad</button><button data-mxplmode="all" class="${all&&!obM?'on':''}">Toda la partida</button>${typeof mobIdx==='function'?`<button data-mxplmode="ob" class="${obM?'on':''}" title="Observaciones por levantar (punch list): toca un ambiente en el plano para registrar una">📍 Observaciones</button>`:''}</span>`;
+  if(obM){const osc=mxPlObScs();if(MXPL.obSc&&!osc.includes(MXPL.obSc))MXPL.obSc='';
+    const fo=`${SCK()&&osc.length<2?'':`<label class="mxord"><span class="fgl">Subcontratista</span><select id="mxplosc" aria-label="Subcontratista"><option value="">${SCK()?'Mis partidas':'Todos'}</option>${osc.map(x=>`<option value="${esc(x)}"${x===MXPL.obSc?' selected':''}>${esc(conOf(x).name)}</option>`).join('')}</select></label>`}${seg}
+      ${bs.length>1?`<label class="mxord"><span class="fgl">Lámina</span><select id="mxplv" aria-label="Lámina">${bs.map(b=>`<option value="${esc(b.id)}"${b.id===v?' selected':''}>${esc(b.esp||b.name||'Lámina')}</option>`).join('')}</select></label>`:''}
+      <span class="fsp"></span><span class="mxleg"><span><i class="mxplsw" style="--c:${MXPL_OB}"></i>Con observaciones abiertas</span><span><i class="mxplsw o"></i>Sin observaciones</span></span>`;
+    const fe=$('#mxplf',main);if(fe.dataset.h!==fo){fe.innerHTML=fo;fe.dataset.h=fo}
+    const msg=!pid?'Elige un piso arriba (selector de piso) para ver su plano y registrar observaciones.':!API?'Cargando láminas…':'';
+    const me_=$('#mxplmsg',main);const mh=msg?`<div class="callout">${msg}</div>`:'';if(me_.innerHTML!==mh)me_.innerHTML=mh;$('#mxplb',main).hidden=!!msg;if(msg)return;
+    renderMxPlOb(main,pid,v,API);return}
   const fh=`${SCK()&&scs.length<2?`<b>${esc(conOf(sc).name)}</b>`:`<label class="mxord"><span class="fgl">Subcontratista</span><select id="mxplsc" aria-label="Subcontratista">${scs.map(x=>`<option value="${esc(x)}"${x===sc?' selected':''}>${esc(conOf(x).name)}</option>`).join('')}</select></label>`}
-    <span class="seg" role="group" aria-label="Qué mostrar"><button data-mxplmode="one" class="${all?'':'on'}">Una actividad</button><button data-mxplmode="all" class="${all?'on':''}">Toda la partida</button></span>
+    ${seg}
     ${all?'':`<label class="mxord"><span class="fgl">Actividad</span><select id="mxplcat" aria-label="Actividad">${cats.map(c=>`<option value="${esc(c.id)}"${c.id===U.mxPlCat?' selected':''}>${esc(c.name)}</option>`).join('')}</select></label>`}
     ${bs.length>1?`<label class="mxord"><span class="fgl">Lámina</span><select id="mxplv" aria-label="Lámina">${bs.map(b=>`<option value="${esc(b.id)}"${b.id===v?' selected':''}>${esc(b.esp||b.name||'Lámina')}</option>`).join('')}</select></label>`:''}
     <span class="fsp"></span><span class="mxleg"><span><i class="mxplsw" style="--c:${MXPL_C.p}"></i>Pendiente</span><span><i class="mxplsw" style="--c:${MXPL_C.c}"></i>En curso</span><span><i class="mxplsw o"></i>Sin pendientes</span></span>`;
@@ -59,3 +72,35 @@ function renderMxPla(main,head){const pid=U.piso;const onF=mxPlFloor(pid);const 
     ${!pen.length&&!cur.length?'<p class="note">Nada pendiente ni en curso en este piso para esta selección.</p>':''}
     ${nog.length?`<p class="note">${nog.length} ${nog.length===1?'ambiente con pendientes no está dibujado':'ambientes con pendientes no están dibujados'} en la lámina (se ubican en Sectorización): ${nog.map(o=>esc(o.a.code)).join(', ')}.</p>`:''}`;
   const se=$('#mxpls',main);if(se.dataset.h!==sh){se.innerHTML=sh;se.dataset.h=sh}}
+
+/* ---------- modo «Observaciones» (punch list, nov 2026; matriz-obs.js) ----------
+   Pines numerados de las observaciones abiertas del piso; tocar un ambiente abre la hoja para registrar una en ese punto
+   (quien puede: ingenieros y SC); tocar un pin la abre. Lo demás del Gráfico no cambia. */
+function mxPlObScs(){const s=new Set();for(const n of MX.obs.values())if(n&&n.st==='ab'&&n.sc&&(!SCK()||myScsI().includes(n.sc)))s.add(n.sc);
+  if(SCK())myScsI().forEach(x=>s.add(x));return[...s].filter(x=>S.con.has(x)).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))}
+function renderMxPlOb(main,pid,v,API){const ambs=[];for(const t of szTree(pid))for(const{a}of t.ambs)ambs.push({a,s:t.s});const ids=new Set(ambs.map(o=>o.a.id));
+  const okSc=n=>(!MXPL.obSc||n.sc===MXPL.obSc)&&(!SCK()||myScsI().includes(n.sc));
+  const L=[...MX.obs.values()].filter(n=>n&&ids.has(n.amb)&&n.st!=='anu'&&okSc(n)).sort((a,b)=>(a.num||0)-(b.num||0));
+  const open=L.filter(n=>n.st==='ab'),lev=L.filter(n=>n.st==='lev');const byA=new Map();open.forEach(n=>{if(!byA.has(n.amb))byA.set(n.amb,[]);byA.get(n.amb).push(n)});
+  const shapes=[];for(const{a}of ambs){const g=szGeo(a,v);if(!g)continue;const k=byA.has(a.id);
+    shapes.push({id:'a:'+a.id,kind:'a',pts:g,label:a.code,nolab:true,op:.22,sop:.45,c:k?MXPL_OB:MXPL_C.x,sel:MXPL.sel===a.id,dim:!k})}
+  const pins=open.filter(n=>n.pt&&n.pt.v===v).map(n=>({id:'ob:'+n.id,x:n.pt.x,y:n.pt.y,t:String(n.num||''),c:conOf(n.sc).color,sel:MXPL.ob===n.id,tip:`${mobLbl(n)} · ${n.desc||''}`}));
+  /* mientras se registra una nueva, el punto tocado se ve con «+» */
+  if(typeof OBS!=='undefined'&&OBS&&OBS.mode==='new'&&OBS.pt&&OBS.pt.v===v)pins.push({id:'a:'+OBS.amb,x:OBS.pt.x,y:OBS.pt.y,t:'+',c:MXPL_OB,sel:true});
+  const can=mobCan();
+  const base=API.ambMap($('#mxplmap',main),{pid,vista:v,canEdit:false,canUp:false,shapes,pins,draw:null,tmp:null,edit:null,onPick:(id,w)=>{
+    if(id&&id.startsWith('ob:')){MXPL.ob=id.slice(3);mobOpen(MXPL.ob);render();return}
+    const am=id&&id.startsWith('a:')?id.slice(2):'';MXPL.sel=am;MXPL.ob='';
+    if(am&&can)mobNew(am,w?{x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10,v}:null);
+    else if(!am&&can)toast('Toca dentro de un ambiente dibujado para registrar ahí la observación.');
+    render()}});
+  const nog=base?open.filter(n=>!n.pt||n.pt.v!==v).length:0;const nd=ambs.filter(o=>!szGeo(o.a,v)).length;
+  const grp=[...byA.entries()].map(([amb,ns])=>({a:S.amb.get(amb),ns})).filter(g=>g.a).sort((x,y)=>(x.a.code||'').localeCompare(y.a.code||'',undefined,{numeric:true}));
+  const sh=`<div class="mxplt"><b>Observaciones · ${esc((S.pis.get(pid)||{}).code||'')}</b><span><b style="color:${MXPL_OB}">${open.length}</b> abierta${open.length===1?'':'s'} · ${lev.length} levantada${lev.length===1?'':'s'}</span></div>
+    ${can?`<p class="note mobhelp">Toca un ambiente en el plano para registrar una observación en ese punto. Cada observación cuelga de una actividad del ambiente: no hace falta crear actividades nuevas.</p>`:''}
+    ${grp.map(g=>`<div class="mxplg${MXPL.sel===g.a.id?' on':''}">${esc(g.a.code)} · ${esc(g.a.name)} <small>${g.ns.length}</small></div>${g.ns.map(n=>mobItemHtml(n).replace('class="mobi','class="mobi'+(MXPL.ob===n.id?' on':''))).join('')}`).join('')}
+    ${!open.length?'<p class="note">No hay observaciones abiertas en este piso.</p>':''}
+    ${lev.length?`<details class="mobdone"><summary>Levantadas (${lev.length})</summary>${lev.map(mobItemHtml).join('')}</details>`:''}
+    ${nog?`<p class="note">${nog} sin punto en esta lámina (registradas desde la tabla o en otra lámina).</p>`:''}
+    ${nd&&can?`<p class="note">${nd} ${nd===1?'ambiente no está dibujado':'ambientes no están dibujados'} en la lámina (se dibujan en Sectorización): regístralas desde la tabla de la Matriz, en la ficha de la celda.</p>`:''}`;
+  const se=$('#mxpls',main);if(se.dataset.h!==sh){const op=se.querySelector('details.mobdone');const wasOpen=op&&op.open;se.innerHTML=sh;se.dataset.h=sh;if(wasOpen){const d=se.querySelector('details.mobdone');if(d)d.open=true}}}

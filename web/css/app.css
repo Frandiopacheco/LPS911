@@ -4890,3 +4890,31 @@ body:has(#plv) #lqm{z-index:400}
 .pdci:hover,.pdci.on{border-color:var(--accent)}.pdci.on{background:var(--accent-soft)}.pdci[disabled]{opacity:.55;cursor:default}
 .pdci>b{flex:0 0 auto;font-family:var(--f-mono)}.pdci>span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink2)}
 .pdci .lqt.ok{background:var(--ok-soft);color:var(--ok)}.pdci .lqt.warn{background:var(--warn-soft);color:var(--warn)}
+
+/* ===== Observaciones de la Matriz (punch list, nov 2026; js/matriz-obs.js) ===== */
+:root{--mob:#E8590C;--mob-soft:#FDEBDF}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--mob:#FF8A4C;--mob-soft:rgba(255,138,76,.16)}}
+:root[data-theme="dark"]{--mob:#FF8A4C;--mob-soft:rgba(255,138,76,.16)}
+/* número de observaciones abiertas en la celda de la tabla */
+table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:var(--mob);color:#fff;font:700 9.5px/15px var(--f-ui);box-shadow:0 0 0 1.5px var(--panel);pointer-events:none;z-index:1}
+/* insignia en la fila del Lookahead y botón «N obs.» de la fila fantasma */
+.mxbadge.mobrb{background:var(--mob-soft);color:var(--mob);border-color:var(--mob)}
+#grid tr.gh .ghb.mobb{color:var(--mob);background:var(--mob-soft);border:0;cursor:pointer}
+/* hoja: icono, actividades, lista */
+.kn.mobk{--k:var(--c,var(--mob));font-size:17px}
+.mobsc .kchips.mobcs{max-height:34vh;overflow:auto;align-content:flex-start}
+.mobdesc{height:auto;min-height:62px;padding:10px 12px;resize:vertical;font:15px/1.35 var(--f-ui)}
+.mobtx{margin:0;font-size:15px;line-height:1.4;white-space:pre-wrap}
+.mobst{font-weight:700}.mobst.st-ab{color:var(--mob)}.mobst.st-lev{color:var(--ok)}.mobst.st-anu{color:var(--muted)}
+.kbig.mobdel{color:var(--bad)}
+.mobl{display:flex;flex-direction:column;gap:6px}
+.mobi{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-left:4px solid var(--c,var(--mob));border-radius:var(--r-ctl);padding:7px 9px;font:inherit;font-size:13px;cursor:pointer;min-height:44px}
+.mobi:hover,.mobi.on{border-color:var(--accent)}.mobi.on{background:var(--accent-soft)}
+.mobi>span{display:flex;flex-direction:column;min-width:0}.mobi>span small{color:var(--ink2);font-size:12px}
+.mobi.st-lev,.mobi.st-anu{opacity:.65}.mobi.st-lev .mobn{background:var(--ok)}
+.mobn{flex:none;font:700 11px/1 var(--f-mono);background:var(--mob);color:#fff;border-radius:999px;padding:4px 7px;margin-top:1px}
+.pop .mobpi{text-align:left}.pop .mobpi b{font-family:var(--f-mono);color:var(--mob)}.pop .mobpi.st-lev b{color:var(--ok)}
+.mobhelp{margin:0 0 6px}.mobdone summary{cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink2);margin:8px 0 4px}.mobdone .mobi{margin-bottom:6px}
+/* pin numerado sobre el plano (Matriz › Gráfico › Observaciones) */
+.pvl.nb.mobpin{cursor:pointer;border:2px solid #fff}
+.pvl.nb.mobpin.sel{outline:2.5px solid var(--mob);outline-offset:3px}
