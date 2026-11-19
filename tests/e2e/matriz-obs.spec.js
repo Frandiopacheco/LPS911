@@ -164,3 +164,20 @@ test('✏️ Registrar: el ingeniero de campo toca un ambiente, agrega una activ
   await expect.poll(() => page.evaluate(() => window.__dbGet('mamb', 'a1').c.k1)).toBe('c');
   noErrors(errors, 'registrar actividades en el plano');
 });
+
+test('desde la ficha de la celda: «📍 marcando el punto» lleva al plano y el toque abre la observación con esa actividad', async ({ page }) => {
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: DATOS });
+  await page.evaluate(() => { U.piso = 'p1'; U.mxV = 'mat'; U.mxFalta = false; render(); });
+  await page.waitForFunction(() => MX.ld.amb && MX.ld.cat && document.querySelector('tr[data-amb="a1"] td.mc.s-t'));
+  await page.evaluate(() => { const tr = document.querySelector('tr[data-amb="a1"]'); const td = [...tr.querySelectorAll('td.mc')].find(t => { const c = mxCellAt(t); return c && c.cat === 'k1'; }); mxInfo(td, mxCellAt(td)); });
+  await page.locator('#pop [data-do="mobp"]').click();
+  await expect(page.locator('#mxplmap .pvs')).toBeVisible();
+  expect(await page.evaluate(() => [U.mxV, U.mxPlEd])).toEqual(['pla', true]);
+  await page.waitForFunction(() => { const h = document.querySelector('#mxplmap'); return h && h._v && h._v.z > 0; });
+  await page.waitForTimeout(300);
+  await tocar(page, 200, 200);
+  const sh = page.locator('#mobsheet');
+  await expect(sh.locator('[data-mobtab="obs"]')).toHaveClass(/on/);
+  await expect(sh.locator('[data-mobc=""]')).toContainText('Redes empotradas');
+  noErrors(errors, 'observación con punto desde la ficha');
+});

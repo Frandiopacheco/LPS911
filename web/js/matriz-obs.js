@@ -204,7 +204,13 @@ function mobGoPlan(n){const pid=pisoOfAmb(n.amb);if(pid&&S.pis.has(pid)){U.piso=
 /** html de las observaciones de una actividad en un ambiente (ficha de la celda en la Matriz) */
 function mobCellHtml(amb,cat){const L=mobOf(amb,cat).filter(n=>n.st!=='anu');const c=MX.cat.get(cat);const can=mobCanCat(c);if(!L.length&&!can)return'';
   return`<hr><div class="ph">Observaciones${L.length?` (${L.filter(n=>n.st==='ab').length} abiertas)`:''}</div>${L.map(n=>`<button data-do="mobo" data-id="${esc(n.id)}" class="mobpi st-${n.st}"><b>${esc(mobLbl(n))}</b> ${esc(n.desc||'')}${n.st!=='ab'?` <small class="mu">· ${MOBST[n.st]}</small>`:''}</button>`).join('')}
-    ${can?'<button data-do="mobn">＋ Observación (sin punto en el plano)</button>':''}`}
+    ${can&&mobHasGeo(amb)?'<button data-do="mobp">📍 Observación marcando el punto en el plano</button>':''}${can?'<button data-do="mobn">＋ Observación (sin punto en el plano)</button>':''}`}
+/** el ambiente está dibujado en alguna lámina (Sectorización) */
+const mobHasGeo=amb=>{const a=S.amb.get(amb);return!!(a&&a.geo&&Object.values(a.geo).some(g=>g&&g.length))};
+/** desde la ficha de la celda: abre Gráfico › Registrar en el piso del ambiente; el siguiente toque dentro del ambiente abre «Observación aquí» con la actividad elegida */
+function mobPlanAt(amb,cat){const pid=pisoOfAmb(amb);if(pid&&S.pis.has(pid)){U.piso=pid;U.pisoAll=false}
+  U.tab='mat';U.mxV='pla';U.mxPlEd=true;MXPL.sel=amb;MXPL.ob='';MXPL.pend={amb,cat};saveUI();render();
+  const a=S.amb.get(amb);toast(`Toca en el plano, dentro de ${a?a.code:'el ambiente'}, dónde está la observación.`)}
 /** lista de observaciones de una fila del Lookahead (clic en «N obs.») */
 function mobListPop(btn,amb,cat){const c=MX.cat.get(cat);const a=S.amb.get(amb);if(!c||!a)return;const L=mobOf(amb,cat).filter(n=>n.st==='ab');
   openPop(btn,`<div class="ph">${esc(c.name)} · ${esc(a.code)}</div><div class="ptx">${L.length} ${L.length===1?'observación abierta':'observaciones abiertas'}: la actividad está hecha pero falta levantarlas. Programa un día en la fila.</div>
