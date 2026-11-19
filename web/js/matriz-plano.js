@@ -5,7 +5,7 @@
    Modo «📍 Observaciones» (nov 2026): pines de las observaciones (punch list) y tocar un ambiente registra una (matriz-obs.js).
    Se arma una vez (el visor de la lámina no se destruye) y luego solo se actualizan sus partes.
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
-const MXPL={sel:'',vista:'',ob:'',obSc:''};
+const MXPL={sel:'',vista:'',ob:'',obSc:'',pend:null};
 /* modo «Observaciones» (U.mxPlOb, matriz-obs.js): naranja = ambiente con observaciones abiertas */
 const MXPL_OB='#E8590C';
 const MXPL_C={p:'#D64545',c:'#E0A01B',x:'#9AA3A8'};
@@ -110,7 +110,9 @@ function renderMxPlOb(main,pid,v,API,reg){const ambs=[];for(const t of szTree(pi
   const base=API.ambMap($('#mxplmap',main),{pid,vista:v,canEdit:false,canUp:false,shapes,pins,draw:null,tmp:null,edit:null,onPick:(id,w)=>{
     if(id&&id.startsWith('ob:')){MXPL.ob=id.slice(3);mobOpen(MXPL.ob);render();return}
     const am=id&&id.startsWith('a:')?id.slice(2):'';MXPL.sel=am;MXPL.ob='';
-    if(reg&&am)mobAmb(am,w?{x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10,v}:null);
+    if(reg&&am){mobAmb(am,w?{x:Math.round(w.x*10)/10,y:Math.round(w.y*10)/10,v}:null);
+      /* viene de la ficha de una celda («📍 marcando el punto»): abre directo la observación con esa actividad */
+      const pd=MXPL.pend;MXPL.pend=null;if(pd&&pd.amb===am&&OBS){OBS.tab='obs';if(mobCanCat(MX.cat.get(pd.cat)))OBS.cat=pd.cat;mobDraw()}}
     else if(reg)toast('Toca dentro de un ambiente dibujado.');
     render()}});
   if(typeof OBS!=='undefined'&&OBS&&$('#mobsheet'))mobDraw(); /* la hoja abierta se actualiza con lo que llega */
