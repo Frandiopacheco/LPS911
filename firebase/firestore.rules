@@ -713,12 +713,17 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/mcat/$(k)).data.get('scs', []).hasAny(scsOf())) && scCellVal(d, k)
         && existsAfter(/databases/$(database)/documents/mlog/$(l)) && scLogOk(id, d, k, l);
     }
+    // Ingeniero de campo (nov 2026, decidido con el dueño: registra en la Matriz tocando el plano): cambia estados y agrega
+    // actividades (c, m) a su nombre; no cambia el tipo del ambiente ni la marca de revisado (rv)
+    function campoCellOk(d) { return canDaily() && !canEdit() && d.get('by', '') == mid(); }
     match /mamb/{id} {
       allow read: if lpsMember();
       allow create: if (canEdit() && request.resource.data.get('by', '') == mid())
+        || (campoCellOk(request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'by', 'n', 't']))
         || (scCellOk(id, request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
             && request.resource.data.get('c', {}).keys().hasOnly([request.resource.data.k]));
       allow update: if (canEdit() && request.resource.data.get('by', '') == mid())
+        || (campoCellOk(request.resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'by', 'n', 't']))
         || (scCellOk(id, request.resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
             && request.resource.data.get('c', {}).diff(resource.data.get('c', {})).affectedKeys().hasOnly([request.resource.data.k])
@@ -743,6 +748,30 @@ service cloud.firestore {
         && (canEdit() || (isSC() && request.resource.data.get('sc', '') in scsOf()));
       allow update: if canEdit();
       allow delete: if false;
+    }
+    // Observaciones de la Matriz (punch list, nov 2026, docs/ia/matriz.md «Observaciones»): un detalle por levantar en una
+    // actividad de un ambiente (punto en el plano, texto y foto opcional). Las registran y levantan los ingenieros (canDaily)
+    // y el SC en su partida (sc de la observación). Nadie cambia el autor. El SC no cambia ambiente, actividad, partida ni
+    // número; solo corrige el texto, el punto y las fotos de las suyas, y solo anula las suyas. Anular = st 'anu'; borrar, el administrador.
+    function mobShape(d) {
+      return d.get('amb', '') is string && d.get('amb', '') != '' && d.get('cat', '') is string && d.get('cat', '') != ''
+        && d.get('sc', '') is string && d.get('desc', '') is string && d.get('desc', '').size() <= 600
+        && d.get('st', '') in ['ab', 'lev', 'anu'];
+    }
+    match /mobs/{id} {
+      allow read: if lpsMember();
+      allow create: if mobShape(request.resource.data) && request.resource.data.get('by', '') == mid() && request.resource.data.st == 'ab'
+        && (canDaily() || (isSC() && request.resource.data.sc in scsOf()));
+      allow update: if mobShape(request.resource.data) && request.resource.data.get('by', '') == resource.data.get('by', '')
+        && (canDaily()
+          || (isSC() && resource.data.get('sc', '') in scsOf()
+            && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st', 'lev', 'reab', 'u'])
+              || (resource.data.get('by', '') == mid()
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st', 'lev', 'reab', 'anu', 'ph', 'desc', 'pt', 'u'])))
+            && (request.resource.data.st != 'anu' || resource.data.get('by', '') == mid())
+            // lo que anuló el ingeniero no lo reabre el SC
+            && (resource.data.get('st', '') != 'anu' || resource.data.get('by', '') == mid())));
+      allow delete: if isAdmin();
     }
     // Foto semanal de la matriz: se crea con el correo de quien la guarda; no se cambia ni se borra
     match /mver/{id} {

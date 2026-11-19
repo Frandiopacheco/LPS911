@@ -160,7 +160,9 @@ async function mxUnifyDlg(){if(!isAdmin)return;
    La matriz dice «Terminado» o «No aplica» (confirmado por una persona) y la fila del lookahead sigue con días de hoy en adelante.
    Lookahead: marca en la fila (`mxRowBadge`) y aviso al programar un día nuevo (`mxApplyWarn`, desde apply). Matriz: celdas ⚠ y «Ver › Alertas». */
 function mxRowWarn(x){if(!x||!MX.ld.amb||!MX.ld.cat||!(x.days||[]).length)return null;const st=(MX.amb.get(x.ambId)||{}).c;if(!st)return null;
-  const c=mxCatOf(x);const v=c&&st[c];if(v!=='t'&&v!=='n')return null;const T=todayIso();return(x.days||[]).some(d=>d>T)?v:null}/* hoy no cuenta: ya no se reprograma y suele ser el día en que se terminó */
+  const c=mxCatOf(x);const v=c&&st[c];if(v!=='t'&&v!=='n')return null;
+  /* con observaciones abiertas (matriz-obs.js) los días futuros son para levantarlas: no es «terminada y aún programada» */
+  if(typeof mobOpenN==='function'&&mobOpenN(x.ambId,c))return null;const T=todayIso();return(x.days||[]).some(d=>d>T)?v:null}/* hoy no cuenta: ya no se reprograma y suele ser el día en que se terminó */
 /* ---------- La Matriz es la referencia del estado de la obra (decidido con el dueño, 10/10/2026) ----------
    Campo solo sirve para el PPC (diario; sugerencia para el semanal). Lo que el Lookahead oculta o recomienda sale solo de la
    Matriz: una fila se oculta («terminadas ocultas») cuando la Matriz tiene CONFIRMADO Terminado o No aplica en ese ambiente
@@ -168,7 +170,9 @@ function mxRowWarn(x){if(!x||!MX.ld.amb||!MX.ld.cat||!(x.days||[]).length)return
    M05 (auditoría 08/10): el Terminado que puso un SC no cuenta hasta que un ingeniero lo da por visto.
    mxDoneSt: 'ok' (ocultable) | null. */
 function mxDoneSt(x){if(!x||!MX.ld.amb||!MX.ld.cat)return null;const c=mxCatOf(x);if(!c)return null;const v=((MX.amb.get(x.ambId)||{}).c||{})[c];
-  if(v!=='t'&&v!=='n')return null;if(mxScPend(x.ambId,c))return null;const T=todayIso();return(x.days||[]).some(d=>d>T)?null:'ok'}
+  if(v!=='t'&&v!=='n')return null;if(mxScPend(x.ambId,c))return null;
+  /* observaciones abiertas: la fila no se oculta (hay que programar el día para levantarlas) */
+  if(typeof mobOpenN==='function'&&mobOpenN(x.ambId,c))return null;const T=todayIso();return(x.days||[]).some(d=>d>T)?null:'ok'}
 const mxDonePend=()=>false;
 function mxDoneTxt(x){const c=mxCatOf(x);const v=((MX.amb.get(x.ambId)||{}).c||{})[c];if(v==='t'&&mxScPend(x.ambId,c))return'el subcontratista la marcó Terminado en la Matriz; falta el «✓ Visto» de un ingeniero';return v&&MXS[v]?`la Matriz dice «${MXS[v]}»`:'por validar en la Matriz'}
 /* fila fuera del catálogo (oct 2026, pedido del dueño): 'off' = su nombre no es de ninguna actividad del catálogo;
@@ -177,7 +181,7 @@ function mxRowCat(x){if(!x||!x.name||!MX.ld.cat||!mxCatAct0().length)return null
 function mxCatBadge(x,k,pc){const w=pc?pc.cat:mxRowCat(x);if(!w)return'';const c=w==='sc'?MX.cat.get(mxCatOfN(x)):null;
   return`<span class="mxbadge mxcb" style="--k:${k||0}" data-mxc="${esc(x.id)}" role="button" tabindex="0" title="${w==='off'?'No está en el catálogo de actividades: no sale en la Matriz. Clic: elegir o agregar':`En el catálogo «${esc(c.name)}» es de ${esc(conOf(c.sc).name)}: esta fila no sale en la Matriz. Clic: ver opciones`}">${w==='off'?'∉':'SC'}</span>`}
 /* pc (opcional): {cat,warn,done} ya calculados por la grilla para la fila, para no repetirlos (auditoría de código 08/10, L1) */
-function mxRowBadge(x,k,pc){const cb=mxCatBadge(x,k,pc);if(cb)k=(k||0)+1;return cb+mxRowBadge0(x,k,pc)}
+function mxRowBadge(x,k,pc){const cb=mxCatBadge(x,k,pc);if(cb)k=(k||0)+1;const ob=typeof mobRowBadge==='function'?mobRowBadge(x,k):'';if(ob)k=(k||0)+1;return cb+ob+mxRowBadge0(x,k,pc)}
 function mxRowBadge0(x,k,pc){const v=pc?pc.warn:mxRowWarn(x);if(!v&&(pc?pc.done:mxDonePend(x)))return`<span class="mxbadge mxdn" style="--k:${k||0}" data-mxd="${esc(x.id)}" role="button" tabindex="0" title="Terminada en Campo el ${esc(fmtD(DONE.get(x.id)))} · ${esc(mxDoneTxt(x))}. Clic: confirmar o reabrir">✓?</span>`;return v?`<span class="mxbadge" style="--k:${k||0}" data-mxw="${esc(x.id)}" role="button" tabindex="0" title="La matriz dice «${MXS[v]}» para esta actividad en este ambiente, pero sigue programada. Clic: ver en la Matriz">⚠</span>`:''}
 function mxApplyWarn(ops){if(typeof cliTabOn==='function'&&cliTabOn())return;if(!MX.ld.amb||!MX.ld.cat)return;const T=todayIso();
   for(const o of ops){if(!o||o.col!=='acts'||!o.after)continue;const b=new Set((o.before&&o.before.days)||[]);if(!(o.after.days||[]).some(d=>d>=T&&!b.has(d)))continue;
@@ -219,7 +223,7 @@ function lkGhosts(){if(typeof mxPendList!=='function')return null;
   LKGHC.k=k;LKGHC.v=m;return m}
 function lkGhostRow(a,g,first,ambHtml,days,DI,nd){const c=g.c;const k=a.id+'|'+c.id;const sc=lkGhostSc(c);const co=conOf(sc);const can=(canWrite||PM())&&!verRO();
   let h=`<tr class="ar gh${first?' first':''}" data-gh="${esc(k)}" style="--c:${esc(co.color)}"><td class="s0"><div class="s0in">${can?`<button class="rb" data-ghmenu="${esc(k)}" aria-label="Opciones">&#8942;</button>`:''}</div></td>${ambHtml}
-    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.past?' (tuvo días antes)':''}">${esc(c.name)}</span>${can?`<button type="button" class="ghb${g.past?' ghq':''}" data-ghq="${esc(k)}" title="${g.past?'Ya tuvo días programados y nadie la cerró: toca para responder si terminó o programarla':'Toca para programarla o marcarla en la Matriz'}">${g.past?'¿Terminó?':'Falta'}</button>`:`<span class="ghb${g.past?' ghq':''}">${g.past?'¿Terminó?':'Falta'}</span>`}</td>
+    <td class="s3 sc" style="--c:${esc(co.color)}"><span class="ghsc">${esc(co.name)}</span></td><td class="s4 act"><span class="ghn" title="${esc(c.name)} · la Matriz la da como pendiente en este ambiente${g.past?' (tuvo días antes)':''}">${esc(c.name)}</span>${g.o&&g.o.ob&&(g.o.s==='t'||g.o.s==='n')?`<button type="button" class="ghb mobb" data-mobl="${esc(k)}" title="La actividad está hecha pero tiene ${g.o.ob} ${g.o.ob===1?'observación abierta':'observaciones abiertas'}: toca para verlas; toca un día de la fila para programar cuándo se levantan">${g.o.ob} obs.</button>`:can?`<button type="button" class="ghb${g.past?' ghq':''}" data-ghq="${esc(k)}" title="${g.past?'Ya tuvo días programados y nadie la cerró: toca para responder si terminó o programarla':'Toca para programarla o marcarla en la Matriz'}">${g.past?'¿Terminó?':'Falta'}</button>`:`<span class="ghb${g.past?' ghq':''}">${g.past?'¿Terminó?':'Falta'}</span>`}</td>
     <td class="cU"></td><td class="cM"></td><td class="cS"></td><td class="ro cN"></td><td class="ro cI"></td><td class="ro cF"></td>`;
   const T=todayIso();for(let i=0;i<nd;i++){const di=DI[i];h+=`<td class="${di.pre}${di.post}"${can&&days[i].d>=T?` data-d="${days[i].d}" title="${di.f}: programar «${esc(c.name)}»"`:''}></td>`}
   return h+'</tr>'}
