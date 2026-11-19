@@ -5,7 +5,7 @@
    mamb/{ambId} (tipo del ambiente y estados confirmados) y mver (fotos semanales). Detalle en docs/ia/matriz.md.
    Fase 1: editan administrador y editores; el resto solo la ve. */
 
-const MX={cat:new Map(),tipo:new Map(),amb:new Map(),ver:new Map(),prop:new Map(),log:new Map(),ld:{cat:false,tipo:false,amb:false},err:null,v:0,
+const MX={cat:new Map(),tipo:new Map(),amb:new Map(),ver:new Map(),prop:new Map(),log:new Map(),obs:new Map(),ld:{cat:false,tipo:false,amb:false},err:null,v:0,
   sel:new Set(),anchor:null,drag:null,moved:false,cmp:'',ali:null,aliV:-1,mc:null,mcK:''};
 /* matriz en el celular: más celdas que esto (unos 60 ambientes × 66 columnas) piden elegir un piso; MXBUSY marca un dibujo en curso */
 const MX_PHONE_MAX=4500,MXBUSY='lps911.mxbusy';
@@ -55,7 +55,10 @@ function ensureMx(){ensureMcat();ensureMamb();if(mxSubs||!db)return;const u=[];
   if(SCK()){onSc('mcatp','prop');onSc('mlog','log',q=>q.where('st','==','pend'),x=>x.st==='pend')}
   else{on('mcatp','prop');if(canWrite)on('mlog','log',fcol('mlog').where('st','==','pend'))}
   on('mtipo','tipo');
-  mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
+  /* observaciones (punch list, matriz-obs.js): el SC solo las de su partida (SEG-05); en Casco no hay Matriz.
+     Al final: la Matriz espera los tipos (MX.ld.tipo) y no conviene retrasar su primera foto */
+  if(!(typeof CS==='function'&&CS())){if(SCK())onSc('mobs','obs');else on('mobs','obs')}
+  mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log','obs'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
 const mxEd=()=>!!me&&canWrite&&!PM()&&!verRO();
 /* la grilla abre en consulta (desplazarse y tocar celdas sin cambiar nada); «✎ Editar» habilita seleccionar y marcar (oct 2026) */
 const mxCanEd=()=>mxEd()||(!!me&&SCK()&&!verRO());
@@ -95,10 +98,15 @@ function mxCells(){const T0=todayIso();const k=MX.v+'|'+DV+'|'+DONEV+'|'+T0;if(M
   for(const amb of S.amb.values()){const m=MX.amb.get(amb.id)||{};const st=m.c||{};const tp0=m.tipo&&MX.tipo.get(m.tipo);const tp=tp0&&!tp0.arch?tp0:null;const L=look.get(amb.id)||new Map();const C={};
     const add=(c,src)=>{if(!MX.cat.has(c)||MX.cat.get(c).arch)return;if(!C[c])C[c]={src,acts:L.get(c)||[]}};
     if(tp)(tp.acts||[]).forEach(c=>add(c,'tipo'));for(const c of L.keys())add(c,'look');for(const c of Object.keys(st))add(c,'man');
+    /* observaciones abiertas (matriz-obs.js): la actividad sale en el ambiente aunque no la traiga el tipo ni el lookahead */
+    const oc=MX.obs.size&&typeof mobIdx==='function'?mobIdx().open.get(amb.id):null;if(oc)for(const c of oc.keys())add(c,'obs');
     for(const[c,o]of Object.entries(C)){const v=st[c];if(v&&MXS[v]){o.s=v;o.sug=false}else{o.sug=true;o.s='p'} /* sin confirmar: pendiente; lo que diga Campo no se toma como propuesta (la Matriz es la referencia, 10/10) */
       /* fut: tiene días de hoy en adelante en el lookahead. Alerta (warn): confirmada terminada / no aplica y aún programada.
          Sin programar (sp): pendiente (no en curso) sin ningún día de hoy en adelante */
-      o.fut=o.acts.filter(id=>{const a=S.act.get(id);return a&&(a.days||[]).some(d=>d>=T0)});o.fwd=o.fut.filter(id=>(S.act.get(id).days||[]).some(d=>d>T0));o.warn=!o.sug&&(o.s==='t'||o.s==='n')&&o.fwd.length>0;o.sp=o.s==='p'&&!o.fut.length;
+      o.fut=o.acts.filter(id=>{const a=S.act.get(id);return a&&(a.days||[]).some(d=>d>=T0)});o.fwd=o.fut.filter(id=>(S.act.get(id).days||[]).some(d=>d>T0));o.ob=oc&&oc.get(c)||0;
+      /* con observaciones abiertas (ob), lo Terminado se comporta como pendiente para el Lookahead: sus días futuros no avisan ⚠
+         y, sin días de hoy en adelante, sale como fila fantasma «N obs.». El estado (y el %) no cambia */
+      o.warn=!o.sug&&(o.s==='t'||o.s==='n')&&o.fwd.length>0&&!o.ob;o.sp=(o.s==='p'||(o.ob>0&&o.s!=='c'))&&!o.fut.length;
       /* dsc: Campo la marcó terminada (todas sus filas) pero la matriz confirmó otra cosa: el ingeniero decide (confirmar o reabrir) */
       o.dsc=o.s!=='t'&&o.s!=='n'&&o.acts.length>0&&o.acts.every(id=>DONE.has(id))} /* aviso: Campo la marcó terminada; el ingeniero confirma o no */
     out.set(amb.id,C)}
@@ -153,7 +161,7 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
   /* con subcontratistas elegidos, solo los ambientes donde tienen algo (para llenar rápido) */
   if(mxSel().length){const ids=new Set(cols.map(c=>c.id));rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>Object.keys(cells.get(a.id)||{}).some(c=>ids.has(c)))})).filter(r=>r.ambs.length)}
   /* «Solo lo que falta» (idea 6): fuera los ambientes y las columnas sin nada pendiente ni en curso */
-  if(U.mxFalta){const open=o=>o&&(o.s==='p'||o.s==='c');rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>{const C=cells.get(a.id)||{};return cols.some(c=>open(C[c.id]))})})).filter(r=>r.ambs.length);
+  if(U.mxFalta){const open=o=>o&&(o.s==='p'||o.s==='c'||o.ob>0);/* con observaciones abiertas también falta algo */rows=rows.map(r=>({...r,ambs:r.ambs.filter(a=>{const C=cells.get(a.id)||{};return cols.some(c=>open(C[c.id]))})})).filter(r=>r.ambs.length);
     const keep=cols.filter(c=>rows.some(r=>r.ambs.some(a=>open((cells.get(a.id)||{})[c.id]))));cols.length=0;cols.push(...keep)}
   const cmp=mxCmpMap();const ed=mxEdG();
   /* totales de lo que está a la vista */
@@ -225,7 +233,8 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
         if(!o){h+=`<td class="mc x${sel}" data-k="${ci}"></td>`;return}
         let cl=`mc s-${o.s}${o.sug?' sug':''}${o.dsc?' dsc':''}${PSC&&PSC.has(k)?' scp':''}${sel}`;let tt=MXS[o.s]+(o.sug?' (sin validar)':'')+(o.dsc?' · Campo la marcó terminada':'');
         if(cmp){const b=(cmp[a.id]||{})[c.id]||'';if(b!==o.s){cl+=' chg';tt+=` · antes: ${b?MXS[b]:'no estaba'}`}}
-        h+=`<td class="${cl}" data-k="${ci}" title="${esc(tt)}">${o.sug?MXI.sug:MXI[o.s]}</td>`});
+        if(o.ob){cl+=' mxobc';tt+=` · ${o.ob} ${o.ob===1?'observación abierta':'observaciones abiertas'}`}
+        h+=`<td class="${cl}" data-k="${ci}" title="${esc(tt)}">${o.sug?MXI.sug:MXI[o.s]}${o.ob?`<b class="mxob">${o.ob}</b>`:''}</td>`});
       h+='</tr>';ri++}}
   h+=`</tbody><tfoot><tr><th class="mxa">Terminado</th><td class="mxtp"></td><td class="mxpc">${pc(tot.t)}</td>${colT.map(t=>{const v=t.a?Math.round(100*t.t/t.a):null;return`<td class="mxf${v===0?' z':''}">${v==null?'':v+'%'}</td>`}).join('')}</tr></tfoot></table></div>
    </div></div>`;
@@ -348,16 +357,17 @@ document.addEventListener('keydown',e=>{if(U.tab!=='mat'||!MX.sel.size||!mxEdG()
 /* ficha de una celda: de dónde sale, qué hay en el lookahead y (si edita) cambiar su estado */
 function mxInfo(td,c){const cat=MX.cat.get(c.cat);const a=S.amb.get(c.amb);if(!cat||!a)return;const o=(mxCells().get(c.amb)||{})[c.cat];const ed=mxEdG();const scE=!mxEd()&&!!MX.edit&&typeof mxScCan==='function'&&mxScCan(cat);const hint=!MX.edit&&(mxEd()||(typeof mxScCan==='function'&&mxScCan(cat)));
   const m=MX.amb.get(c.amb)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);
-  const src=!o?'No está en este ambiente.':o.src==='tipo'?`Del tipo de ambiente «${esc(tp?tp.name:'')}».`:o.src==='look'?'Del lookahead.':'Agregada a mano.';
+  const src=!o?'No está en este ambiente.':o.src==='tipo'?`Del tipo de ambiente «${esc(tp?tp.name:'')}».`:o.src==='look'?'Del lookahead.':o.src==='obs'?'Por sus observaciones.':'Agregada a mano.';
   const L=(o&&o.acts||[]).map(id=>S.act.get(id)).filter(Boolean).map(x=>{const d=x.days||[];const dn=DONE.get(x.id);return`<div class="ptx">${esc(x.name)} · ${d.length?esc(fmtD(d[0]))+(d.length>1?'–'+esc(fmtD(d[d.length-1])):''):'sin días'}${dn?` · <b>terminada ${esc(fmtD(dn))}</b>`:''}</div>`}).join('');
   openPop(td,`<div class="ph">${esc(cat.name)}</div><div class="ptx">${esc(a.code)} ${esc(a.name)} · ${esc(conOf(cat.sc).name)}</div>
    <div class="ptx">${o?`<b>${MXS[o.s]}</b>${o.sug?' · propuesta del sistema, sin validar':''}`:''} ${src}</div>
    ${o&&o.dsc?`<div class="ptx">⚑ En Campo la marcaron <b>terminada</b> (${esc(o.acts.map(id=>fmtD(DONE.get(id))).filter(Boolean).join(', '))}), pero aquí dice «${MXS[o.s]}». Confirma Terminado o reábrela en el Lookahead.</div>${canDaily?'<button data-do="reo">Reabrir en el Lookahead (no está terminada)</button>':''}`:''}${L?'<hr><div class="ph">En el lookahead</div>'+L:''}
    ${typeof mxWhoHtml==='function'?mxWhoHtml(c.amb,c.cat):''}
+   ${typeof mobCellHtml==='function'?mobCellHtml(c.amb,c.cat):''}
    ${hint?'<hr><div class="ptx">Para cambiarla, toca <b>✎ Editar</b> arriba.</div>':''}
    ${scE?`<hr>${['p','c','t','n'].map(s=>`<button data-do="scs" data-s="${s}"${o&&!o.sug&&o.s===s?' class="on"':''}><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</button>`).join('')}`:''}
    ${ed?`<hr>${['p','c','t','n'].map(s=>`<button data-do="s" data-s="${s}"${o&&!o.sug&&o.s===s?' class="on"':''}><i class="mc s-${s}">${MXI[s]}</i>${MXS[s]}</button>`).join('')}${o&&o.sug?'<button data-do="s" data-s="ok">✓ Validar como está</button>':''}${o&&o.src==='man'?'<button data-do="rm" class="danger">Quitar de este ambiente</button>':''}`:''}`,
-   {reo:()=>{(o&&o.acts||[]).forEach(id=>reopenDone(id,true));toast('Reabierta en el Lookahead');render()},s:d=>{MX.sel=new Set([c.amb+'|'+c.cat]);mxApply(d.s)},rm:()=>mxRemove(c.amb,c.cat),scs:d=>mxScSet(c.amb,c.cat,d.s)})}
+   {reo:()=>{(o&&o.acts||[]).forEach(id=>reopenDone(id,true));toast('Reabierta en el Lookahead');render()},s:d=>{MX.sel=new Set([c.amb+'|'+c.cat]);mxApply(d.s)},rm:()=>mxRemove(c.amb,c.cat),scs:d=>mxScSet(c.amb,c.cat,d.s),mobo:d=>mobOpen(d.id),mobn:()=>mobNew(c.amb,null,c.cat)})}
 /* quita los días desde mañana (hoy ya está comprometido) de las filas del lookahead; pasa por apply: Deshacer, historial y días cerrados */
 async function mxUnprogram(ids,name){if(!mxEd())return;const T=todayIso();const ops=[];let nd=0;
   for(const id of ids){const x=S.act.get(id);if(!x)continue;const keep=(x.days||[]).filter(d=>d<=T);const drop=(x.days||[]).filter(d=>d>T);if(!drop.length)continue;nd+=drop.length;

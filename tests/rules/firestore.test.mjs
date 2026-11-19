@@ -1284,6 +1284,41 @@ test('matriz: una actividad de varios SC (scs) la llena también el SC sumado; e
   await assertFails(lote('ky', 'x2'));
   await assertFails(setDoc(doc(sc, 'mcat/k60'), { name: 'Nueva', sc: 'c-gabel', scs: ['c-otro'], cl: 't', by: 'sc@obra.pe', rev: { by: 'sc@obra.pe' } }));
 });
+test('observaciones de la matriz (mobs): registran ingenieros y el SC en su partida; el SC levanta las de su partida y solo anula las suyas; nadie borra', async () => {
+  const ob = (by, sc, x = {}) => ({ amb: 'a1', cat: 'k001', sc, pid: 'p1', num: 1, desc: 'Corregir sello en ventana', pt: { x: 10, y: 20, v: 'l1' }, ph: [], st: 'ab', by, n: 'x', t: 1, ...x });
+  const campo = user('campo@obra.pe'), sc = user('sc@obra.pe'), lec = user('lector@obra.pe'), ot = user('ot@obra.pe'), ed = user('editor@obra.pe');
+  /* crear: ingeniero de campo y editor (cualquier partida), SC solo la suya y a su nombre; lector, área y capataz no */
+  await assertSucceeds(setDoc(doc(campo, 'mobs/o1'), ob('campo@obra.pe', 'c-otro')));
+  await assertSucceeds(setDoc(doc(ed, 'mobs/o2'), ob('editor@obra.pe', 'c-gabel')));
+  await assertSucceeds(setDoc(doc(sc, 'mobs/o3'), ob('sc@obra.pe', 'c-gabel')));
+  await assertFails(setDoc(doc(sc, 'mobs/o4'), ob('sc@obra.pe', 'c-otro')));
+  await assertFails(setDoc(doc(sc, 'mobs/o5'), ob('campo@obra.pe', 'c-gabel')));
+  await assertFails(setDoc(doc(campo, 'mobs/o6'), ob('campo@obra.pe', 'c-otro', { st: 'lev' })));
+  await assertFails(setDoc(doc(campo, 'mobs/o7'), ob('campo@obra.pe', 'c-otro', { amb: '' })));
+  await assertFails(setDoc(doc(lec, 'mobs/o8'), ob('lector@obra.pe', 'c-gabel')));
+  await assertFails(setDoc(doc(ot, 'mobs/o9'), ob('ot@obra.pe', 'c-gabel')));
+  await assertFails(setDoc(doc(cap('cap1'), 'mobs/o10'), ob('u_cap1', 'c-gabel')));
+  await assertSucceeds(getDoc(doc(lec, 'mobs/o1')));
+  /* levantar: el SC las de su partida (aunque las registre el ingeniero), no las de otra; no cambia la actividad ni el texto ajeno */
+  const lev = { st: 'lev', lev: { by: 'sc@obra.pe', n: 'SC', t: 2, sc: true } };
+  await assertSucceeds(updateDoc(doc(sc, 'mobs/o2'), lev));
+  await assertFails(updateDoc(doc(sc, 'mobs/o1'), lev));
+  await assertFails(updateDoc(doc(sc, 'mobs/o2'), { cat: 'k002' }));
+  await assertFails(updateDoc(doc(sc, 'mobs/o2'), { desc: 'Otro texto' }));
+  await assertSucceeds(updateDoc(doc(sc, 'mobs/o3'), { desc: 'Corregir sello en ventana (lado izquierdo)' }));
+  /* reabrir: el ingeniero y el SC de la partida */
+  await assertSucceeds(updateDoc(doc(campo, 'mobs/o2'), { st: 'ab', reab: { by: 'campo@obra.pe', n: 'x', t: 3 } }));
+  /* anular: el SC solo las suyas; el ingeniero cualquiera */
+  await assertFails(updateDoc(doc(sc, 'mobs/o2'), { st: 'anu', anu: { by: 'sc@obra.pe', t: 4 } }));
+  await assertSucceeds(updateDoc(doc(sc, 'mobs/o3'), { st: 'anu', anu: { by: 'sc@obra.pe', t: 4 } }));
+  await assertSucceeds(updateDoc(doc(campo, 'mobs/o1'), { st: 'anu', anu: { by: 'campo@obra.pe', t: 4 } }));
+  /* nadie cambia el autor; lector no actualiza; borrar solo el administrador */
+  await assertFails(updateDoc(doc(campo, 'mobs/o2'), { by: 'campo@obra.pe' }));
+  await assertFails(updateDoc(doc(lec, 'mobs/o2'), lev));
+  await assertFails(deleteDoc(doc(campo, 'mobs/o1')));
+  await assertFails(deleteDoc(doc(sc, 'mobs/o3')));
+  await assertSucceeds(deleteDoc(doc(user(OWNER), 'mobs/o1')));
+});
 test('auditoría 09/10: semanas, fotos y configuración solo las borra el admin; el editor sí deshace lo que crea', async () => {
   await env.withSecurityRulesDisabled(async c => { const db = c.firestore();
     await setDoc(doc(db, 'weeks/90_p1'), { n: 90, pisoId: 'p1', frozenAt: 'x', items: {}, res: {} });
