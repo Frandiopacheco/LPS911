@@ -40,6 +40,11 @@ const mobLbl=n=>{const a=S.amb.get(n.amb);return(a?a.code:'?')+'-'+(n.num||'?')}
 const mobNext=amb=>mobOf(amb).reduce((m,n)=>Math.max(m,n.num||0),0)+1;
 /** SC de la observación: el de la partida del SC que la registra; si no, el principal de la actividad */
 const mobScOf=c=>{if(SCK()){const m=mxScsOf(c).find(s=>myScsI().includes(s));if(m)return m}return c.sc||''};
+/* el SC solo tiene las observaciones de su partida (SEG-05): el número sale del servidor si contesta pronto; si no, del cálculo local */
+async function mobNextSrv(amb){let num=mobNext(amb);if(!SCK()||!navigator.onLine)return num;
+  try{const sn=await Promise.race([fcol('mobs').where('amb','==',amb).get(),new Promise((_,ko)=>setTimeout(()=>ko(new Error('tiempo')),3000))]);
+    sn.docs.forEach(d=>{const x=+(d.data().num||0);if(x>=num)num=x+1})}catch(e){}
+  return num}
 
 /* ---------- frases frecuentes: así «corregir sello» o «desmanche» son un toque sin volverse actividades del catálogo ---------- */
 function mobFrases(cat){const cnt=new Map();
@@ -52,7 +57,9 @@ function mobPhoto(id,data){const fid=uid('f');
   const fallback=()=>{FOTO.set(fid,data);fcol('fotos').doc(fid).set({data,mobId:id,by:me.email,ts:NOW()}).catch(err=>toast('No se pudo guardar la foto: '+(err.code||err.message)));return fid};
   if(!navigator.onLine||typeof plPut!=='function'||!(window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.storageBucket))return Promise.resolve(fallback());
   const path='mobs/'+id+'/'+fid+'.jpg';
-  return fetch(data).then(r=>r.blob()).then(b=>plPut(path,b,'image/jpeg')).then(()=>{MOBPH.set('st:'+path,data);return'st:'+path},()=>fallback())}
+  /* con señal mala navigator.onLine sigue en true y plPut reintenta: a los 15 s pasa a fotos de Firestore para no dejarla solo en memoria */
+  const up=fetch(data).then(r=>r.blob()).then(b=>plPut(path,b,'image/jpeg'));const to=new Promise((_,ko)=>setTimeout(()=>ko(new Error('tiempo')),15000));
+  return Promise.race([up,to]).then(()=>{MOBPH.set('st:'+path,data);return'st:'+path},()=>fallback())}
 function mobPhSrc(ref){if(!ref)return'';if(!ref.startsWith('st:')){loadFoto(ref);return FOTO.get(ref)||''}
   if(MOBPH.has(ref))return MOBPH.get(ref)||'';MOBPH.set(ref,'');
   if(typeof plGet==='function')plGet(ref.slice(3)).then(b=>{const u=URL.createObjectURL(b);MOBPH.set(ref,u);$$(`img[data-mobph="${CSS.escape(ref)}"]`).forEach(i=>i.src=u)}).catch(()=>MOBPH.delete(ref));
@@ -71,14 +78,16 @@ function mobAddPhotos(id,list,field){(list||[]).forEach(data=>mobPhoto(id,data).
   const AU=firebase.firestore.FieldValue.arrayUnion;const n=MX.obs.get(id);
   if(n){const doc={...n};if(field==='lev')doc.lev={...(n.lev||{}),ph:[...((n.lev||{}).ph||[]),ref]};else doc.ph=[...(n.ph||[]),ref];delete doc.id;mobLocal(id,doc)}
   fcol('mobs').doc(id).update(field==='lev'?{'lev.ph':AU(ref)}:{ph:AU(ref)}).catch(mobErr)}))}
-function mobCreate(){const o=OBS;if(!o||!db)return;const c=MX.cat.get(o.cat);const a=S.amb.get(o.amb);const desc=String(o.desc||'').trim();
+async function mobCreate(){const o=OBS;if(!o||!db||o.busy)return;const c=MX.cat.get(o.cat);const a=S.amb.get(o.amb);const desc=String(o.desc||'').trim();
   if(!a){toast('Elige el ambiente.');return}if(!c){toast('Elige en qué actividad es la observación.');return}if(!desc){toast('Escribe o elige qué hay que hacer.');return}
   if(!mobCanCat(c)){toast('Solo puedes registrar observaciones de tu partida.');return}
-  const id=uid('ob');const doc={amb:a.id,cat:c.id,sc:mobScOf(c),pid:pisoOfAmb(a.id)||'',num:mobNext(a.id),desc:desc.slice(0,600),pt:o.pt||null,ph:[],st:'ab',...mobMeta()};
+  o.busy=true;const num=Math.max(await mobNextSrv(a.id),o.num||0);if(OBS!==o)return;o.busy=false;
+  const sc=o.sc&&mxScsOf(c).includes(o.sc)&&(!SCK()||myScsI().includes(o.sc))?o.sc:mobScOf(c);
+  const id=uid('ob');const doc={amb:a.id,cat:c.id,sc,pid:pisoOfAmb(a.id)||'',num,desc:desc.slice(0,600),pt:o.pt||null,ph:[],st:'ab',...mobMeta()};
   mobLocal(id,doc);fcol('mobs').doc(id).set(doc).catch(mobErr);mobAddPhotos(id,o.newPh,'ph');
   toast(`Observación ${a.code}-${doc.num} registrada${o.newPh.length?' (subiendo la foto…)':''}`);
   /* sigue en el mismo ambiente para registrar otra (recorrido rápido) */
-  OBS={mode:'new',id:'',amb:a.id,pt:null,cat:'',desc:'',q:'',newPh:[]};mobDraw()}
+  OBS={mode:'new',id:'',amb:a.id,pt:null,cat:'',desc:'',q:'',newPh:[],num:num+1};mobDraw()}
 function mobLev(){const n=OBS&&MX.obs.get(OBS.id);if(!mobCanLev(n))return;const lev={...mobMeta(),...(SCK()?{sc:true}:{})};
   mobPatch(n.id,{st:'lev',lev,u:mobMeta()});mobAddPhotos(n.id,OBS.newPh,'lev');toast(`${mobLbl(n)} levantada`);mobClose()}
 function mobReab(){const n=OBS&&MX.obs.get(OBS.id);if(!mobCanLev(n))return;mobPatch(n.id,{st:'ab',reab:mobMeta(),u:mobMeta()});toast(`${mobLbl(n)} reabierta`);mobDraw()}
@@ -91,22 +100,29 @@ function mobSaveEd(){const n=OBS&&MX.obs.get(OBS.id);if(!mobCanEd(n))return;cons
 /* ---------- hoja inferior ---------- */
 /** nueva observación en un ambiente (pt = punto tocado en la lámina {x,y,v}; cat = actividad ya elegida, desde la ficha de una celda) */
 function mobNew(amb,pt,cat){if(!mobCan()){toast('Registran observaciones los ingenieros y los subcontratistas.');return}
-  OBS={mode:'new',id:'',amb,pt:pt||null,cat:cat&&mobCanCat(MX.cat.get(cat))?cat:'',desc:'',q:'',newPh:[]};mobDraw()}
+  const o=OBS={mode:'new',id:'',amb,pt:pt||null,cat:cat&&mobCanCat(MX.cat.get(cat))?cat:'',desc:'',q:'',newPh:[]};mobDraw();
+  if(SCK())mobNextSrv(amb).then(n=>{if(OBS===o&&n!==mobNext(amb)){o.num=n;mobDraw()}})}
 function mobOpen(id){const n=MX.obs.get(id);if(!n)return;OBS={mode:'edit',id,amb:n.amb,pt:n.pt||null,cat:n.cat,desc:n.desc||'',q:'',newPh:[]};mobDraw()}
 function mobClose(){const sh=$('#mobsheet');if(sh)sh.remove();const had=!!(OBS&&OBS.pt);OBS=null;if(had&&U.tab==='mat'&&U.mxV==='pla')requestRender()}
-/** actividades donde registrar en el ambiente: las que tiene en la Matriz (o, con búsqueda, todo el catálogo), en el orden del tren */
+/** actividades donde registrar: SOLO las que el ambiente tiene en la Matriz (decidido con el dueño: una observación cuelga de una
+    actividad del ambiente; si falta la actividad entera, se agrega al ambiente como Pendiente), en el orden del tren; q filtra entre ellas */
 function mobCats(amb,q){const cells=mxCells().get(amb)||{};const qq=mnk(q||'');
-  const L=qq?[...MX.cat.values()].filter(c=>!c.arch&&mnk(c.name).includes(qq)):Object.keys(cells).map(k=>MX.cat.get(k)).filter(Boolean);
-  return L.filter(c=>!c.arch&&mobCanCat(c)).sort((x,y)=>typeof mxSeqCmp==='function'?mxSeqCmp(x,y):(x.ord||0)-(y.ord||0)).slice(0,qq?14:200).map(c=>({c,o:cells[c.id]}))}
+  return Object.keys(cells).map(k=>MX.cat.get(k)).filter(c=>c&&!c.arch&&mobCanCat(c)&&(!qq||mnk(c.name).includes(qq)))
+    .sort((x,y)=>typeof mxSeqCmp==='function'?mxSeqCmp(x,y):(x.ord||0)-(y.ord||0)).map(c=>({c,o:cells[c.id]}))}
+/** quien puede agregar una actividad al ambiente (como Pendiente): editores y el SC en su partida (mxAddCell, matriz-rec.js) */
+const mobCanAdd=()=>!!me&&(typeof mxEd==='function'&&mxEd()||SCK());
 function mobItemHtml(n){const c=MX.cat.get(n.cat);const co=conOf(n.sc);
   return`<button class="mobi st-${n.st}" data-mobo="${esc(n.id)}" style="--c:${esc(co.color)}"><b class="mobn">${esc(mobLbl(n))}</b><span><b>${esc(n.desc||'')}</b><small>${esc(c?c.name:'')} · ${esc(co.name)}${n.st!=='ab'?' · '+MOBST[n.st]:''}${(n.ph||[]).length?' · 📷':''}${n.pt?'':' · sin punto'}</small></span></button>`}
 function mobDraw(){if(!OBS)return;const o=OBS;const a=S.amb.get(o.amb);const n=o.mode==='edit'?MX.obs.get(o.id):null;if(o.mode==='edit'&&!n){mobClose();return}
   const sec=a&&secOf(a.sectorId);let h='';
   if(!n){const cats=mobCats(o.amb,o.q);const c=MX.cat.get(o.cat);
-    h+=`<div class="ksh"><i class="kn mobk" aria-hidden="true">📍</i><div><b>Nueva observación ${a?esc(a.code)+'-'+mobNext(a.id):''}</b><span>${a?esc(a.code+' · '+a.name):'Sin ambiente'}${sec?' · '+esc(sec.name):''}${o.pt?' · punto marcado en el plano':''}</span></div><button class="kx" data-mobx aria-label="Cerrar">×</button></div>`;
+    h+=`<div class="ksh"><i class="kn mobk" aria-hidden="true">📍</i><div><b>Nueva observación ${a?esc(a.code)+'-'+(o.num||mobNext(a.id)):''}</b><span>${a?esc(a.code+' · '+a.name):'Sin ambiente'}${sec?' · '+esc(sec.name):''}${o.pt?' · punto marcado en el plano':''}</span></div><button class="kx" data-mobx aria-label="Cerrar">×</button></div>`;
     h+=`<div class="ksl">¿En qué actividad?</div>${c?`<div class="kchips kw"><button class="on" data-mobc="" style="--c:${esc(conOf(c.sc).color)}"><i></i>${esc(c.name)} ✕</button></div>`:
-      `<input class="kin" id="mobq" value="${esc(o.q)}" placeholder="Buscar otra actividad del catálogo" aria-label="Buscar actividad">
-      <div class="kchips kw mobcs">${cats.map(({c,o:x})=>`<button data-mobc="${esc(c.id)}" style="--c:${esc(conOf(c.sc).color)}" title="${esc(conOf(c.sc).name)}${x?' · '+MXS[x.s]:''}"><i></i>${esc(c.name)}${x&&x.s==='t'?' ✓':''}</button>`).join('')||`<p class="note">${o.q?'Nada con ese nombre en el catálogo.':'Este ambiente no tiene actividades en la Matriz: busca arriba.'}</p>`}</div>`}`;
+      `${cats.length>12||o.q?`<input class="kin" id="mobq" value="${esc(o.q)}" placeholder="Buscar entre las actividades del ambiente" aria-label="Buscar actividad">`:''}
+      <div class="kchips kw mobcs">${cats.map(({c,o:x})=>`<button data-mobc="${esc(c.id)}" style="--c:${esc(conOf(c.sc).color)}" title="${esc(conOf(c.sc).name)}${x?' · '+MXS[x.s]:''}"><i></i>${esc(c.name)}${x&&x.s==='t'?' ✓':''}</button>`).join('')||`<p class="note">${o.q?'Ninguna actividad del ambiente con ese nombre.':'Este ambiente no tiene actividades en la Matriz'+(SCK()?' de tu partida':'')+'.'}</p>`}</div>
+      <p class="knote">¿Falta la actividad entera? No es una observación: ${mobCanAdd()?'<button class="lnkb" data-moba="addc">agrégala al ambiente como Pendiente</button>':'pídele al ingeniero de producción que la agregue al ambiente como Pendiente'}.</p>`}`;
+    if(c&&!SCK()&&mxScsOf(c).length>1){const cur=o.sc&&mxScsOf(c).includes(o.sc)?o.sc:c.sc;
+      h+=`<div class="ksl">¿De qué subcontratista?</div><div class="kchips kw">${mxScsOf(c).map(x=>`<button class="${x===cur?'on':''}" data-mobsc="${esc(x)}" style="--c:${esc(conOf(x).color)}"><i></i>${esc(conOf(x).name)}</button>`).join('')}</div>`}
     if(c){const fr=mobFrases(c.id);
       h+=`<div class="ksl">¿Qué hay que hacer?</div><div class="kchips kw">${fr.map(t=>`<button data-mobd="${esc(t)}" class="${o.desc===t?'on':''}">${esc(t)}</button>`).join('')}</div>
         <textarea class="kin mobdesc" id="mobdesc" rows="2" maxlength="600" placeholder="Ej.: sello de la ventana despegado en la esquina" aria-label="Qué hay que hacer">${esc(o.desc)}</textarea>`;
@@ -135,15 +151,17 @@ async function mobChange(e){const t=e.target;if(!OBS)return;
   if(t.id==='mobfoto'&&t.files[0]){const f=t.files[0];t.value='';try{toast('Comprimiendo foto…');OBS.newPh.push(await shrinkPhoto(f));mobDraw()}catch(err){toast(err.message)}}}
 function mobClick(e){const t=e.target;const sh=$('#mobsheet');if(t===sh&&NOW()-(sh._open||0)<600)return;if(t===sh||t.closest('[data-mobx]')){mobClose();return}if(!OBS)return;let b;
   const im=t.closest('.mobph img');if(im&&im.src){const lb=document.createElement('div');lb.className='lb';lb.innerHTML=`<div class="lbbar"><button class="ib" data-x="1">Cerrar</button></div><img src="${im.src}" alt="">`;lb.onclick=ev=>{if(ev.target.dataset.x||ev.target===lb)lb.remove()};document.body.appendChild(lb);return}
-  if((b=t.closest('[data-mobc]'))){OBS.cat=b.dataset.mobc;OBS.q='';mobDraw();return}
+  if((b=t.closest('[data-mobc]'))){OBS.cat=b.dataset.mobc;OBS.q='';OBS.sc='';mobDraw();return}
+  if((b=t.closest('[data-mobsc]'))){OBS.sc=b.dataset.mobsc;mobDraw();return}
   if((b=t.closest('[data-mobd]'))){const v=b.dataset.mobd;OBS.desc=MOB_GEN.includes(v)?v+' ':v;mobDraw();const i=$('#mobdesc');if(i&&MOB_GEN.includes(v)){i.focus();i.setSelectionRange(i.value.length,i.value.length)}return}
   if((b=t.closest('[data-mobphn]'))){OBS.newPh.splice(+b.dataset.mobphn,1);mobDraw();return}
   if((b=t.closest('[data-mobo]'))){mobOpen(b.dataset.mobo);return}
   if((b=t.closest('[data-moba]'))){const k=b.dataset.moba;const n=MX.obs.get(OBS.id);
+    if(k==='addc'){const amb=OBS.amb,ed=typeof mxEd==='function'&&mxEd();mobClose();mxRecPick(amb,ed,cid=>mxAddCell(amb,cid,ed));return}
     if(k==='save')mobCreate();else if(k==='lev')mobLev();else if(k==='reab')mobReab();else if(k==='anu')mobAnu();else if(k==='sav')mobSaveEd();
     else if(k==='plano'&&n){mobClose();mobGoPlan(n)}else if(k==='mat'&&n){mobClose();mxGoCell(n.amb,n.cat)}}}
 /** abre Matriz › Gráfico › Observaciones en el piso de la observación y la resalta */
-function mobGoPlan(n){const pid=pisoOfAmb(n.amb);if(pid&&S.pis.has(pid))U.piso=pid;
+function mobGoPlan(n){const pid=pisoOfAmb(n.amb);if(pid&&S.pis.has(pid)){U.piso=pid;U.pisoAll=false}
   U.tab='mat';U.mxV='pla';U.mxPlOb=true;MXPL.sel=n.amb;MXPL.ob=n.id;saveUI();render()}
 
 /* ---------- lista para la ficha de una celda, el Lookahead y Campo ---------- */

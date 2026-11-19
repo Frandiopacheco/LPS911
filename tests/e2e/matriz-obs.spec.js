@@ -70,7 +70,9 @@ test('el ingeniero de campo registra una observación tocando el plano: número 
 });
 
 test('el SC solo registra en su partida y levanta las suyas; levantada, la actividad vuelve a ocultarse como terminada', async ({ page }) => {
-  const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: [...DATOS, OBS1] });
+  /* otra partida (SC TARRAJEO) ya tiene la A-1-2: el SC no la ve (SEG-05), pero su número no se repite */
+  const OTRA = ['mobs', 'ob9', { amb: 'a1', cat: 'k2', sc: 'c3', pid: 'p1', num: 2, desc: 'Resanar', pt: null, ph: [], st: 'ab', by: 'campo@obra.pe', n: 'Carlos Campo', t: 2 }];
+  const errors = await openApp(page, { as: 'sc', tab: 'mat', extra: [...DATOS, OBS1, OTRA] });
   await grafico(page);
   /* el pin abre la observación; el SC (SC SANITARIAS) la levanta */
   await page.locator('#mxplmap .pvl.mobpin').click();
@@ -83,9 +85,13 @@ test('el SC solo registra en su partida y levanta las suyas; levantada, la activ
   expect(await page.evaluate(() => mxDoneSt(S.act.get('i0')))).toBe('ok');
   /* nueva: solo actividades de su partida (no Tarrajeo de muros, que es de otro SC) */
   await tocar(page, 200, 220);
-  await expect(sh).toContainText('Nueva observación A-1-2');
+  await expect(sh).toContainText('Nueva observación A-1-3');
   await expect(sh.locator('[data-mobc="k1"]')).toHaveCount(1);
   await expect(sh.locator('[data-mobc="k2"]')).toHaveCount(0);
+  await sh.locator('[data-mobc="k1"]').click();
+  await sh.locator('#mobdesc').fill('Falta tapa del registro');
+  await sh.locator('[data-moba="save"]').click();
+  await expect.poll(async () => (await obs(page)).filter(o => o.by === 'sc@obra.pe').map(o => o.num)).toEqual([3]);
   noErrors(errors, 'el SC levanta');
 });
 

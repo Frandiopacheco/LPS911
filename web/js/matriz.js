@@ -167,7 +167,7 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
   /* totales de lo que está a la vista */
   const tot={p:0,c:0,t:0,n:0,sug:0,chg:0,chgT:0};const colT=cols.map(()=>({a:0,t:0}));
   const ambPct=new Map();
-  for(const r of rows)for(const a of r.ambs){const C=cells.get(a.id)||{};let ap=0,tt=0;cols.forEach((c,i)=>{const o=C[c.id];if(!o)return;tot[o.s]++;if(o.sug)tot.sug++;if(o.s!=='n'){ap++;colT[i].a++;if(o.s==='t'){tt++;colT[i].t++}}
+  for(const r of rows)for(const a of r.ambs){const C=cells.get(a.id)||{};let ap=0,tt=0;cols.forEach((c,i)=>{const o=C[c.id];if(!o||o.src==='obs')return;/* la que solo está por una observación no cuenta en el % */tot[o.s]++;if(o.sug)tot.sug++;if(o.s!=='n'){ap++;colT[i].a++;if(o.s==='t'){tt++;colT[i].t++}}
       if(cmp){const b=(cmp[a.id]||{})[c.id]||'';if(b!==o.s){tot.chg++;if(o.s==='t')tot.chgT++}}});ambPct.set(a.id,ap?tt/ap:null)}
   const apl=tot.p+tot.c+tot.t;const pc=x=>apl?Math.round(100*x/apl)+'%':'—';
   const unm=mxUnmapped();let mis=[];

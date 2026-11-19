@@ -1312,6 +1312,9 @@ test('observaciones de la matriz (mobs): registran ingenieros y el SC en su part
   await assertFails(updateDoc(doc(sc, 'mobs/o2'), { st: 'anu', anu: { by: 'sc@obra.pe', t: 4 } }));
   await assertSucceeds(updateDoc(doc(sc, 'mobs/o3'), { st: 'anu', anu: { by: 'sc@obra.pe', t: 4 } }));
   await assertSucceeds(updateDoc(doc(campo, 'mobs/o1'), { st: 'anu', anu: { by: 'campo@obra.pe', t: 4 } }));
+  /* lo que anuló el ingeniero no lo reabre el SC */
+  await assertSucceeds(updateDoc(doc(campo, 'mobs/o2'), { st: 'anu', anu: { by: 'campo@obra.pe', t: 5 } }));
+  await assertFails(updateDoc(doc(sc, 'mobs/o2'), { st: 'ab', reab: { by: 'sc@obra.pe', t: 6 } }));
   /* nadie cambia el autor; lector no actualiza; borrar solo el administrador */
   await assertFails(updateDoc(doc(campo, 'mobs/o2'), { by: 'campo@obra.pe' }));
   await assertFails(updateDoc(doc(lec, 'mobs/o2'), lev));
