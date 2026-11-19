@@ -159,7 +159,7 @@ function mobDraw(){if(!OBS)return;const o=OBS;const a=S.amb.get(o.amb);const n=o
     const L=a?mobOf(a.id).filter(x=>x.st!=='anu'):[];
     if(L.length)h+=`<div class="ksl">En este ambiente (${L.filter(x=>x.st==='ab').length} abiertas)</div><div class="mobl">${L.map(mobItemHtml).join('')}</div>`}
   else{const c=MX.cat.get(n.cat);const co=conOf(n.sc);const ed=mobCanEd(n),lv=mobCanLev(n);
-    h+=`<div class="ksh"><i class="kn mobk" style="--c:${esc(co.color)}" aria-hidden="true">${esc(String(n.num||''))}</i><div><b>${esc(mobLbl(n))} · ${esc(c?c.name:'')}</b><span>${a?esc(a.code+' · '+a.name):''} · ${esc(co.name)} · <b class="mobst st-${n.st}">${MOBST[n.st]||n.st}</b></span>
+    h+=`<div class="ksh"><i class="kn mobk dia" aria-hidden="true">${esc(String(n.num||''))}</i><div><b>${esc(mobLbl(n))} · ${esc(c?c.name:'')}</b><span>${a?esc(a.code+' · '+a.name):''} · ${esc(co.name)} · <b class="mobst st-${n.st}">${MOBST[n.st]||n.st}</b></span>
       <span>Registró ${esc(n.n||n.by||'')} · ${esc(fmtD(ldt(n.t)))}${n.lev&&n.st!=='ab'?` · levantó ${esc(n.lev.n||'')}${n.lev.sc?' (SC)':''} ${esc(fmtD(ldt(n.lev.t)))}`:''}${n.st==='ab'&&n.reab?` · reabrió ${esc(n.reab.n||'')} ${esc(fmtD(ldt(n.reab.t)))}`:''}${n.st==='anu'&&n.anu?` · anuló ${esc(n.anu.n||'')}`:''}</span></div><button class="kx" data-mobx aria-label="Cerrar">×</button></div>`;
     h+=ed&&n.st==='ab'?`<textarea class="kin mobdesc" id="mobdesc" rows="2" maxlength="600" aria-label="Qué hay que hacer">${esc(o.desc)}</textarea>`:`<p class="mobtx">${esc(n.desc||'')}</p>`;
     const ph=[...(n.ph||[]),...((n.lev||{}).ph||[])];

@@ -4902,6 +4902,7 @@ table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height
 #grid tr.gh .ghb.mobb{color:var(--mob);background:var(--mob-soft);border:0;cursor:pointer}
 /* hoja: icono, actividades, lista */
 .kn.mobk{--k:var(--c,var(--mob));font-size:17px}
+.kn.mobk.dia{border-radius:0;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);box-shadow:none;width:44px;height:44px;--k:var(--mob)}
 .mobsc .kchips.mobcs{max-height:34vh;overflow:auto;align-content:flex-start}
 .mobdesc{height:auto;min-height:62px;padding:10px 12px;resize:vertical;font:15px/1.35 var(--f-ui)}
 .mobtx{margin:0;font-size:15px;line-height:1.4;white-space:pre-wrap}
@@ -4916,5 +4917,8 @@ table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height
 .pop .mobpi{text-align:left}.pop .mobpi b{font-family:var(--f-mono);color:var(--mob)}.pop .mobpi.st-lev b{color:var(--ok)}
 .mobhelp{margin:0 0 6px}.mobdone summary{cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink2);margin:8px 0 4px}.mobdone .mobi{margin-bottom:6px}
 /* pin numerado sobre el plano (Matriz › Gráfico › Observaciones) */
-.pvl.nb.mobpin{cursor:pointer;border:2px solid #fff}
-.pvl.nb.mobpin.sel{outline:2.5px solid var(--mob);outline-offset:3px}
+/* rombo naranja (no círculo) para no confundirlas con las marcas de actividades (19-11-2026, pedido del dueño) */
+.pvl.nb.mobpin{cursor:pointer;width:38px;height:38px;background:var(--mob)!important;color:#fff!important;border-radius:0;box-shadow:none;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);font-size:12px}
+.pvl.nb.mobpin.sel{transform:translate(-50%,-50%) scale(1.25);background:#C2410C!important}
+@media (max-width:599px){.pvl.nb.mobpin{width:34px;height:34px;font-size:11px}}
+.mobn::before{content:'◆';margin-right:3px;font-size:9px;vertical-align:1px}
