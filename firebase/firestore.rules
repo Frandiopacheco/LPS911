@@ -729,12 +729,17 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/mcat/$(k)).data.get('scs', []).hasAny(scsOf())) && scCellVal(d, k)
         && existsAfter(/databases/$(database)/documents/mlog/$(l)) && scLogOk(id, d, k, l);
     }
+    // Ingeniero de campo (nov 2026, decidido con el dueño: registra en la Matriz tocando el plano): cambia estados y agrega
+    // actividades (c, m) a su nombre; no cambia el tipo del ambiente ni la marca de revisado (rv)
+    function campoCellOk(d) { return canDaily() && !canEdit() && d.get('by', '') == mid(); }
     match /mamb/{id} {
       allow read: if lpsMember();
       allow create: if (canEdit() && request.resource.data.get('by', '') == mid())
+        || (campoCellOk(request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'by', 'n', 't']))
         || (scCellOk(id, request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
             && request.resource.data.get('c', {}).keys().hasOnly([request.resource.data.k]));
       allow update: if (canEdit() && request.resource.data.get('by', '') == mid())
+        || (campoCellOk(request.resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'by', 'n', 't']))
         || (scCellOk(id, request.resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
             && request.resource.data.get('c', {}).diff(resource.data.get('c', {})).affectedKeys().hasOnly([request.resource.data.k])
@@ -1267,12 +1272,15 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/cs_mcat/$(k)).data.get('scs', []).hasAny(scsOf_cs())) && scCellVal_cs(d, k)
         && existsAfter(/databases/$(database)/documents/cs_mlog/$(l)) && scLogOk_cs(id, d, k, l);
     }
+    function campoCellOk_cs(d) { return canDaily_cs() && !canEdit_cs() && d.get('by', '') == mid_cs(); }
     match /cs_mamb/{id} {
       allow read: if lpsMember_cs();
       allow create: if (canEdit_cs() && request.resource.data.get('by', '') == mid_cs())
+        || (campoCellOk_cs(request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'by', 'n', 't']))
         || (scCellOk_cs(id, request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
             && request.resource.data.get('c', {}).keys().hasOnly([request.resource.data.k]));
       allow update: if (canEdit_cs() && request.resource.data.get('by', '') == mid_cs())
+        || (campoCellOk_cs(request.resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'by', 'n', 't']))
         || (scCellOk_cs(id, request.resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
             && request.resource.data.get('c', {}).diff(resource.data.get('c', {})).affectedKeys().hasOnly([request.resource.data.k])
