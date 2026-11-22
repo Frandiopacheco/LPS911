@@ -5,7 +5,7 @@
    mamb/{ambId} (tipo del ambiente y estados confirmados) y mver (fotos semanales). Detalle en docs/ia/matriz.md.
    Fase 1: editan administrador y editores; el resto solo la ve. */
 
-const MX={cat:new Map(),tipo:new Map(),amb:new Map(),ver:new Map(),prop:new Map(),log:new Map(),obs:new Map(),ld:{cat:false,tipo:false,amb:false},err:null,v:0,
+const MX={cat:new Map(),tipo:new Map(),amb:new Map(),ver:new Map(),prop:new Map(),log:new Map(),obs:new Map(),obt:new Map(),ld:{cat:false,tipo:false,amb:false,obt:false},err:null,v:0,
   sel:new Set(),anchor:null,drag:null,moved:false,cmp:'',ali:null,aliV:-1,mc:null,mcK:''};
 /* matriz en el celular: más celdas que esto (unos 60 ambientes × 66 columnas) piden elegir un piso; MXBUSY marca un dibujo en curso */
 const MX_PHONE_MAX=4500,MXBUSY='lps911.mxbusy';
@@ -57,8 +57,8 @@ function ensureMx(){ensureMcat();ensureMamb();if(mxSubs||!db)return;const u=[];
   on('mtipo','tipo');
   /* observaciones (punch list, matriz-obs.js): el SC solo las de su partida (SEG-05); en Casco no hay Matriz.
      Al final: la Matriz espera los tipos (MX.ld.tipo) y no conviene retrasar su primera foto */
-  if(!(typeof CS==='function'&&CS())){if(SCK())onSc('mobs','obs');else on('mobs','obs')}
-  mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log','obs'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.v++})}
+  if(!(typeof CS==='function'&&CS())){if(SCK())onSc('mobs','obs');else on('mobs','obs');on('mobt','obt')} /* tipos de observación (matriz-obt.js): lista corta, la leen todos */
+  mxSubs=()=>u.forEach(f=>f());unsubs.push(()=>{if(mxSubs)mxSubs();mxSubs=null;['tipo','prop','log','obs','obt'].forEach(k=>MX[k].clear());MX.ld.tipo=false;MX.ld.obt=false;MX.v++})}
 const mxEd=()=>!!me&&canWrite&&!PM()&&!verRO();
 /* la grilla abre en consulta (desplazarse y tocar celdas sin cambiar nada); «✎ Editar» habilita seleccionar y marcar (oct 2026) */
 const mxCanEd=()=>mxEd()||(!!me&&SCK()&&!verRO());
@@ -107,6 +107,9 @@ function mxCells(){const T0=todayIso();const k=MX.v+'|'+DV+'|'+DONEV+'|'+T0;if(M
       /* con observaciones abiertas (ob), lo Terminado se comporta como pendiente para el Lookahead: sus días futuros no avisan ⚠
          y, sin días de hoy en adelante, sale como fila fantasma «N obs.». El estado (y el %) no cambia */
       o.warn=!o.sug&&(o.s==='t'||o.s==='n')&&o.fwd.length>0&&!o.ob;o.sp=(o.s==='p'||(o.ob>0&&o.s!=='c'))&&!o.fut.length;
+      /* la que solo está por una observación (el ambiente no tiene la actividad: decidido con el dueño, 22-11-2026) no es un pendiente:
+         no sale como fila fantasma en el Lookahead ni avisa; tampoco cuenta en el %, el Gráfico, la foto semanal ni el catálogo (o.src==='obs') */
+      if(o.src==='obs'){o.sp=false;o.warn=false}
       /* dsc: Campo la marcó terminada (todas sus filas) pero la matriz confirmó otra cosa: el ingeniero decide (confirmar o reabrir) */
       o.dsc=o.s!=='t'&&o.s!=='n'&&o.acts.length>0&&o.acts.every(id=>DONE.has(id))} /* aviso: Campo la marcó terminada; el ingeniero confirma o no */
     out.set(amb.id,C)}
@@ -153,6 +156,7 @@ function renderMat(main){ensureMx();ensureMver();if(mxPC()&&mxCanEd())MX.edit=tr
   if(!MX.cat.size){main.innerHTML=`<div class="scroll"><div class="wrap">${head}<div class="callout">Todavía no hay catálogo de actividades.${isAdmin?' Usa «⬆ Cargar catálogo» con el archivo preparado (LPS911_matriz_inicial.json).':' El administrador debe cargarlo.'}</div></div></div>`;mxWire(main);return}
   if(U.mxV==='cat'){renderMxCat(main,head);return}
   if(U.mxV==='tipo'&&!SCK()){renderMxTipo(main,head);return}
+  if(U.mxV==='obt'){if(!SCK()&&!(typeof CS==='function'&&CS())){renderMxObt(main,head);return}U.mxV='mat'}
   if(U.mxV==='rec'){renderMxRec(main,head);return}
   if(U.mxV==='act'){renderMxAct(main,head);return}
   if(U.mxV==='pla'){renderMxPla(main,head);return}
@@ -397,7 +401,7 @@ function mxUndo(done,undo){const by=new Map();let skip=0;
   if(!by.size){toast(skip?'Ya cambió después (otra persona): no se deshace.':'No hay nada que deshacer.');return}
   mxWrite(by,skip?`Deshecho; ${skip} ${skip===1?'celda cambió':'celdas cambiaron'} después y se ${skip===1?'deja':'dejan'} como está${skip===1?'':'n'}`:'Deshecho',null)}
 function mxApply(s){if(!mxEd()||!MX.sel.size)return;const cells=mxCells();const DEL=firebase.firestore.FieldValue.delete();const by=new Map(),un=new Map();let n=0;
-  for(const k of MX.sel){const[amb,cat]=k.split('|');const o=(cells.get(amb)||{})[cat];if(s==='ok'&&!o)continue;const v=s==='ok'?o.s:s;
+  for(const k of MX.sel){const[amb,cat]=k.split('|');const o=(cells.get(amb)||{})[cat];if(s==='ok'&&!o)continue;if(o&&o.src==='obs')continue;/* solo por una observación: en bloque no se agrega al ambiente */const v=s==='ok'?o.s:s;
     const prev=((MX.amb.get(amb)||{}).c||{})[cat];if(prev===v&&!mxScPend(amb,cat))continue; // lo que cambió un SC: confirmarlo igual lo da por bueno
     if(!by.has(amb)){by.set(amb,{});un.set(amb,{})}by.get(amb)[cat]=v;un.get(amb)[cat]=prev===undefined?DEL:prev;n++}
   MX.sel.clear();if(!n){mxPaintSel();toast('No hay cambios que guardar.');return}
@@ -409,7 +413,7 @@ function mxSetTipo(amb,tipo){if(!mxEd())return;const prev=(MX.amb.get(amb)||{}).
 
 /* foto semanal: el estado de toda la obra (todas las celdas, también las sin validar) en un documento compacto */
 /* Foto semanal (oct 2026): '?' al final = celda sin validar (propuesta del sistema). Al guardar se abre el historial. */
-function mxFotoData(){const a={};let n=0;for(const[amb,C]of mxCells()){const p=Object.entries(C).map(([c,o])=>c+':'+o.s+(o.sug?'?':''));if(p.length){a[amb]=p.join(',');n+=p.length}}return{a,n}}
+function mxFotoData(){const a={};let n=0;for(const[amb,C]of mxCells()){const p=Object.entries(C).filter(([,o])=>o.src!=='obs').map(([c,o])=>c+':'+o.s+(o.sug?'?':''));if(p.length){a[amb]=p.join(',');n+=p.length}}return{a,n}}
 async function mxFoto(){if(!mxEd())return;const{a,n}=mxFotoData();
   const ok=await uiAsk({title:'Guardar foto semanal',text:`Se guarda el estado de hoy (${fmtD(todayIso())}) de ${Object.keys(a).length} ambientes y ${n} celdas. Luego podrás compararla en «Comparar con».`,ok:'Guardar foto',tone:'info'});if(!ok)return;
   const id='f'+NOW();const doc={t:NOW(),d:todayIso(),w:curWeek(),by:me.email,n:me.name||'',a,v:2};

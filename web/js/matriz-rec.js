@@ -88,7 +88,7 @@ async function mxRecNew(amb,ed,v,add,pre){const tp=await mxAmbTipo(amb);const sc
    async e=>{if(e.target.id==='mxrncl'&&e.target.value==='e'){const c=$('#mxrntp');if(c)c.checked=false}})}
 
 function renderMxRecAmb(main,head,cells,ed){const id=MXR.amb;const a=S.amb.get(id);const m=MX.amb.get(id)||{};const tp=m.tipo&&MX.tipo.get(m.tipo);
-  const C=cells.get(id)||{};const items=Object.entries(C).map(([c,o])=>({c:MX.cat.get(c),o})).filter(r=>r.c&&mxMine(r.c)).sort((x,y)=>mxSeqCmp(x.c,y.c));
+  const C=cells.get(id)||{};const items=Object.entries(C).map(([c,o])=>({c:MX.cat.get(c),o})).filter(r=>r.c&&mxMine(r.c)&&r.o.src!=='obs').sort((x,y)=>mxSeqCmp(x.c,y.c));
   const open=items.filter(r=>r.o.s!=='t'&&r.o.s!=='n'),done=items.filter(r=>r.o.s==='t'||r.o.s==='n');let sug=mxRecSug(id,cells);
   const L=mxRecAmbs();const ix=L.findIndex(o=>o.a.id===id);const nx=L[ix+1];const w0=mxWk0();const rvOk=m.rv&&m.rv.d>=w0;const nSug=items.filter(r=>r.o.sug).length;
   const T=todayIso();

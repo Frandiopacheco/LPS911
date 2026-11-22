@@ -10,7 +10,7 @@ const mxFV=()=>firebase.firestore.FieldValue;
 const mxErr=e=>toast(typeof e==='string'?e:'No se pudo guardar: '+(e&&e.code||e));
 
 /** pestañas internas de la matriz */
-function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['act','Por actividad'],['pla','Gráfico'],['rec','Recorrido'],['cat','Catálogo'],['tipo','Tipos de ambiente'],['tren','Tren']].filter(([k])=>!((k==='tipo'||k==='tren')&&SCK()))
+function mxViewSeg(){return`<div class="seg mxvseg" role="tablist" aria-label="Vista de la matriz">${[['mat','Matriz'],['act','Por actividad'],['pla','Gráfico'],['rec','Recorrido'],['cat','Catálogo'],['tipo','Tipos de ambiente'],['obt','Tipos de obs.'],['tren','Tren']].filter(([k])=>!((k==='tipo'||k==='tren'||k==='obt')&&SCK())&&!(k==='obt'&&typeof CS==='function'&&CS()))
   .map(([k,l])=>`<button type="button" role="tab" data-mxv="${k}" class="${(U.mxV||'mat')===k?'on':''}" aria-selected="${(U.mxV||'mat')===k}">${l}</button>`).join('')}</div>`}
 /* cabecera en una fila (oct 2026): vistas (y en la Matriz, los indicadores) entre el título y los botones */
 function mxHd(head,mid){const m=`<div class="phm">${mid}</div>`;return head.includes('<div class="pha">')?head.replace('<div class="pha">',m+'<div class="pha">'):head.replace('</header>',m+'</header>')}
@@ -20,7 +20,7 @@ function mxWireV(main){main.querySelectorAll('[data-mxv]').forEach(b=>b.onclick=
 
 /* uso de cada actividad: ambientes donde aparece y celdas con estado confirmado */
 function mxCatUse(){const k=MX.v+'|'+DV+'|'+DONEV;if(MXC.use&&MXC.useK===k)return MXC.use;const u=new Map();const g=id=>{let o=u.get(id);if(!o)u.set(id,o={amb:0,st:0});return o};
-  for(const C of mxCells().values())for(const id of Object.keys(C))g(id).amb++;
+  for(const C of mxCells().values())for(const[id,o]of Object.entries(C))if(o.src!=='obs')g(id).amb++;
   for(const m of MX.amb.values())for(const id of Object.keys(m.c||{}))g(id).st++;
   MXC.use=u;MXC.useK=k;return u}
 const mxScOpts=sel=>[...S.con.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${esc(c.id)}"${c.id===sel?' selected':''}>${esc(c.name)}</option>`).join('');

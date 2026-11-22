@@ -1330,6 +1330,32 @@ test('observaciones de la matriz (mobs): registran ingenieros y el SC en su part
   await assertFails(deleteDoc(doc(sc, 'mobs/o3')));
   await assertSucceeds(deleteDoc(doc(user(OWNER), 'mobs/o1')));
 });
+test('tipos de observación (mobt): los editan editor y admin, nadie borra; una observación sin actividad lleva tipo y SC, y el SC no cambia el tipo', async () => {
+  const ed = user('editor@obra.pe'), campo = user('campo@obra.pe'), sc = user('sc@obra.pe'), lec = user('lector@obra.pe');
+  const t = { code: 'PT-01', name: 'Desmanche de pintura', esp: 'Pintura', cat: '', sc: 'c-gabel', ord: 1, by: 'x', n: 'x', t: 1 };
+  await assertSucceeds(setDoc(doc(ed, 'mobt/ot-PT-01'), t));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'mobt/ot-PT-02'), { ...t, code: 'PT-02' }));
+  await assertFails(setDoc(doc(campo, 'mobt/ot-x1'), t));
+  await assertFails(setDoc(doc(sc, 'mobt/ot-x2'), t));
+  await assertFails(setDoc(doc(ed, 'mobt/ot-x3'), { ...t, name: '' }));
+  await assertSucceeds(updateDoc(doc(ed, 'mobt/ot-PT-01'), { name: 'Desmanche' }));
+  await assertSucceeds(getDoc(doc(lec, 'mobt/ot-PT-01')));
+  await assertFails(deleteDoc(doc(ed, 'mobt/ot-PT-01')));
+  const ob = (by, x = {}) => ({ amb: 'a1', cat: '', ot: 'ot-PT-01', sc: 'c-gabel', pid: 'p1', num: 1, desc: 'Desmanche de pintura', pt: null, ph: [], st: 'ab', by, n: 'x', t: 1, ...x });
+  /* sin actividad: vale con tipo y SC; sin tipo o sin SC, no */
+  await assertSucceeds(setDoc(doc(campo, 'mobs/t1'), ob('campo@obra.pe')));
+  await assertSucceeds(setDoc(doc(sc, 'mobs/t2'), ob('sc@obra.pe')));
+  await assertFails(setDoc(doc(campo, 'mobs/t3'), ob('campo@obra.pe', { ot: '' })));
+  await assertFails(setDoc(doc(campo, 'mobs/t4'), ob('campo@obra.pe', { sc: '' })));
+  await assertFails(setDoc(doc(campo, 'mobs/t5'), ob('campo@obra.pe', { ot: 'x'.repeat(41) })));
+  await assertFails(setDoc(doc(sc, 'mobs/t6'), ob('sc@obra.pe', { sc: 'c-otro' })));
+  /* con actividad y tipo (el ambiente puede no tenerla) */
+  await assertSucceeds(setDoc(doc(campo, 'mobs/t7'), ob('campo@obra.pe', { cat: 'k001', sc: 'c-otro' })));
+  /* el SC levanta, pero no cambia el tipo (ni en las suyas) */
+  await assertSucceeds(updateDoc(doc(sc, 'mobs/t1'), { st: 'lev', lev: { by: 'sc@obra.pe', n: 'SC', t: 2, sc: true } }));
+  await assertFails(updateDoc(doc(sc, 'mobs/t2'), { ot: 'ot-PT-02' }));
+  await assertSucceeds(updateDoc(doc(campo, 'mobs/t2'), { ot: 'ot-PT-02' }));
+});
 test('auditoría 09/10: semanas, fotos y configuración solo las borra el admin; el editor sí deshace lo que crea', async () => {
   await env.withSecurityRulesDisabled(async c => { const db = c.firestore();
     await setDoc(doc(db, 'weeks/90_p1'), { n: 90, pisoId: 'p1', frozenAt: 'x', items: {}, res: {} });
