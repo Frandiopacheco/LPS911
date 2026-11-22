@@ -13,7 +13,7 @@ function mxTrList(){return mxCatAct0().filter(mxTrOn).sort((a,b)=>a.tr-b.tr||a.n
 /* posición en el tren de una actividad (null = fuera del tren) */
 function mxTrOf(cid){const c=cid&&MX.cat.get(cid);return mxTrOn(c)?c.tr:null}
 /* actividades que aparecen en ambientes de un tipo (por el tipo, el lookahead o a mano) */
-function mxTrTipoSet(tid){const T=MX.tipo.get(tid);const s=new Set((T&&T.acts)||[]);for(const[amb,C]of mxCells()){const m=MX.amb.get(amb);if(m&&m.tipo===tid)for(const k of Object.keys(C))s.add(k)}return s}
+function mxTrTipoSet(tid){const T=MX.tipo.get(tid);const s=new Set((T&&T.acts)||[]);for(const[amb,C]of mxCells()){const m=MX.amb.get(amb);if(m&&m.tipo===tid)for(const[k,o]of Object.entries(C))if(o.src!=='obs')s.add(k)}return s}
 
 /* guarda tr: {id:valor|null}; deshacer vuelve a los valores anteriores */
 async function mxTrWrite(chg,label){if(!mxEd())return;const ids=Object.keys(chg);if(!ids.length)return;

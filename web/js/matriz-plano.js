@@ -5,14 +5,14 @@
    Modo «📍 Observaciones» (nov 2026): pines de las observaciones (punch list) y tocar un ambiente registra una (matriz-obs.js).
    Se arma una vez (el visor de la lámina no se destruye) y luego solo se actualizan sus partes.
    Parte de la app: index.html carga los archivos de js/ en orden y todos comparten las mismas variables globales. */
-const MXPL={sel:'',vista:'',ob:'',obSc:'',pend:null};
+const MXPL={sel:'',vista:'',ob:'',obSc:'',obT:'',obSum:false,pend:null};
 /* modo «Observaciones» (U.mxPlOb, matriz-obs.js): naranja = ambiente con observaciones abiertas */
 const MXPL_OB='#E8590C';
 const MXPL_C={p:'#D64545',c:'#E0A01B',x:'#9AA3A8'};
 /* actividades que existen en los ambientes del piso (oct 2026, pedido del dueño: la lista del Gráfico solo trae las del piso elegido);
    null = sin piso elegido: no se filtra */
 function mxPlFloor(pid){if(!pid)return null;const cells=mxCells();const s=new Set();
-  for(const t of szTree(pid))for(const{a}of t.ambs){const C=cells.get(a.id);if(C)for(const k in C)if(C[k])s.add(k)}
+  for(const t of szTree(pid))for(const{a}of t.ambs){const C=cells.get(a.id);if(C)for(const k in C)if(C[k]&&C[k].src!=='obs')s.add(k)}
   return s}
 /* SC que tienen actividades en el catálogo (el SC: solo los suyos); con `on` (mxPlFloor) solo los que tienen alguna en el piso */
 function mxPlScs(on){const mine=SCK()?new Set(myScsI()):null;const s=new Set();for(const c of MX.cat.values()){if(c.arch||(on&&!on.has(c.id)))continue;for(const x of mxScsOf(c))if(!mine||mine.has(x))s.add(x)}
@@ -23,7 +23,7 @@ function mxPlBase(pid){const API=window.__plano;const bs=API&&API.basesOf?API.ba
   const n=b=>{let k=0;for(const t of szTree(pid))for(const{a}of t.ambs)if(szGeo(a,b.id))k++;return k};const best=bs.slice().sort((x,y)=>n(y)-n(x))[0];return{bs,v:best.id}}
 /* estado de cada ambiente del piso: {k:'p'|'c'|'', p:[cat], c:[cat]} */
 function mxPlState(pid,sc,cat){const cells=mxCells();const cats=cat==='*'?mxPlCats(sc).map(c=>c.id):[cat];const out=new Map();
-  for(const t of szTree(pid))for(const{a}of t.ambs){const C=cells.get(a.id)||{};const p=[],c=[];for(const k of cats){const o=C[k];if(!o)continue;if(o.s==='p')p.push(k);else if(o.s==='c')c.push(k)}
+  for(const t of szTree(pid))for(const{a}of t.ambs){const C=cells.get(a.id)||{};const p=[],c=[];for(const k of cats){const o=C[k];if(!o||o.src==='obs')continue;if(o.s==='p')p.push(k);else if(o.s==='c')c.push(k)}
     out.set(a.id,{a,s:t.s,k:p.length?'p':c.length?'c':'',p,c})}
   return out}
 function renderMxPla(main,head){const pid=U.piso;const onF=mxPlFloor(pid);const scs=mxPlScs(onF);
@@ -31,8 +31,11 @@ function renderMxPla(main,head){const pid=U.piso;const onF=mxPlFloor(pid);const 
   if(U.mxPlCat!=='*'&&!cats.some(c=>c.id===U.mxPlCat))U.mxPlCat=(cats[0]||{}).id||'';
   if(!$('#mxplmap',main)){main.innerHTML=`<div class="scroll"><div class="wrap mxwrap"><div id="mxplh"></div><div id="mxplf" class="fbar mxplf"></div><div id="mxplmsg"></div>
      <div class="mxplb" id="mxplb"><section class="mxplmw"><div class="szmap mxplmap" id="mxplmap"></div></section><aside class="mxpls" id="mxpls"></aside></div></div></div>`;
-    main.onchange=e=>{const t=e.target;if(t.id==='mxplosc'){MXPL.obSc=t.value;MXPL.ob='';render();return}if(t.id==='mxplobl'){U.mxPlObL=t.checked;saveUI();render();return}if(t.id==='mxplsc'){U.mxPlSc=t.value;U.mxPlCat='';MXPL.sel='';saveUI();render()}else if(t.id==='mxplcat'){U.mxPlCat=t.value;MXPL.sel='';saveUI();render()}else if(t.id==='mxplv'){MXPL.vista=t.value;render()}};
-    main.onclick=e=>{const b=e.target.closest('[data-mxpla]');if(b){MXPL.sel=MXPL.sel===b.dataset.mxpla?'':b.dataset.mxpla;render();return}
+    main.onchange=e=>{const t=e.target;if(t.id==='mxplosc'){MXPL.obSc=t.value;MXPL.ob='';render();return}if(t.id==='mxplot'){MXPL.obT=t.value;MXPL.ob='';render();return}if(t.id==='mxplobl'){U.mxPlObL=t.checked;saveUI();render();return}if(t.id==='mxplsc'){U.mxPlSc=t.value;U.mxPlCat='';MXPL.sel='';saveUI();render()}else if(t.id==='mxplcat'){U.mxPlCat=t.value;MXPL.sel='';saveUI();render()}else if(t.id==='mxplv'){MXPL.vista=t.value;render()}};
+    main.onclick=e=>{const sm=e.target.closest('details.obts>summary');if(sm){MXPL.obSum=!sm.parentElement.open;return}
+      /* resumen por tipo: tocar el tipo lo filtra; tocar un número, además, va a ese piso */
+      const tf=e.target.closest('[data-obtf]');if(tf){MXPL.obT=MXPL.obT===tf.dataset.obtf&&!tf.dataset.obtp?'':tf.dataset.obtf;MXPL.ob='';const pp=tf.dataset.obtp;if(pp&&S.pis.has(pp)){U.piso=pp;U.pisoAll=false;saveUI()}render();return}
+      const b=e.target.closest('[data-mxpla]');if(b){MXPL.sel=MXPL.sel===b.dataset.mxpla?'':b.dataset.mxpla;render();return}
       const o=e.target.closest('[data-mobo]');if(o){MXPL.ob=o.dataset.mobo;mobOpen(o.dataset.mobo);render();return}
       const ed=e.target.closest('[data-mxpled]');if(ed){U.mxPlEd=ed.dataset.mxpled==='1';MXPL.sel='';MXPL.ob='';saveUI();render();return}
       const m=e.target.closest('[data-mxplmode]');if(m){const k=m.dataset.mxplmode;U.mxPlOb=k==='ob';if(k!=='ob'){const cs=U.mxPlSc?mxPlCats(U.mxPlSc,mxPlFloor(U.piso)):[];U.mxPlCat=k==='all'?'*':((cs[0]||{}).id||'')}MXPL.sel='';MXPL.ob='';saveUI();render()}}}
@@ -50,7 +53,10 @@ function renderMxPla(main,head){const pid=U.piso;const onF=mxPlFloor(pid);const 
     renderMxPlOb(main,pid,v,API,true);return}
   const seg=`<span class="seg" role="group" aria-label="Qué mostrar"><button data-mxplmode="one" class="${all||obM?'':'on'}">Una actividad</button><button data-mxplmode="all" class="${all&&!obM?'on':''}">Toda la partida</button>${typeof mobIdx==='function'?`<button data-mxplmode="ob" class="${obM?'on':''}" title="Observaciones por levantar (punch list)">📍 Observaciones</button>`:''}</span>`;
   if(obM){const osc=mxPlObScs();if(MXPL.obSc&&!osc.includes(MXPL.obSc))MXPL.obSc='';
-    const fo=`${seg0}${SCK()&&osc.length<2?'':`<label class="mxord"><span class="fgl">Subcontratista</span><select id="mxplosc" aria-label="Subcontratista"><option value="">${SCK()?'Mis partidas':'Todos'}</option>${osc.map(x=>`<option value="${esc(x)}"${x===MXPL.obSc?' selected':''}>${esc(conOf(x).name)}</option>`).join('')}</select></label>`}${seg}
+    /* tipos de observación (matriz-obt.js): los que tienen abiertas en la obra (también archivados mientras tengan) */
+    const ots=typeof obtSummary==='function'&&MX.obt.size?obtSummary(n=>(!SCK()||myScsI().includes(n.sc))&&(!MXPL.obSc||n.sc===MXPL.obSc)):[];if(MXPL.obT&&!ots.some(o=>o.id===MXPL.obT))MXPL.obT='';
+    const otSel=ots.length?`<label class="mxord"><span class="fgl">Tipo</span><select id="mxplot" aria-label="Tipo de observación"><option value="">Todos</option>${ots.map(o=>`<option value="${esc(o.id)}"${o.id===MXPL.obT?' selected':''}>${esc(o.lbl)} (${o.amb.size})</option>`).join('')}</select></label>`:'';
+    const fo=`${seg0}${SCK()&&osc.length<2?'':`<label class="mxord"><span class="fgl">Subcontratista</span><select id="mxplosc" aria-label="Subcontratista"><option value="">${SCK()?'Mis partidas':'Todos'}</option>${osc.map(x=>`<option value="${esc(x)}"${x===MXPL.obSc?' selected':''}>${esc(conOf(x).name)}</option>`).join('')}</select></label>`}${otSel}${seg}
       ${bs.length>1?`<label class="mxord"><span class="fgl">Lámina</span><select id="mxplv" aria-label="Lámina">${bs.map(b=>`<option value="${esc(b.id)}"${b.id===v?' selected':''}>${esc(b.esp||b.name||'Lámina')}</option>`).join('')}</select></label>`:''}
       <span class="fsp"></span><span class="mxleg"><span><i class="mxplsw" style="--c:${MXPL_OB}"></i>Con observaciones abiertas</span><span><i class="mxplsw o"></i>Sin observaciones</span></span>`;
     const fe=$('#mxplf',main);if(fe.dataset.h!==fo){fe.innerHTML=fo;fe.dataset.h=fo}
@@ -90,14 +96,16 @@ function renderMxPla(main,head){const pid=U.piso;const onF=mxPlFloor(pid);const 
    (quien puede: ingenieros y SC); tocar un pin la abre. Lo demás del Gráfico no cambia. */
 function mxPlObScs(){const s=new Set();for(const n of MX.obs.values())if(n&&n.st==='ab'&&n.sc&&(!SCK()||myScsI().includes(n.sc)))s.add(n.sc);
   if(SCK())myScsI().forEach(x=>s.add(x));return[...s].filter(x=>S.con.has(x)).sort((a,b)=>conOf(a).name.localeCompare(conOf(b).name))}
+/** filtro de tipo del modo Observaciones ('-' = sin tipo) */
+const mxPlObT=n=>!MXPL.obT||(MXPL.obT==='-'?!(n.ot&&MX.obt.has(n.ot)):n.ot===MXPL.obT);
 /** puntos de las observaciones abiertas del piso en la lámina v (el SC: las suyas; filtro de SC del modo Observaciones) */
 function mxPlObPins(pid,v,flt){const ids=new Set();for(const t of szTree(pid))for(const{a}of t.ambs)ids.add(a.id);
-  return[...MX.obs.values()].filter(n=>n&&n.st==='ab'&&ids.has(n.amb)&&n.pt&&n.pt.v===v&&(!SCK()||myScsI().includes(n.sc))&&(!flt||!MXPL.obSc||n.sc===MXPL.obSc))
+  return[...MX.obs.values()].filter(n=>n&&n.st==='ab'&&ids.has(n.amb)&&n.pt&&n.pt.v===v&&(!SCK()||myScsI().includes(n.sc))&&(!flt||!MXPL.obSc||n.sc===MXPL.obSc)&&(!flt||mxPlObT(n)))
     .map(n=>({id:'ob:'+n.id,x:n.pt.x,y:n.pt.y,t:String(n.num||''),c:conOf(n.sc).color,sel:MXPL.ob===n.id,tip:`${mobLbl(n)} · ${n.desc||''}`}))}
 /* reg = modo ✏️ Registrar: tocar un ambiente abre su hoja (Actividades | Observación aquí); los colores muestran lo pendiente.
    Sin reg (👁 Ver › Observaciones): tocar solo selecciona; tocar un punto lo abre */
 function renderMxPlOb(main,pid,v,API,reg){const ambs=[];for(const t of szTree(pid))for(const{a}of t.ambs)ambs.push({a,s:t.s});const ids=new Set(ambs.map(o=>o.a.id));
-  const okSc=n=>(reg||!MXPL.obSc||n.sc===MXPL.obSc)&&(!SCK()||myScsI().includes(n.sc));
+  const okSc=n=>(reg||!MXPL.obSc||n.sc===MXPL.obSc)&&(reg||mxPlObT(n))&&(!SCK()||myScsI().includes(n.sc));
   const L=[...MX.obs.values()].filter(n=>n&&ids.has(n.amb)&&n.st!=='anu'&&okSc(n)).sort((a,b)=>(a.num||0)-(b.num||0));
   const open=L.filter(n=>n.st==='ab'),lev=L.filter(n=>n.st==='lev');const byA=new Map();open.forEach(n=>{if(!byA.has(n.amb))byA.set(n.amb,[]);byA.get(n.amb).push(n)});
   const cells=reg?mxCells():null;
@@ -119,7 +127,8 @@ function renderMxPlOb(main,pid,v,API,reg){const ambs=[];for(const t of szTree(pi
   const nog=base?open.filter(n=>!n.pt||n.pt.v!==v).length:0;const nd=ambs.filter(o=>!szGeo(o.a,v)).length;
   const grp=[...byA.entries()].map(([amb,ns])=>({a:S.amb.get(amb),ns})).filter(g=>g.a).sort((x,y)=>(x.a.code||'').localeCompare(y.a.code||'',undefined,{numeric:true}));
   const sh=`${reg?`<div class="callout mobhelp">Toca un ambiente en el plano: ahí cambias el estado de sus actividades, agregas las que faltan o registras una observación en ese punto.</div>`:''}
-    <div class="mxplt"><b>Observaciones · ${esc((S.pis.get(pid)||{}).code||'')}</b><span><b style="color:${MXPL_OB}">${open.length}</b> abierta${open.length===1?'':'s'} · ${lev.length} levantada${lev.length===1?'':'s'}</span></div>
+    ${!reg&&typeof obtSummaryHtml==='function'?obtSummaryHtml(n=>(!SCK()||myScsI().includes(n.sc))&&(!MXPL.obSc||n.sc===MXPL.obSc)):''}
+    <div class="mxplt"><b>Observaciones · ${esc((S.pis.get(pid)||{}).code||'')}${MXPL.obT&&!reg?` · ${esc(MXPL.obT==='-'?'Sin tipo':obtLbl(MX.obt.get(MXPL.obT)))}`:''}</b><span><b style="color:${MXPL_OB}">${open.length}</b> abierta${open.length===1?'':'s'} · ${lev.length} levantada${lev.length===1?'':'s'}</span></div>
     ${grp.map(g=>`<div class="mxplg${MXPL.sel===g.a.id?' on':''}">${esc(g.a.code)} · ${esc(g.a.name)} <small>${g.ns.length}</small></div>${g.ns.map(n=>mobItemHtml(n).replace('class="mobi','class="mobi'+(MXPL.ob===n.id?' on':''))).join('')}`).join('')}
     ${!open.length?'<p class="note">No hay observaciones abiertas en este piso.</p>':''}
     ${lev.length?`<details class="mobdone"><summary>Levantadas (${lev.length})</summary>${lev.map(mobItemHtml).join('')}</details>`:''}

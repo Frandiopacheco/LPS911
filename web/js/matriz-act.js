@@ -16,7 +16,7 @@ function renderMxAct(main,head){const cells=mxCells();const ed=mxEd();const L=mx
   const cat=MX.cat.get(U.mxAct);const can=!!cat&&(ed||mxScCan(cat));const T=todayIso();
   /* ambientes con esta actividad, por piso y sector */
   const grp=[];let n=0,nd=0;
-  if(cat)for(const r of mxRows()){const its=r.ambs.map(a=>({a,o:(cells.get(a.id)||{})[cat.id]})).filter(x=>x.o);if(!its.length)continue;n+=its.length;nd+=its.filter(x=>x.o.s==='t'||x.o.s==='n').length;grp.push({r,its})}
+  if(cat)for(const r of mxRows()){const its=r.ambs.map(a=>({a,o:(cells.get(a.id)||{})[cat.id]})).filter(x=>x.o&&x.o.src!=='obs');if(!its.length)continue;n+=its.length;nd+=its.filter(x=>x.o.s==='t'||x.o.s==='n').length;grp.push({r,its})}
   const info=o=>{const xs=(o.acts||[]).map(i=>S.act.get(i)).filter(Boolean);const nx=xs.flatMap(x=>(x.days||[]).filter(d=>d>=T)).sort()[0];return[nx?'programada '+fmtD(nx):'',o.sug?'sin validar':''].filter(Boolean).join(' · ')};
   const row=({a,o})=>{const k=a.id;const hide=U.mxActDone&&(o.s==='t'||o.s==='n');if(hide)return'';
     return`<div class="mxri mxai${o.sug?' sug':''}" data-mxaa="${esc(k)}">${can?`<input type="checkbox" class="mxack" data-mxack="${esc(k)}"${MXA.sel.has(k)?' checked':''} aria-label="Elegir ${esc(a.code)}">`:''}

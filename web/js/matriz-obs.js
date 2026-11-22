@@ -52,6 +52,11 @@ function mobFrases(cat){const cnt=new Map();
   const L=[...cnt.values()].sort((a,b)=>b.n-a.n||a.t.localeCompare(b.t)).slice(0,6).map(o=>o.t);
   for(const g of MOB_GEN)if(L.length<6&&!L.some(t=>t.toLowerCase()===g.toLowerCase()))L.push(g);return L}
 
+/** con tipo: los textos más usados con ese tipo (el nombre del tipo ya viene escrito) */
+function mobFrasesT(t){const cnt=new Map();
+  for(const n of MX.obs.values()){if(!n||n.ot!==t.id||n.st==='anu')continue;const x=String(n.desc||'').trim();if(!x||x.length>60||x===t.name)continue;const k=x.toLowerCase();const o=cnt.get(k)||{t:x,n:0};o.n++;cnt.set(k,o)}
+  return[t.name,...[...cnt.values()].sort((a,b)=>b.n-a.n||a.t.localeCompare(b.t)).slice(0,5).map(o=>o.t)]}
+
 /* ---------- fotos: Storage si se puede; si no, fotos de Firestore (se guarda aunque no haya señal) ---------- */
 function mobPhoto(id,data){const fid=uid('f');
   const fallback=()=>{FOTO.set(fid,data);fcol('fotos').doc(fid).set({data,mobId:id,by:me.email,ts:NOW()}).catch(err=>toast('No se pudo guardar la foto: '+(err.code||err.message)));return fid};
@@ -78,16 +83,18 @@ function mobAddPhotos(id,list,field){(list||[]).forEach(data=>mobPhoto(id,data).
   const AU=firebase.firestore.FieldValue.arrayUnion;const n=MX.obs.get(id);
   if(n){const doc={...n};if(field==='lev')doc.lev={...(n.lev||{}),ph:[...((n.lev||{}).ph||[]),ref]};else doc.ph=[...(n.ph||[]),ref];delete doc.id;mobLocal(id,doc)}
   fcol('mobs').doc(id).update(field==='lev'?{'lev.ph':AU(ref)}:{ph:AU(ref)}).catch(mobErr)}))}
-async function mobCreate(){const o=OBS;if(!o||!db||o.busy)return;const c=MX.cat.get(o.cat);const a=S.amb.get(o.amb);const desc=String(o.desc||'').trim();
-  if(!a){toast('Elige el ambiente.');return}if(!c){toast('Elige en qué actividad es la observación.');return}if(!desc){toast('Escribe o elige qué hay que hacer.');return}
-  if(!mobCanCat(c)){toast('Solo puedes registrar observaciones de tu partida.');return}
+async function mobCreate(){const o=OBS;if(!o||!db||o.busy)return;const t=o.ot?MX.obt.get(o.ot):null;const c=t?obtCat(t):MX.cat.get(o.cat);const a=S.amb.get(o.amb);const desc=String(o.desc||'').trim();
+  if(!a){toast('Elige el ambiente.');return}if(!c&&!t){toast('Elige el tipo de observación o la actividad.');return}if(!desc){toast('Escribe o elige qué hay que hacer.');return}
+  /* con tipo, el ambiente puede no tener la actividad (decidido con el dueño, 22-11-2026); sin actividad, responde el SC fijo del tipo */
+  if(t?!obtCanUse(t):!mobCanCat(c)){toast('Solo puedes registrar observaciones de tu partida.');return}
+  if(!c&&!t.sc){toast('Este tipo no tiene actividad ni subcontratista responsable: complétalo en Matriz › Tipos de obs.');return}
   o.busy=true;const num=Math.max(await mobNextSrv(a.id),o.num||0);if(OBS!==o)return;o.busy=false;
-  const sc=o.sc&&mxScsOf(c).includes(o.sc)&&(!SCK()||myScsI().includes(o.sc))?o.sc:mobScOf(c);
-  const id=uid('ob');const doc={amb:a.id,cat:c.id,sc,pid:pisoOfAmb(a.id)||'',num,desc:desc.slice(0,600),pt:o.pt||null,ph:[],st:'ab',...mobMeta()};
+  const sc=!c?t.sc:o.sc&&mxScsOf(c).includes(o.sc)&&(!SCK()||myScsI().includes(o.sc))?o.sc:mobScOf(c);
+  const id=uid('ob');const doc={amb:a.id,cat:c?c.id:'',...(t?{ot:t.id}:{}),sc,pid:pisoOfAmb(a.id)||'',num,desc:desc.slice(0,600),pt:o.pt||null,ph:[],st:'ab',...mobMeta()};
   mobLocal(id,doc);fcol('mobs').doc(id).set(doc).catch(mobErr);mobAddPhotos(id,o.newPh,'ph');
   toast(`Observación ${a.code}-${doc.num} registrada${o.newPh.length?' (subiendo la foto…)':''}`);
   /* sigue en el mismo ambiente para registrar otra (recorrido rápido) */
-  OBS={mode:'new',reg:o.reg,tab:o.tab,id:'',amb:a.id,pt:null,cat:'',desc:'',q:'',newPh:[],num:num+1,aq:'',add:false};mobDraw()}
+  OBS={mode:'new',reg:o.reg,tab:o.tab,id:'',amb:a.id,pt:null,cat:'',ot:'',otra:false,tq:'',desc:'',q:'',newPh:[],num:num+1,aq:'',add:false};mobDraw()}
 function mobLev(){const n=OBS&&MX.obs.get(OBS.id);if(!mobCanLev(n))return;const lev={...mobMeta(),...(SCK()?{sc:true}:{})};
   mobPatch(n.id,{st:'lev',lev,u:mobMeta()});mobAddPhotos(n.id,OBS.newPh,'lev');toast(`${mobLbl(n)} levantada`);mobClose()}
 function mobReab(){const n=OBS&&MX.obs.get(OBS.id);if(!mobCanLev(n))return;mobPatch(n.id,{st:'ab',reab:mobMeta(),u:mobMeta()});toast(`${mobLbl(n)} reabierta`);mobDraw()}
@@ -114,7 +121,7 @@ function mobSetSt(amb,cid,s,lbl){const c=MX.cat.get(cid);if(!mobStCan(c))return;
   const prev=((MX.amb.get(amb)||{}).c||{})[cid];if(prev===s&&!(typeof mxScPend==='function'&&mxScPend(amb,cid)))return;const DEL=firebase.firestore.FieldValue.delete();
   mxWrite(new Map([[amb,{[cid]:s}]]),lbl||`${c.name}: ${MXS[s]}`,new Map([[amb,{[cid]:prev===undefined?DEL:prev}]])).then(()=>{if(OBS)mobDraw()})}
 function mobActHtml(o){const cells=mxCells().get(o.amb)||{};
-  const items=Object.entries(cells).map(([k,x])=>({c:MX.cat.get(k),x})).filter(r=>r.c&&!r.c.arch&&mxMine(r.c)).sort((p,q)=>typeof mxSeqCmp==='function'?mxSeqCmp(p.c,q.c):0);
+  const items=Object.entries(cells).map(([k,x])=>({c:MX.cat.get(k),x})).filter(r=>r.c&&!r.c.arch&&mxMine(r.c)&&r.x.src!=='obs').sort((p,q)=>typeof mxSeqCmp==='function'?mxSeqCmp(p.c,q.c):0);
   const open=items.filter(r=>r.x.s!=='t'&&r.x.s!=='n'),done=items.filter(r=>r.x.s==='t'||r.x.s==='n');
   const row=r=>{const can=mobStCan(r.c);return`<div class="mxri${r.x.sug?' sug':''}" data-mobrc="${esc(r.c.id)}"><div class="mxrin"><span class="mxsw" style="--c:${esc(conOf(r.c.sc).color)}"></span><span><b>${esc(r.c.name)}</b><small>${esc(conOf(r.c.sc).name)}${r.x.sug?' · sin validar':''}${r.x.ob?` · ${r.x.ob} obs.`:''}</small></span></div>
     <div class="mxrbt" role="group" aria-label="Estado de ${esc(r.c.name)}">${['p','c','t','n'].map(s=>`<button class="mc s-${s}${r.x.s===s?' on':''}${r.x.s===s&&r.x.sug?' sug':''}" data-mobst="${s}"${can?'':' disabled'} aria-pressed="${r.x.s===s}"><i>${MXI[s]||'○'}</i>${MXS[s]}</button>`).join('')}</div></div>`};
@@ -136,22 +143,36 @@ function mobCats(amb,q){const cells=mxCells().get(amb)||{};const qq=mnk(q||'');
     .sort((x,y)=>typeof mxSeqCmp==='function'?mxSeqCmp(x,y):(x.ord||0)-(y.ord||0)).map(c=>({c,o:cells[c.id]}))}
 /** quien puede agregar una actividad al ambiente (como Pendiente): editores y el SC en su partida (mxAddCell, matriz-rec.js) */
 const mobCanAdd=()=>!!me&&(!!canDaily||SCK());
-function mobItemHtml(n){const c=MX.cat.get(n.cat);const co=conOf(n.sc);
-  return`<button class="mobi st-${n.st}" data-mobo="${esc(n.id)}" style="--c:${esc(co.color)}"><b class="mobn">${esc(mobLbl(n))}</b><span><b>${esc(n.desc||'')}</b><small>${esc(c?c.name:'')} · ${esc(co.name)}${n.st!=='ab'?' · '+MOBST[n.st]:''}${(n.ph||[]).length?' · 📷':''}${n.pt?'':' · sin punto'}</small></span></button>`}
+const mobOt=n=>n&&n.ot?MX.obt.get(n.ot)||null:null;
+function mobItemHtml(n){const c=MX.cat.get(n.cat);const co=conOf(n.sc);const t=mobOt(n);
+  return`<button class="mobi st-${n.st}" data-mobo="${esc(n.id)}" style="--c:${esc(co.color)}"><b class="mobn">${esc(mobLbl(n))}</b><span><b>${t&&t.code?`<span class="mobtc">${esc(t.code)}</span> `:''}${esc(n.desc||'')}</b><small>${esc(c?c.name:'Sin actividad')} · ${esc(co.name)}${n.st!=='ab'?' · '+MOBST[n.st]:''}${(n.ph||[]).length?' · 📷':''}${n.pt?'':' · sin punto'}</small></span></button>`}
 function mobDraw(){if(!OBS)return;const o=OBS;const a=S.amb.get(o.amb);const n=o.mode==='edit'?MX.obs.get(o.id):null;if(o.mode==='edit'&&!n){mobClose();return}
   const sec=a&&secOf(a.sectorId);let h='';
   if(!n&&o.reg){h+=`<div class="ksh"><i class="kn mobk" aria-hidden="true">✏️</i><div><b>${a?esc(a.code+' · '+a.name):'Sin ambiente'}</b><span>${sec?esc(sec.name):''}${o.pt?' · punto marcado en el plano':''}</span></div><button class="kx" data-mobx aria-label="Cerrar">×</button></div>
       <div class="seg mobtabs" role="tablist"><button data-mobtab="act" class="${o.tab==='act'?'on':''}" role="tab" aria-selected="${o.tab==='act'}">Actividades</button><button data-mobtab="obs" class="${o.tab==='obs'?'on':''}" role="tab" aria-selected="${o.tab==='obs'}">📍 Observación aquí</button></div>`}
   if(!n&&o.reg&&o.tab==='act')h+=mobActHtml(o);
-  else if(!n){const cats=mobCats(o.amb,o.q);const c=MX.cat.get(o.cat);
+  else if(!n){const cats=mobCats(o.amb,o.q);const t=o.ot?MX.obt.get(o.ot):null;const c=t?obtCat(t):MX.cat.get(o.cat);
+    /* tipos de observación (matriz-obt.js, 22-11-2026): primero se elige el tipo; «Otra» sigue con el flujo por actividad */
+    const types=typeof obtAll==='function'&&obtAll().some(obtCanUse);
     h+=o.reg?`<div class="ksl">Nueva observación ${a?esc(a.code)+'-'+(o.num||mobNext(a.id)):''}</div>`:`<div class="ksh"><i class="kn mobk" aria-hidden="true">📍</i><div><b>Nueva observación ${a?esc(a.code)+'-'+(o.num||mobNext(a.id)):''}</b><span>${a?esc(a.code+' · '+a.name):'Sin ambiente'}${sec?' · '+esc(sec.name):''}${o.pt?' · punto marcado en el plano':''}</span></div><button class="kx" data-mobx aria-label="Cerrar">×</button></div>`;
-    h+=`<div class="ksl">¿En qué actividad?</div>${c?`<div class="kchips kw"><button class="on" data-mobc="" style="--c:${esc(conOf(c.sc).color)}"><i></i>${esc(c.name)} ✕</button></div>`:
+    if(t){const C=mxCells().get(o.amb)||{};const inA=c&&C[c.id]&&C[c.id].src!=='obs';
+      h+=`<div class="ksl">Tipo de observación</div><div class="kchips kw"><button class="on" data-mobt=""><i></i>${esc(obtLbl(t))} ✕</button></div>
+        <p class="knote mobtin">${c?`Actividad: <b>${esc(c.name)}</b> · ${esc(conOf(c.sc).name)}${inA?'':'. El ambiente no tiene esta actividad: la observación no cuenta en el % ni sale en el Lookahead.'}`:t.sc?`Sin actividad · responsable: <b>${esc(conOf(t.sc).name)}</b>`:'<b>Este tipo no tiene actividad ni responsable:</b> complétalo en Matriz › Tipos de obs.'}</p>`}
+    else if(types&&!o.otra&&!o.cat){const{own,rest}=obtFor(o.amb,o.tq);const chip=x=>{const k=obtCat(x);return`<button data-mobt="${esc(x.id)}" style="--c:${esc(conOf(obtSc(x)).color)}" title="${esc(k?k.name:'Sin actividad')} · ${esc(conOf(obtSc(x)).name)}"><i></i>${esc(obtLbl(x))}</button>`};
+      h+=`<div class="ksl">¿Qué observación?</div><input class="kin" id="mobtq" value="${esc(o.tq||'')}" placeholder="Buscar tipo: pintura, fragua, sello…" aria-label="Buscar tipo de observación">
+        ${own.length?`<div class="kchips kw mobts">${own.map(chip).join('')}</div>`:''}
+        ${rest.length?(o.tq||!own.length?`<div class="kchips kw mobts">${rest.slice(0,40).map(chip).join('')}</div>`:`<details class="mobtmore"><summary>Otros tipos (${rest.length}): de actividades que el ambiente no tiene o generales</summary><div class="kchips kw mobts">${rest.map(chip).join('')}</div></details>`):''}
+        ${!own.length&&!rest.length?'<p class="note">Ningún tipo con ese texto.</p>':''}
+        <div class="kchips kw"><button class="mobot" data-mobt="*">Otra: elegir la actividad y escribirla</button></div>`}
+    else{if(types)h+=`<button class="lnkb" data-mobt="">← Elegir un tipo de la lista</button>`;
+      h+=`<div class="ksl">¿En qué actividad?</div>${c?`<div class="kchips kw"><button class="on" data-mobc="" style="--c:${esc(conOf(c.sc).color)}"><i></i>${esc(c.name)} ✕</button></div>`:
       `${cats.length>12||o.q?`<input class="kin" id="mobq" value="${esc(o.q)}" placeholder="Buscar entre las actividades del ambiente" aria-label="Buscar actividad">`:''}
       <div class="kchips kw mobcs">${cats.map(({c,o:x})=>`<button data-mobc="${esc(c.id)}" style="--c:${esc(conOf(c.sc).color)}" title="${esc(conOf(c.sc).name)}${x?' · '+MXS[x.s]:''}"><i></i>${esc(c.name)}${x&&x.s==='t'?' ✓':''}</button>`).join('')||`<p class="note">${o.q?'Ninguna actividad del ambiente con ese nombre.':'Este ambiente no tiene actividades en la Matriz'+(SCK()?' de tu partida':'')+'.'}</p>`}</div>
       <p class="knote">¿Falta la actividad entera? No es una observación: ${mobCanAdd()?'<button class="lnkb" data-moba="addc">agrégala al ambiente como Pendiente</button>':'pídele al ingeniero de producción que la agregue al ambiente como Pendiente'}.</p>`}`;
+      if(c&&types){const ts=obtAll().filter(x=>obtCanUse(x)&&obtCat(x)===c);if(ts.length)h+=`<div class="ksl">Tipo (opcional)</div><div class="kchips kw mobts">${ts.map(x=>`<button data-mobt="${esc(x.id)}"><i></i>${esc(obtLbl(x))}</button>`).join('')}</div>`}}
     if(c&&!SCK()&&mxScsOf(c).length>1){const cur=o.sc&&mxScsOf(c).includes(o.sc)?o.sc:c.sc;
       h+=`<div class="ksl">¿De qué subcontratista?</div><div class="kchips kw">${mxScsOf(c).map(x=>`<button class="${x===cur?'on':''}" data-mobsc="${esc(x)}" style="--c:${esc(conOf(x).color)}"><i></i>${esc(conOf(x).name)}</button>`).join('')}</div>`}
-    if(c){const fr=mobFrases(c.id);
+    if(c||t){const fr=t?mobFrasesT(t):mobFrases(c.id);
       h+=`<div class="ksl">¿Qué hay que hacer?</div><div class="kchips kw">${fr.map(t=>`<button data-mobd="${esc(t)}" class="${o.desc===t?'on':''}">${esc(t)}</button>`).join('')}</div>
         <textarea class="kin mobdesc" id="mobdesc" rows="2" maxlength="600" placeholder="Ej.: sello de la ventana despegado en la esquina" aria-label="Qué hay que hacer">${esc(o.desc)}</textarea>`;
       h+=`<div class="cph mobph">${o.newPh.map((s,i)=>`<div class="th"><img src="${s}" alt="Foto nueva"><button data-mobphn="${i}" aria-label="Quitar foto">&times;</button></div>`).join('')}<label class="kph">${CAM} Foto (opcional)<input type="file" accept="image/*" capture="environment" id="mobfoto" hidden></label></div>`;
@@ -159,7 +180,7 @@ function mobDraw(){if(!OBS)return;const o=OBS;const a=S.amb.get(o.amb);const n=o
     const L=a?mobOf(a.id).filter(x=>x.st!=='anu'):[];
     if(L.length)h+=`<div class="ksl">En este ambiente (${L.filter(x=>x.st==='ab').length} abiertas)</div><div class="mobl">${L.map(mobItemHtml).join('')}</div>`}
   else{const c=MX.cat.get(n.cat);const co=conOf(n.sc);const ed=mobCanEd(n),lv=mobCanLev(n);
-    h+=`<div class="ksh"><i class="kn mobk dia" aria-hidden="true">${esc(String(n.num||''))}</i><div><b>${esc(mobLbl(n))} · ${esc(c?c.name:'')}</b><span>${a?esc(a.code+' · '+a.name):''} · ${esc(co.name)} · <b class="mobst st-${n.st}">${MOBST[n.st]||n.st}</b></span>
+    h+=`<div class="ksh"><i class="kn mobk dia" aria-hidden="true">${esc(String(n.num||''))}</i><div><b>${esc(mobLbl(n))} · ${mobOt(n)?esc(obtLbl(mobOt(n))):esc(c?c.name:'')}</b><span>${a?esc(a.code+' · '+a.name):''} · ${esc(co.name)} · <b class="mobst st-${n.st}">${MOBST[n.st]||n.st}</b></span>
       <span>Registró ${esc(n.n||n.by||'')} · ${esc(fmtD(ldt(n.t)))}${n.lev&&n.st!=='ab'?` · levantó ${esc(n.lev.n||'')}${n.lev.sc?' (SC)':''} ${esc(fmtD(ldt(n.lev.t)))}`:''}${n.st==='ab'&&n.reab?` · reabrió ${esc(n.reab.n||'')} ${esc(fmtD(ldt(n.reab.t)))}`:''}${n.st==='anu'&&n.anu?` · anuló ${esc(n.anu.n||'')}`:''}</span></div><button class="kx" data-mobx aria-label="Cerrar">×</button></div>`;
     h+=ed&&n.st==='ab'?`<textarea class="kin mobdesc" id="mobdesc" rows="2" maxlength="600" aria-label="Qué hay que hacer">${esc(o.desc)}</textarea>`:`<p class="mobtx">${esc(n.desc||'')}</p>`;
     const ph=[...(n.ph||[]),...((n.lev||{}).ph||[])];
@@ -168,13 +189,13 @@ function mobDraw(){if(!OBS)return;const o=OBS;const a=S.amb.get(o.amb);const n=o
     if(n.st==='ab'){h+=`<div class="kbtns">${lv?'<button class="kbig ok" data-moba="lev">✓ Levantada</button>':''}${ed?'<button class="kbig ghost" data-moba="sav">Guardar cambios</button>':''}</div>`;
       if(lv&&o.newPh.length)h+=`<p class="knote">La foto se guarda con «✓ Levantada» como foto del después${ed?', o con «Guardar cambios» como foto de la observación':''}.</p>`}
     else if(n.st==='lev'&&lv)h+=`<div class="kbtns"><button class="kbig ghost" data-moba="reab">↺ Reabrir (no quedó bien)</button></div>`;
-    h+=`<div class="kbtns">${n.pt&&!(U.tab==='mat'&&U.mxV==='pla'&&U.mxPlOb)?'<button class="kbig ghost" data-moba="plano">Ver en el plano</button>':''}<button class="kbig ghost" data-moba="mat">Ver en la Matriz</button>${ed&&n.st!=='anu'?'<button class="kbig ghost mobdel" data-moba="anu">Anular</button>':''}</div>`;
+    h+=`<div class="kbtns">${n.pt&&!(U.tab==='mat'&&U.mxV==='pla'&&U.mxPlOb)?'<button class="kbig ghost" data-moba="plano">Ver en el plano</button>':''}${c?'<button class="kbig ghost" data-moba="mat">Ver en la Matriz</button>':''}${ed&&n.st!=='anu'?'<button class="kbig ghost mobdel" data-moba="anu">Anular</button>':''}</div>`;
     if(!lv&&!ed)h+=`<p class="knote">La levanta el ingeniero o el subcontratista de la partida.</p>`}
   let sh=$('#mobsheet');if(!sh){sh=document.createElement('div');sh.className='ksheet';sh.id='mobsheet';sh.innerHTML='<div class="ksc mobsc" role="dialog" aria-modal="true" aria-label="Observación"></div>';document.body.appendChild(sh);
     sh._open=NOW();sh.onclick=mobClick;sh.onchange=mobChange;sh.oninput=mobInput}
-  const sc=sh.firstChild;if(sc.dataset.h!==h){const st=sc.scrollTop;const fq=document.activeElement&&(document.activeElement.id==='mobq'||document.activeElement.id==='mobaq')&&document.activeElement.id;sc.innerHTML=h;sc.dataset.h=h;sc.scrollTop=st;
+  const sc=sh.firstChild;if(sc.dataset.h!==h){const st=sc.scrollTop;const fq=document.activeElement&&(document.activeElement.id==='mobq'||document.activeElement.id==='mobaq'||document.activeElement.id==='mobtq')&&document.activeElement.id;sc.innerHTML=h;sc.dataset.h=h;sc.scrollTop=st;
     if(fq){const i=$('#'+fq);if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}}}
-function mobInput(e){const t=e.target;if(!OBS)return;if(t.id==='mobdesc')OBS.desc=t.value;else if(t.id==='mobq'){OBS.q=t.value;mobDraw()}else if(t.id==='mobaq'){OBS.aq=t.value;mobDraw()}}
+function mobInput(e){const t=e.target;if(!OBS)return;if(t.id==='mobdesc')OBS.desc=t.value;else if(t.id==='mobq'){OBS.q=t.value;mobDraw()}else if(t.id==='mobaq'){OBS.aq=t.value;mobDraw()}else if(t.id==='mobtq'){OBS.tq=t.value;mobDraw()}}
 async function mobChange(e){const t=e.target;if(!OBS)return;
   if(t.id==='mobfoto'&&t.files[0]){const f=t.files[0];t.value='';try{toast('Comprimiendo foto…');OBS.newPh.push(await shrinkPhoto(f));mobDraw()}catch(err){toast(err.message)}}}
 function mobClick(e){const t=e.target;const sh=$('#mobsheet');if(t===sh&&NOW()-(sh._open||0)<600)return;if(t===sh||t.closest('[data-mobx]')){mobClose();return}if(!OBS)return;let b;
@@ -183,6 +204,10 @@ function mobClick(e){const t=e.target;const sh=$('#mobsheet');if(t===sh&&NOW()-(
   if((b=t.closest('[data-mobst]'))){const cid=b.closest('[data-mobrc]').dataset.mobrc;mobSetSt(OBS.amb,cid,b.dataset.mobst);return}
   if((b=t.closest('[data-mobadd]'))){const cid=b.dataset.mobadd;const c=MX.cat.get(cid);OBS.add=false;OBS.aq='';mobSetSt(OBS.amb,cid,'p',`Agregada: ${c?c.name:''} (pendiente)`);mobDraw();return}
   if((b=t.closest('[data-mobc]'))){OBS.cat=b.dataset.mobc;OBS.q='';OBS.sc='';mobDraw();return}
+  if((b=t.closest('[data-mobt]'))){const v=b.dataset.mobt;const prev=OBS.ot?MX.obt.get(OBS.ot):null;if(prev&&OBS.desc===prev.name)OBS.desc='';
+    if(v==='*'){OBS.otra=true;OBS.ot=''}else if(!v){OBS.ot='';OBS.otra=false;OBS.cat='';OBS.sc=''}
+    else{const ty=MX.obt.get(v);if(!ty)return;const k=obtCat(ty);if(!k||k.id!==OBS.cat)OBS.sc='';OBS.ot=v;OBS.otra=false;OBS.tq='';OBS.cat=k?k.id:'';if(!String(OBS.desc||'').trim())OBS.desc=ty.name}
+    mobDraw();return}
   if((b=t.closest('[data-mobsc]'))){OBS.sc=b.dataset.mobsc;mobDraw();return}
   if((b=t.closest('[data-mobd]'))){const v=b.dataset.mobd;OBS.desc=MOB_GEN.includes(v)?v+' ':v;mobDraw();const i=$('#mobdesc');if(i&&MOB_GEN.includes(v)){i.focus();i.setSelectionRange(i.value.length,i.value.length)}return}
   if((b=t.closest('[data-mobphn]'))){OBS.newPh.splice(+b.dataset.mobphn,1);mobDraw();return}
@@ -195,7 +220,7 @@ function mobClick(e){const t=e.target;const sh=$('#mobsheet');if(t===sh&&NOW()-(
       if(!ed&&!SCK()){OBS.tab='act';OBS.add=true;OBS.reg=true;mobDraw();return}
       mobClose();mxRecPick(amb,ed,cid=>mxAddCell(amb,cid,ed));return}
     if(k==='save')mobCreate();else if(k==='lev')mobLev();else if(k==='reab')mobReab();else if(k==='anu')mobAnu();else if(k==='sav')mobSaveEd();
-    else if(k==='plano'&&n){mobClose();mobGoPlan(n)}else if(k==='mat'&&n){mobClose();mxGoCell(n.amb,n.cat)}}}
+    else if(k==='plano'&&n){mobClose();mobGoPlan(n)}else if(k==='mat'&&n&&MX.cat.has(n.cat)){mobClose();mxGoCell(n.amb,n.cat)}}}
 /** abre Matriz › Gráfico › Observaciones en el piso de la observación y la resalta */
 function mobGoPlan(n){const pid=pisoOfAmb(n.amb);if(pid&&S.pis.has(pid)){U.piso=pid;U.pisoAll=false}
   U.tab='mat';U.mxV='pla';U.mxPlOb=true;U.mxPlEd=false;MXPL.sel=n.amb;MXPL.ob=n.id;saveUI();render()}

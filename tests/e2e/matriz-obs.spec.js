@@ -42,6 +42,7 @@ async function tocar(page, x, y) {
   await page.mouse.click(p.x, p.y);
 }
 const obs = page => page.evaluate(() => Object.values(window.__dbAll('mobs')));
+const MOBT_N = 43; /* tipos de la lista preliminar (MOBT_DEF, js/matriz-obt.js) */
 const cell = (page, amb, cat) => page.evaluate(([a, c]) => { const o = (mxCells().get(a) || {})[c]; return o ? { s: o.s, ob: o.ob, sp: o.sp } : null; }, [amb, cat]);
 
 test('el ingeniero de campo registra una observación tocando el plano: número por ambiente, pin y la actividad queda por programar', async ({ page }) => {
@@ -180,4 +181,72 @@ test('desde la ficha de la celda: «📍 marcando el punto» lleva al plano y el
   await expect(sh.locator('[data-mobtab="obs"]')).toHaveClass(/on/);
   await expect(sh.locator('[data-mobc=""]')).toContainText('Redes empotradas');
   noErrors(errors, 'observación con punto desde la ficha');
+});
+
+test('tipos de observación: el editor carga la lista preliminar y la ajusta; se registra por tipo aunque el ambiente no tenga la actividad (sin fantasma ni %) o sin actividad (SC del tipo); se filtra por tipo', async ({ page }) => {
+  /* «Baranda metálica» existe en el catálogo pero el Dpto 101 no la tiene; no hay ninguna actividad de limpieza */
+  const BAR = ['mcat', 'k3', { name: 'Baranda metálica', sc: 'c1', cl: 't', al: ['baranda metalica'], ord: 30 }];
+  const errors = await openApp(page, { as: 'editor', tab: 'mat', extra: [...DATOS, BAR] });
+  page.on('dialog', d => d.accept());
+  await page.waitForFunction(() => MX.ld.cat && MX.ld.amb);
+  await page.evaluate(() => { U.piso = 'p1'; U.mxV = 'obt'; render(); });
+  await page.locator('#obtseed').click();
+  await expect.poll(() => page.evaluate(() => Object.keys(window.__dbAll('mobt')).length)).toBe(MOBT_N);
+  const t = id => page.evaluate(i => window.__dbGet('mobt', i), id);
+  expect(await t('ot-AL-04')).toMatchObject({ code: 'AL-04', name: 'Baranda: corrección de pintura', cat: 'k3', sc: '' });
+  expect(await t('ot-TR-01')).toMatchObject({ cat: 'k2' });
+  expect(await t('ot-LM-01')).toMatchObject({ cat: '', sc: '' });
+  /* sin actividad ni responsable se marca; el editor le pone el SC responsable */
+  const fila = page.locator('tr[data-otid="ot-LM-01"]');
+  await expect(fila).toContainText('Sin actividad ni responsable');
+  await fila.locator('select[data-otf="sc"]').selectOption('c3');
+  await expect.poll(async () => (await t('ot-LM-01')).sc).toBe('c3');
+  /* cargar otra vez no duplica */
+  await expect(page.locator('#obtseed')).toHaveCount(0);
+  const pct0 = await page.evaluate(() => { const C = mxCells().get('a1'); return Object.values(C).filter(o => o.src !== 'obs').length; });
+
+  /* registrar por tipo: Baranda (el ambiente no la tiene) */
+  await grafico(page);
+  await tocar(page, 200, 200);
+  const sh = page.locator('#mobsheet');
+  await sh.locator('[data-mobtab="obs"]').click();
+  /* primero salen los tipos de las actividades del ambiente (Tarrajeo), los demás plegados o con el buscador */
+  await expect(sh.locator('.mobts').first().locator('[data-mobt="ot-TR-01"]')).toBeVisible();
+  await sh.locator('#mobtq').fill('baranda');
+  await sh.locator('[data-mobt="ot-AL-04"]').click();
+  await expect(sh).toContainText('El ambiente no tiene esta actividad');
+  await expect(sh.locator('#mobdesc')).toHaveValue('Baranda: corrección de pintura');
+  await sh.locator('[data-moba="save"]').click();
+  await expect.poll(async () => (await obs(page)).length).toBe(1);
+  expect((await obs(page))[0]).toMatchObject({ amb: 'a1', cat: 'k3', ot: 'ot-AL-04', sc: 'c1', desc: 'Baranda: corrección de pintura', st: 'ab' });
+  /* la celda existe solo por la observación: no es un pendiente del Lookahead ni cuenta en el % */
+  expect(await cell(page, 'a1', 'k3')).toEqual({ s: 'p', ob: 1, sp: false });
+  expect(await page.evaluate(() => mxPendList().some(r => r.c.id === 'k3'))).toBe(false);
+  expect(await page.evaluate(() => { const C = mxCells().get('a1'); return Object.values(C).filter(o => o.src !== 'obs').length; })).toBe(pct0);
+
+  /* sin actividad: limpieza → SC responsable del tipo */
+  await sh.locator('#mobtq').fill('limpieza fina');
+  await sh.locator('[data-mobt="ot-LM-01"]').click();
+  await expect(sh).toContainText('Sin actividad');
+  await sh.locator('[data-moba="save"]').click();
+  await expect.poll(async () => (await obs(page)).length).toBe(2);
+  expect((await obs(page)).find(o => o.ot === 'ot-LM-01')).toMatchObject({ cat: '', sc: 'c3', num: 2 });
+
+  /* «Otra» sigue con el flujo por actividad (sin tipo) */
+  await sh.locator('[data-mobt="*"]').click();
+  await sh.locator('[data-mobc="k2"]').click();
+  await sh.locator('#mobdesc').fill('Revisar arista');
+  await sh.locator('[data-moba="save"]').click();
+  await expect.poll(async () => (await obs(page)).length).toBe(3);
+  expect((await obs(page)).find(o => o.num === 3).ot).toBeUndefined();
+  await sh.locator('[data-mobx]').first().click();
+
+  /* Ver › Observaciones: resumen por tipo y filtro */
+  await page.evaluate(() => { U.mxPlEd = false; U.mxPlOb = true; render(); });
+  await expect(page.locator('details.obts')).toContainText('AL-04 Baranda: corrección de pintura');
+  await expect(page.locator('details.obts')).toContainText('Sin tipo');
+  await page.locator('#mxplot').selectOption('ot-AL-04');
+  await expect(page.locator('#mxpls .mobi')).toHaveCount(1);
+  await expect(page.locator('#mxpls .mobi .mobtc')).toHaveText('AL-04');
+  noErrors(errors, 'tipos de observación');
 });

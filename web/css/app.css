@@ -5281,3 +5281,14 @@ table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height
 .pvl.nb.mobpin.sel{transform:translate(-50%,-50%) scale(1.25);background:#C2410C!important}
 @media (max-width:599px){.pvl.nb.mobpin{width:34px;height:34px;font-size:11px}}
 .mobn::before{content:'◆';margin-right:3px;font-size:9px;vertical-align:1px}
+
+/* Tipos de observación (matriz-obt.js, nov 2026): Matriz › Tipos de obs., hoja de registro y resumen del Gráfico */
+.obtt td{vertical-align:top}.obtt .tin,.obtt select{width:100%;min-width:0;box-sizing:border-box}.obtt .obtc{width:84px;font-family:var(--f-mono);font-weight:700}
+.obtt td:nth-child(2){min-width:200px}.obtt td:nth-child(4){min-width:200px}.obtt td:nth-child(5){min-width:150px}
+.obtt tr.obtg td{background:var(--panel2);font-weight:700;padding:7px 8px}.obtt tr.obtg small{color:var(--muted);font-weight:500;margin-left:4px}
+.obtt .obtu{white-space:nowrap;font-size:12px}.obtt tr.obtw td{background:var(--mob-soft)}.obtwm{color:var(--mob);font-size:12px;font-weight:600;margin-top:3px}
+.mobtc{font:700 11px/1 var(--f-mono);color:var(--mob);background:var(--mob-soft);border-radius:4px;padding:2px 5px;margin-right:2px}
+.mobts button{border-left:3px solid var(--c,var(--line))}.mobot{border-style:dashed!important;color:var(--accent)!important}
+.mobtmore summary{cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink2);margin:8px 0 4px}.mobtin{margin-top:2px}
+.obts{margin:0 0 8px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--panel)}.obts>summary{cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink2);padding:8px 10px}
+.obtsw{overflow-x:auto;padding:0 6px 6px}.obtsw td,.obtsw th{white-space:nowrap}.obtsw tr.on td{background:var(--mob-soft)}.obtsw .lnkb{min-height:0}

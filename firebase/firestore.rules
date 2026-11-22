@@ -769,8 +769,12 @@ service cloud.firestore {
     // actividad de un ambiente (punto en el plano, texto y foto opcional). Las registran y levantan los ingenieros (canDaily)
     // y el SC en su partida (sc de la observación). Nadie cambia el autor. El SC no cambia ambiente, actividad, partida ni
     // número; solo corrige el texto, el punto y las fotos de las suyas, y solo anula las suyas. Anular = st 'anu'; borrar, el administrador.
+    // ot: tipo de observación (mobt, 22-11-2026). Sin actividad (cat '') solo con tipo y con SC responsable: el ambiente puede no
+    // tener la actividad, o no existir en el catálogo (decidido con el dueño).
     function mobShape(d) {
-      return d.get('amb', '') is string && d.get('amb', '') != '' && d.get('cat', '') is string && d.get('cat', '') != ''
+      return d.get('amb', '') is string && d.get('amb', '') != '' && d.get('cat', '') is string
+        && d.get('ot', '') is string && d.get('ot', '').size() <= 40
+        && (d.get('cat', '') != '' || (d.get('ot', '') != '' && d.get('sc', '') != ''))
         && d.get('sc', '') is string && d.get('desc', '') is string && d.get('desc', '').size() <= 600
         && d.get('st', '') in ['ab', 'lev', 'anu'];
     }
@@ -788,6 +792,14 @@ service cloud.firestore {
             // lo que anuló el ingeniero no lo reabre el SC
             && (resource.data.get('st', '') != 'anu' || resource.data.get('by', '') == mid())));
       allow delete: if isAdmin();
+    }
+    // Tipos de observación (punch list, 22-11-2026, decidido con el dueño): lista configurable; la editan administrador y editores.
+    // Se archiva (arch), no se borra.
+    match /mobt/{id} {
+      allow read: if lpsMember();
+      allow create, update: if canEdit() && request.resource.data.get('code', '') is string && request.resource.data.get('code', '').size() <= 12
+        && request.resource.data.get('name', '') is string && request.resource.data.get('name', '') != '' && request.resource.data.get('name', '').size() <= 80;
+      allow delete: if false;
     }
     // Foto semanal de la matriz: se crea con el correo de quien la guarda; no se cambia ni se borra
     match /mver/{id} {
@@ -1303,7 +1315,9 @@ service cloud.firestore {
       allow delete: if false;
     }
     function mobShape_cs(d) {
-      return d.get('amb', '') is string && d.get('amb', '') != '' && d.get('cat', '') is string && d.get('cat', '') != ''
+      return d.get('amb', '') is string && d.get('amb', '') != '' && d.get('cat', '') is string
+        && d.get('ot', '') is string && d.get('ot', '').size() <= 40
+        && (d.get('cat', '') != '' || (d.get('ot', '') != '' && d.get('sc', '') != ''))
         && d.get('sc', '') is string && d.get('desc', '') is string && d.get('desc', '').size() <= 600
         && d.get('st', '') in ['ab', 'lev', 'anu'];
     }
@@ -1321,6 +1335,12 @@ service cloud.firestore {
             // lo que anuló el ingeniero no lo reabre el SC
             && (resource.data.get('st', '') != 'anu' || resource.data.get('by', '') == mid_cs())));
       allow delete: if isAdmin_cs();
+    }
+    match /cs_mobt/{id} {
+      allow read: if lpsMember_cs();
+      allow create, update: if canEdit_cs() && request.resource.data.get('code', '') is string && request.resource.data.get('code', '').size() <= 12
+        && request.resource.data.get('name', '') is string && request.resource.data.get('name', '') != '' && request.resource.data.get('name', '').size() <= 80;
+      allow delete: if false;
     }
     match /cs_mver/{id} {
       allow read: if lpsMember_cs();
