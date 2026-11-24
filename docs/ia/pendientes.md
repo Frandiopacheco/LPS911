@@ -75,3 +75,13 @@ Pendiente: Matriz con todos los pisos tarda ~0,5 s por dibujo (solo se agrupan l
 - `lhprop/{sc}` acumula claves `id:null` de cada decisión; vigilar el límite de 1 MB en obras largas.
 - Dos usuarios SC de la misma partida comparten `lhprop/{sc}`: «Enviar» de uno envía también los borradores del otro (¿por diseño?).
 - Duda del informe externo: confirmar que al entrar a la revisión se limpie la selección en bloque (`SELA`, mover.js).
+
+## Herramientas y escalabilidad (conversado con el dueño, 24-11-2026; para más adelante, aún no le interesa)
+Decisión: **no cambiar de stack** (nada de rehacer en React). Seguir con JS sin framework + Firebase; si el orden del código llega a frenar, pasar a Vite con módulos ES archivo por archivo, sin cambiar la interfaz; React solo para un módulo nuevo y aislado, como prueba.
+Cuando el dueño lo pida, en este orden:
+1. **Registro de errores de la app** (lo de más valor): Sentry gratuito o colección propia `errores` llenada con `window.onerror`/`unhandledrejection` (usuario, rol, pestaña, versión `VER`). Hoy un error en el celular de un capataz solo se sabe si avisa.
+2. **Respaldo automático de Firestore** en `lps911`: respaldos programados y recuperación a un momento pasado (PITR, 7 días). Se activa en la consola o con `gcloud`, sin código. Hoy el respaldo es manual (Equipo › Descargar respaldo).
+3. **Alertas de presupuesto** en Google Cloud (gasto que se dispara por lecturas de más).
+4. **ESLint en «Revisar»** (CI): variables sin definir y nombres globales repetidos entre archivos de `js/`; opcional `// @ts-check` sin cambiar el código.
+5. **Varias obras:** hoy se separa por prefijo de colección (`fcol`, `DNS`, `cs_`), que no escala a N obras. Propuesta: **un proyecto de Firebase por obra** (mismo código, otra `config/`), aislado y sin migrar datos; un tablero consolidado aparte si hace falta. Alternativa más cara: una base con `obras/{id}/...` (reescribir reglas y migrar). Decidir antes de abrir la 2.ª obra.
+6. **Bajar menos datos al entrar:** varias vistas escuchan colecciones completas (`base.js`, `fcol(col).onSnapshot`); `live`/`daily`/`dplan` ya filtran por fecha. Falta filtrar lo terminado/archivado del lookahead y las propuestas en obras largas (ver también el límite de 1 MB de `lhprop`).
