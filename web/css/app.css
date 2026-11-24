@@ -1771,6 +1771,8 @@ table.rtab .rc-x{width:30px}
 body.mod-tar #fpiso,body.mod-tar .wk .lbl,body.mod-tar #wprev,body.mod-tar #wnext,body.mod-tar #wtoday,body.mod-tar #bundo,body.mod-tar #bredo,body.mod-tar #bexport,body.mod-tar #bhelp{display:none!important}
 /* lo mismo en el módulo Planos (docs/ia/planos.md) */
 body.mod-pla #fpiso,body.mod-pla .wk,body.mod-pla #bundo,body.mod-pla #bredo,body.mod-pla #bexport,body.mod-pla #bhelp{display:none!important}
+/* y en el módulo Avance (docs/ia/avance.md) */
+body.mod-ava #fpiso,body.mod-ava .wk,body.mod-ava #bundo,body.mod-ava #bredo,body.mod-ava #bexport,body.mod-ava #bhelp{display:none!important}
 /* «Más» del celular: selector de módulo a todo el ancho */
 .msc .msmod{display:flex;align-items:center;gap:10px;padding:6px 8px}
 .msc .msmod>span:first-child{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
@@ -5292,3 +5294,68 @@ table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height
 .mobtmore summary{cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink2);margin:8px 0 4px}.mobtin{margin-top:2px}
 .obts{margin:0 0 8px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--panel)}.obts>summary{cursor:pointer;font:600 12.5px var(--f-ui);color:var(--ink2);padding:8px 10px}
 .obtsw{overflow-x:auto;padding:0 6px 6px}.obtsw td,.obtsw th{white-space:nowrap}.obtsw tr.on td{background:var(--mob-soft)}.obtsw .lnkb{min-height:0}
+
+/* ---------- Módulo Avance (js/avance.js, docs/ia/avance.md): registro tipo lookahead del avance físico por ambiente ---------- */
+.avpage{display:flex;flex-direction:column;gap:10px}
+.avbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.avbar .tin{height:var(--h-ctl,34px);max-width:260px}
+.avsp{flex:1}
+.avlb{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.avtot{font-size:13.5px;color:var(--ink2)}
+.avbox{overflow:auto;max-height:calc(100vh - 250px);min-height:200px;border:1px solid var(--line);border-radius:var(--r-card,10px);background:var(--panel)}
+.avgr{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
+.avgr th,.avgr td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:4px 7px;white-space:nowrap;background:var(--panel);text-align:left;height:28px}
+.avgr th{background:var(--panel2);color:var(--ink2);font-weight:600;position:sticky;top:0;z-index:2}
+.avgr thead tr+tr th{top:29px}
+.avgr .num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.avgr .avs0{position:sticky;left:0;z-index:1;min-width:250px;max-width:250px;overflow:hidden;text-overflow:ellipsis}
+.avgr th.avs0{z-index:3}
+.avgr .avs0 em{font-style:normal;color:var(--ink2)}
+.avgr tr.avpi td{background:var(--accent-soft);font-weight:700;cursor:pointer}
+.avgr tr.avam td{background:var(--panel2);font-weight:600;cursor:pointer}
+.avgr tr.avrw td.avs0 b{font-family:var(--f-mono);font-weight:500}
+.avgr td.hoy,.avgr th.hoy,.avgr tr.avpi td.hoy,.avgr tr.avam td.hoy{background:var(--today-soft)}
+.avgr td.nw,.avgr th.nw{background:var(--sec);color:var(--muted)}
+.avgr th.avwk{cursor:pointer;text-align:left}
+.avgr td.avwt{font-weight:600}
+.avgr td.aved{cursor:text;min-width:44px;box-shadow:inset 0 0 0 1px var(--line2)}
+.avgr td.aved:hover{box-shadow:inset 0 0 0 1px var(--line)}
+.avgr td.aved:focus{outline:2px solid var(--accent);outline-offset:-2px;background:var(--panel)}
+.avgr td.avov{color:var(--bad);font-weight:600}
+.avgr td.aval{display:table-cell}
+.avi1,.avi2{display:inline-block;width:14px}.avi2{width:28px}
+.avpb{display:inline-block;width:50px;height:8px;border-radius:4px;background:var(--line2);vertical-align:middle;margin-right:6px;overflow:hidden}
+.avpb i{display:block;height:100%;background:var(--ok)}.avpb.a i{background:var(--accent)}
+.avtg{display:inline-block;font-size:12px;border-radius:999px;padding:1px 8px;margin-right:4px;white-space:nowrap;background:var(--panel2);color:var(--ink2)}
+.avtg.o{background:var(--ok-soft);color:var(--ok)}.avtg.w{background:var(--warn-soft);color:var(--warn)}.avtg.b{background:var(--bad-soft);color:var(--bad)}
+.avtg.avblk{display:block;border-radius:8px;padding:6px 10px;white-space:normal}
+.avnote{font-size:13px;color:var(--muted);margin:0}
+.avhist{display:flex;flex-direction:column;gap:6px;padding:4px 10px 8px;max-height:240px;overflow:auto}
+.avhist div{display:flex;flex-direction:column}.avhist b{font-family:var(--f-mono);font-weight:500}.avhist span{font-size:12px;color:var(--muted)}
+/* celular: piso → ambiente → ítems */
+.avcel{display:flex;flex-direction:column;gap:8px;max-width:560px;width:100%;margin:0 auto}
+.avch{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.avch span{font-size:13px;color:var(--muted)}
+.avcard,.avcrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card,10px);padding:10px 12px;text-align:left;font:inherit;color:inherit;min-height:52px}
+.avcard{cursor:pointer}.avcard i{font-style:normal;color:var(--muted);font-size:20px}
+.avcard span,.avcrow>span:first-child{display:flex;flex-direction:column;min-width:0}
+.avcard small,.avcrow small{font-size:12.5px;color:var(--muted)}
+.avstp{display:flex;gap:6px;align-items:center;flex:none}
+.avstp button{width:42px;height:42px;border:1px solid var(--line);border-radius:var(--r-ctl,8px);background:var(--panel2);color:var(--ink);font-size:20px;cursor:pointer}
+.avstp input{width:64px;height:42px;border:1px solid var(--line);border-radius:var(--r-ctl,8px);background:var(--panel);color:var(--ink);text-align:center;font:500 15px var(--f-mono)}
+/* ventanas: ficha de la partida, fila e importación */
+.avh{display:flex;justify-content:space-between;align-items:center;gap:10px}.avh>b{font-size:16px}
+.avf{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--ink2);min-width:0}
+.avf .tin{height:var(--h-ctl,34px);font-size:14px;color:var(--ink);width:100%}
+.avf .avta{height:auto;padding:6px 8px;font-family:var(--f-mono);font-size:12.5px;resize:vertical}
+.avf2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}.avf3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.avfs{border:1px solid var(--line2);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;margin:0}.avfs legend{font-size:12.5px;color:var(--ink2);padding:0 4px}
+.avfe{display:flex;gap:6px;align-items:center}.avfe .tin:first-child{flex:1;min-width:0}.avfe .tin+.tin{width:70px;text-align:right}
+.avck,.lqc .avck{display:flex;flex-direction:row;gap:8px;align-items:center;font-size:13.5px}.avck input{flex:none;width:auto}
+.avact{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.avibox{max-height:44vh;overflow:auto;border:1px solid var(--line2);border-radius:8px}
+.avit{border-collapse:collapse;width:100%;font-size:13px}.avit th,.avit td{padding:5px 8px;border-bottom:1px solid var(--line2);text-align:left}
+.avit th{background:var(--panel2);position:sticky;top:0}.avit .num{text-align:right;font-family:var(--f-mono)}.avit tr.avinv td{background:var(--accent-soft);font-weight:600}
+.avit .tin{height:32px;max-width:240px}
+.avisum{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13.5px}
+.avierr{font-size:12.5px;color:var(--bad)}.avierr div{padding:1px 0}
+@media (max-width:760px){.avgr .avs0{min-width:150px;max-width:150px}.avbox{max-height:calc(100vh - 300px)}.avf2,.avf3{grid-template-columns:1fr}.avbar .tin{max-width:100%;flex:1 1 140px}}

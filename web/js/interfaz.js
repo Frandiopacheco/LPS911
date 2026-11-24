@@ -6,13 +6,14 @@
 const TAB_ORDER=['hoy','dash','look','pull','mat','restr','plan','mapa','campo','cap','lib','ind','prod','cli','planos','met','cfg','team'];
 /* nombres cortos (menú del celular); el nombre completo es el del botón de la pestaña */
 const TAB_SHORT={hoy:'Hoy',dash:'Tablero',look:'Lookahead',pull:'Sesión pull',mat:'Matriz',restr:'Restricciones',plan:'Plan semanal',mapa:'Plan diario',campo:'Campo',cap:'En obra',lib:'Liberaciones',ind:'Indicadores',prod:'Productividad',cli:'Cliente',planos:'Sectorización',met:'Metrados',cfg:'Configuración',team:'Equipo',
-  tdia:'Tareos',tpub:'Publicación',tcos:'Costos',trh:'RR.HH.',tper:'Personal',tpc:'Partidas',tcfg:'Configuración',pbib:'Planos',pcar:'Cargar',p3d:'3D'};
+  tdia:'Tareos',tpub:'Publicación',tcos:'Costos',trh:'RR.HH.',tper:'Personal',tpc:'Partidas',tcfg:'Configuración',pbib:'Planos',pcar:'Cargar',p3d:'3D',areg:'Registro'};
 const isCalArea=()=>!!me&&me.role==='area'&&/calidad/i.test(me.area||'');
 /* Cada módulo tiene sus pestañas: Last Planner (TAB_ORDER) y Tareo (TAR_TABS, base.js). U.mod dice cuál se ve */
-const tabOrder=()=>U.mod==='tar'?TAR_TABS:U.mod==='pla'?PLA_TABS:TAB_ORDER;
+const tabOrder=()=>U.mod==='tar'?TAR_TABS:U.mod==='pla'?PLA_TABS:U.mod==='ava'?AVA_TABS:TAB_ORDER;
 
 /** ¿Puede este usuario abrir la pestaña? (las reglas de seguridad siguen mandando sobre lo que puede guardar) */
 function tabAllowed(t){if(!me)return false;
+  if(AVA_TABS.includes(t))return U.mod==='ava'&&canAva();
   if(PLA_TABS.includes(t)){if(U.mod!=='pla'||!canPla())return false;return t==='pcar'?plaEd():t==='p3d'?me.role==='admin':true}
   if(TAR_TABS.includes(t)){if(U.mod!=='tar'||!canTar())return false;if(t==='tcfg')return me.role==='admin'||TASIS();
     /* F3: costos no entra a Tareos del día (su inicio es Costos); Publicación: admin y jefe de producción (tareo-pub.js) */
@@ -35,7 +36,7 @@ function tabHome(){if(me&&me.role==='trh'&&U.mod==='tar')return'trh';return tabP
 function navApply(){const nav=$('#tabs');if(!nav||!me)return;const prim=tabPrimary(),sec=tabSecondary();
   const btn=t=>nav.querySelector(`button[data-tab="${t}"]`);
   const sig=prim.join()+'|'+sec.join();const re=nav.dataset.sig!==sig;nav.dataset.sig=sig;
-  [...TAB_ORDER,...TAR_TABS,...PLA_TABS].forEach(t=>{const b=btn(t);if(b){const h=!prim.includes(t);if(b.hidden!==h)b.hidden=h;if(re)nav.appendChild(b)}});
+  [...TAB_ORDER,...TAR_TABS,...PLA_TABS,...AVA_TABS].forEach(t=>{const b=btn(t);if(b){const h=!prim.includes(t);if(b.hidden!==h)b.hidden=h;if(re)nav.appendChild(b)}});
   let mb=$('#tabMore');if(!mb){mb=document.createElement('button');mb.id='tabMore';mb.type='button';mb.className='tmore';mb.setAttribute('aria-haspopup','menu');mb.onclick=()=>moreMenu(mb)}
   if(re||mb.parentNode!==nav)nav.appendChild(mb);mb.hidden=!sec.length;const inSec=sec.includes(U.tab);
   const mh=`${inSec?esc(TAB_SHORT[U.tab]||U.tab):'Más'} <span aria-hidden="true">▾</span>`;if(mb.innerHTML!==mh)mb.innerHTML=mh;mb.setAttribute('aria-selected',inSec);mb.classList.toggle('on',inSec)}

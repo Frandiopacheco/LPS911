@@ -688,6 +688,33 @@ service cloud.firestore {
       allow create, update: if canDaily() && pmetOk(request.resource.data);
       allow delete: if isAdmin();
     }
+    // Módulo Avance (docs/ia/avance.md): avance físico de partidas de acabados por ambiente. Lo lee todo LPS.
+    // avp (partidas) y el metrado de avm: administrador y editores. «Llegó» (avm.ll) y el avance diario (ava): también campo.
+    // Nada se borra (se archiva); el historial por celda (ava.log) nunca se acorta.
+    match /avp/{id} {
+      allow read: if lpsMember();
+      allow create, update: if canEdit() && request.resource.data.nom is string && request.resource.data.nom != ''
+        && request.resource.data.et is list && request.resource.data.et.size() > 0;
+      allow delete: if false;
+    }
+    function avmOk(id, d) { return d.p is string && d.piso is string && d.p != '' && d.piso != '' && id == d.p + '_' + d.piso && d.get('r', {}) is map && d.get('ll', {}) is map; }
+    match /avm/{id} {
+      allow read: if lpsMember();
+      allow create: if canEdit() && avmOk(id, request.resource.data);
+      allow update: if avmOk(id, request.resource.data)
+        && (canEdit() || (canDaily() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ll', 'by', 't'])));
+      allow delete: if false;
+    }
+    function avaOk(id, d) {
+      return d.p is string && d.piso is string && d.w is string && d.p != '' && d.piso != '' && id == d.p + '_' + d.piso + '_' + d.w
+        && d.c is map && d.log is list && d.keys().hasOnly(['p', 'piso', 'w', 'c', 'log', 'by', 't']);
+    }
+    match /ava/{id} {
+      allow read: if lpsMember();
+      allow create: if canDaily() && avaOk(id, request.resource.data);
+      allow update: if canDaily() && avaOk(id, request.resource.data) && request.resource.data.log.size() >= resource.data.log.size();
+      allow delete: if false;
+    }
     // Matriz de ambientes (docs/ia/matriz.md): catálogo de actividades, tipos de ambiente y estado de cada ambiente.
     // La lee todo LPS; en la fase 1 editan administrador y editores. No se borra (lo que sobra se archiva o queda «no aplica»).
     // El SC también agrega actividades desde el lookahead (oct 2026): de su partida, con su correo y marcadas «por revisar» (rev).
@@ -1249,6 +1276,11 @@ service cloud.firestore {
       allow read: if isTar_cs() || canDaily_cs();
       allow create, update: if canDaily_cs() && pmetOk_cs(request.resource.data);
       allow delete: if isAdmin_cs();
+    }
+    function avmOk_cs(id, d) { return d.p is string && d.piso is string && d.p != '' && d.piso != '' && id == d.p + '_' + d.piso && d.get('r', {}) is map && d.get('ll', {}) is map; }
+    function avaOk_cs(id, d) {
+      return d.p is string && d.piso is string && d.w is string && d.p != '' && d.piso != '' && id == d.p + '_' + d.piso + '_' + d.w
+        && d.c is map && d.log is list && d.keys().hasOnly(['p', 'piso', 'w', 'c', 'log', 'by', 't']);
     }
     match /cs_mcat/{id} {
       allow read: if lpsMember_cs();
