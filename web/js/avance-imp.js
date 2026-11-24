@@ -5,7 +5,7 @@
    Nunca crea ambientes: los toma de los que ya existen (decidido con el dueño, 24-11-2026). Las equivalencias quedan en avp.eq. */
 let AVI=null;
 const AVI_COL={cod:['codigo','cod','item','code'],des:['descripcion','desc','detalle'],niv:['nivel','piso'],amb:['ambiente','amb'],q:['cantidad','metrado','cant','qty'],ub:['ubicacion','ubic','ub']};
-function avImpOpen(){const p=avCur();if(!p||!avaCfg())return;AVI={pid:p.id,rows:null,niv:{},amb:{},err:'',busy:false};avImpDraw()}
+function avImpOpen(){const p=avCur();if(!p||!avaCfg())return;if(avSubP!==p.id||AV.dok!==3){toast('Espera a que cargue el metrado.');return}AVI={pid:p.id,rows:null,niv:{},amb:{},err:'',busy:false};avImpDraw()}
 /** texto → filas {cod,des,niv,amb,ub,q,ln}; devuelve un mensaje si faltan columnas */
 function avImpParse(txt){const M=avCsv(txt);if(M.length<2)return{err:'El archivo no tiene filas.'};const hd=M[0].map(x=>mnk(x)),ix={};
   for(const k in AVI_COL){ix[k]=hd.findIndex(x=>AVI_COL[k].includes(x))}const falta=['cod','niv','amb','q'].filter(k=>ix[k]<0);
@@ -52,11 +52,11 @@ function avImpDraw(){const I=AVI,p=AVP.get(I.pid);if(!I||!p)return;let h=`<div c
    e=>{const t=e.target;if(t.id==='avifile'&&t.files&&t.files[0]){const fr=new FileReader();fr.onload=()=>{const ta=$('#avitxt');if(ta)ta.value=String(fr.result||'');avImpRead()};fr.readAsText(t.files[0])}
     else if(t.dataset.avn!=null){AVI.niv[t.dataset.avn]=t.value;avImpDraw()}else if(t.dataset.avia!=null){AVI.amb[t.dataset.avia]=t.value;avImpDraw()}})}
 function avImpRead(){const ta=$('#avitxt'),r=avImpParse(ta?ta.value:'');if(r.err){AVI.err=r.err;AVI.rows=null}else{AVI.rows=r.rows;AVI.err='';AVI.niv={};AVI.amb={}}avImpDraw()}
-async function avImpGo(){const I=AVI,p=AVP.get(I.pid);if(!I||!p||I.busy||!avaCfg())return;const P=avImpPlan();if(P.pend)return;I.busy=true;const w=avWho();
+async function avImpGo(){const I=AVI,p=AVP.get(I.pid);if(!I||!p||I.busy||!avaCfg())return;if(avSubP!==p.id||AV.dok!==3){toast('Espera a que cargue el metrado.');return}const P=avImpPlan();if(P.pend)return;I.busy=true;const w=avWho();
   /* ítems nuevos: se agregan a la partida con un id propio */
   const items={},idOf=new Map();let n=Object.keys(p.items||{}).length,k=0;P.newIt.forEach((v,ck)=>{const id='i'+NOW().toString(36)+(k++).toString(36);items[id]={cod:v.cod.slice(0,30),des:String(v.des||'').slice(0,120),ord:n++};idOf.set('new:'+ck,id)});
   const byPiso=new Map();let m=0;P.agg.forEach(o=>{if(o.old&&Math.abs(o.old.q-o.q)<=1e-9)return;const id=o.old?o.old.id:'r'+NOW().toString(36)+(m++).toString(36),q=Math.round(o.q*100)/100;
-    const R=byPiso.get(o.piso)||{};R[id]=o.old?{q}:{it:idOf.get(o.it)||o.it,amb:o.amb,ub:o.ub,q,an:o.an};byPiso.set(o.piso,R)});
+    const pk=o.old?o.old.piso:o.piso/* la fila que ya existe se corrige en SU documento */,R=byPiso.get(pk)||{};R[id]=o.old?{q}:{it:idOf.get(o.it)||o.it,amb:o.amb,ub:o.ub,q,an:o.an};byPiso.set(pk,R)});
   const eq={niv:{},amb:{}};for(const a in I.niv)if(I.niv[a])eq.niv[a]=I.niv[a];for(const a in I.amb)if(I.amb[a])eq.amb[a]=I.amb[a];
   try{const b=db.batch();b.set(fcol('avp').doc(p.id),{items,eq,by:w.by,n:w.n,t:w.t},{merge:true});byPiso.forEach((R,pi)=>b.set(fcol('avm').doc(p.id+'_'+pi),{p:p.id,piso:pi,r:R,by:w.by,t:w.t},{merge:true}));
     await bgWrite(b.commit());AVI=null;lqClose();toast(`Importado: ${P.nu} filas nuevas${P.ch?', '+P.ch+' actualizadas':''}${P.skip?' · '+P.skip+' sin importar':''}`);requestRender()}

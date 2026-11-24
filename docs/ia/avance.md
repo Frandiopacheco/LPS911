@@ -39,7 +39,7 @@ Están en `DSHARED` (base.js), `SHARED` (`scripts/reglas-casco.mjs` y `functions
   - «Llegó» va en `ll`, aparte de `r`, para que las reglas dejen a campo escribir solo eso.
   - Quitar una fila = `r.<id>.arch` (no se borra; su avance queda en la base y deja de contar).
 - `ava/{partida}_{piso}_{lunes|ini}`: avance de una semana `{p, piso, w, c:{fecha|'ini':{filaId:{etapaId:cantidad}}}, log:[{d,r,e,q,a,by,n,t}], by, t}`.
-  - `ini` = corte inicial (lo ejecutado antes del registro diario). `lunes` = `weekStart(weekOf(fecha))`.
+  - `ini` = corte inicial (lo ejecutado antes del registro diario). `lunes` = el lunes del calendario de esa fecha (`avMon`; no depende de `refDate` del proyecto).
   - Cada celda se escribe **sola** con `set(…,{merge:true})` y su entrada de historial con `arrayUnion` (`avPutCell`): dos personas en celdas distintas del mismo documento no se pisan. No uses `apply`/`put` aquí (`fsDiff` solo baja un nivel).
   - Una celda en 0 se guarda como 0 (no se borra el campo).
 - `avm` y `ava` se leen **solo de la partida elegida** (`avSubData`: `where('p','==',id)`), y se reabren al cambiar de partida. El tablero de la fase 2 necesitará leer todas.
@@ -91,6 +91,12 @@ Están en `DSHARED` (base.js), `SHARED` (`scripts/reglas-casco.mjs` y `functions
 - `tests/rules/firestore.test.mjs` «avance: …».
 
 ## Pendiente (fase 2 y después)
+
+- `ava.log` crece sin límite dentro del documento de la semana (y sobre todo en el de `ini`): vigilar el tamaño (límite 1 MiB); si hiciera falta, pasar el historial a una colección aparte. La regla solo exige que no se acorte.
+- Restaurar un respaldo viejo no pisa los `ava` cuyo historial creció después (la regla lo rechaza): esos documentos se saltan.
+- El SC lee todas las partidas (como el resto de LPS); revisar si entra a SEG-05 paso 2.
+- `#avpiso` escribe `U.piso`: elegir piso en Avance cambia también el filtro de Last Planner (a propósito).
+- Los ids de etapa no se reusan nunca (reusarlos reviviría avance viejo).
 
 - Tablero (`atab`): % ejecutado, llegado y faltante por partida, piso y global; bajar al detalle; curva acumulada (`hasta`); Excel y PDF (también para el cliente).
 - Equipo › Limpieza borra pisos y ambientes de verdad: debería avisar si un piso tiene metrado de Avance (hoy las filas quedarían con el nombre guardado en `an`).

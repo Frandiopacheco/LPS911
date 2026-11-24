@@ -8,7 +8,7 @@
    - ava/{partida}_{piso}_{lunes|ini}: avance de una semana {p, piso, w, c:{fecha|'ini':{filaId:{etapaId:cantidad}}}, log:[{d,r,e,q,a,by,n,t}]}.
      Cada celda se escribe sola (set con merge): dos personas en celdas distintas no se pisan. `log` es el historial por celda.
    El cálculo está en avance-calc.js (funciones puras). */
-const AVP=new Map(),AVM=new Map(),AVD=new Map();let avUnP=null,avUnD=[],avSubP='',avOk=false;
+const AVP=new Map(),AVM=new Map(),AVD=new Map();let avUnP=null,avUnD=[],avSubP='',avOk=false,avReg1=false;
 const AV={e:'',cel:null,day:'',pc:null,ambC:new Set(),wkO:null,key:'',amb:'',v:0,cv:-1,rows:null,ex:null,pend:false,dok:0};
 const AV_UND=['und','m²','ml','m','m³','kg','pto','glb','jgo'];
 const avF=n=>Number(+n||0).toLocaleString('es-PE',{maximumFractionDigits:2});
@@ -21,8 +21,8 @@ Object.assign(BNI,{areg:SVG('<rect x="3.5" y="4.5" width="17" height="15" rx="1.
 /* ---------- datos ---------- */
 function ensureAv(){if(!db||avUnP||!me||!canAva())return;
   const open=()=>{avUnP=fcol('avp').onSnapshot(sn=>{snapOk('avp');AVP.clear();sn.docs.forEach(d=>AVP.set(d.id,{...d.data(),id:d.id}));avOk=true;if(U.mod==='ava')snapRender(sn)},
-    err=>{avUnP=null;snapFail('avp',err,()=>{if(me&&canAva())open()})})};
-  open();unsubs.push(avStop)}
+    err=>{avUnP=null;snapFail('avp',err,()=>{if(me&&canAva()&&!avUnP)open()})})};
+  open();if(!avReg1){avReg1=true;unsubs.push(()=>{avReg1=false;avStop()})}}
 function avStop(){if(avUnP)try{avUnP()}catch(e){}avUnP=null;avUnD.forEach(f=>{try{f()}catch(e){}});avUnD=[];avSubP='';avOk=false;AVP.clear();AVM.clear();AVD.clear();AV.v++}
 /** metrado y avance de UNA partida (la elegida): se reabre al cambiar de partida */
 function avSubData(pid){if(avSubP===pid)return;avUnD.forEach(f=>{try{f()}catch(e){}});avUnD=[];AVM.clear();AVD.clear();AV.v++;AV.dok=0;avSubP=pid;if(!pid||!db)return;
@@ -41,7 +41,8 @@ const avAmbN=r=>{const a=avAmb(r.amb);return a?(a.name||a.code||r.an||'Ambiente'
 const avIt=(p,r)=>(p.items||{})[r.it]||{cod:'?',des:'(ítem eliminado)'};
 function avSort(p,rows){const key=r=>{const a=avAmb(r.amb),s=a&&(S.sec.get(a.sectorId)||ARCH.sec.get(a.sectorId));return[(s&&s.order)||0,a?(a.order||0):9e9,avAmbN(r),r.amb,(avIt(p,r).ord)||0,avIt(p,r).cod,r.ub]};
   return rows.map(r=>[key(r),r]).sort((A,B)=>{for(let i=0;i<7;i++){const a=A[0][i],b=B[0][i];if(a!==b)return typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b),'es',{numeric:true})}return 0}).map(x=>x[1])}
-const avMon=d=>weekStart(weekOf(d));
+/* lunes del calendario (no el de la configuración del proyecto: si cambiara, un mismo día quedaría en dos documentos) */
+const avMon=d=>addD(d,-((pd(d).getUTCDay()+6)%7));
 /** semanas (lunes a domingo) del rango de la partida */
 function avWeeks(p){const t=todayIso();const d0=p.d0||addD(t,-7),d1=p.d1&&p.d1>=d0?p.d1:addD(d0,41);const W=[];for(let m=avMon(d0);m<=d1&&W.length<104;m=addD(m,7))W.push({m,n:weekOf(m),days:[0,1,2,3,4,5,6].map(i=>addD(m,i))});return{W,d0,d1,t}}
 const avEts=p=>Array.isArray(p.et)?p.et:[];
@@ -53,6 +54,7 @@ function renderAReg(main){ensureAv();const p=avCur();avSubData(p?p.id:'');
   /* si alguien está escribiendo en una celda y llega un dato, no se redibuja encima: se redibuja al salir de la celda */
   const ae=document.activeElement,ed=ae&&ae.classList&&ae.classList.contains('aved')&&main.contains(ae);
   if(ed&&ae.textContent.trim()!==(ae.dataset.o||'')){AV.pend=true;return}
+  if(ae&&ae.matches&&ae.matches('input[data-avin]')&&main.contains(ae)&&ae.value!==ae.defaultValue){AV.pend=true;return}/* igual en el celular */
   const fk=ed?ae.dataset.k:null,box=main.querySelector('.avbox'),st=box?[box.scrollTop,box.scrollLeft]:null;
   if(AV.cel==null)AV.cel=isMob();const cfg=avaCfg(),parts=avParts();
   let h=`<div class="scroll"><div class="avpage">`;
@@ -67,7 +69,7 @@ function renderAReg(main){ensureAv();const p=avCur();avSubData(p?p.id:'');
       <span class="seg" role="group" aria-label="Vista"><button type="button" data-avv="0" class="${AV.cel?'':'on'}">Grilla</button><button type="button" data-avv="1" class="${AV.cel?'on':''}">Celular</button></span></div>
     <div class="avbar"><span class="avlb">Etapa</span><span class="seg" role="group" aria-label="Etapa">${ets.map(e=>`<button type="button" data-ave="${esc(e.id)}" class="${AV.e===e.id?'on':''}">${esc(e.nom)} ${avF(e.peso)} %</button>`).join('')}${ets.length>1&&!AV.cel?`<button type="button" data-ave="*" class="${AV.e==='*'?'on':''}">Resumen</button>`:''}</span>
       <span class="avtot">${rows.length?`Avance de la partida: <b>${avPc(avGrpPct(ets,D.ex,rows))}</b>${p.sum?` · llegado <b>${avPc(avLlPct(rows))}</b>`:''}`:''}</span><span class="avsp"></span>
-      ${cfg&&!AV.cel?`<button class="ib" data-av="row">＋ Fila</button><button class="ib" data-av="imp">Importar CSV…</button>`:''}</div>`;
+      ${cfg&&!AV.cel&&AV.dok===3?`<button class="ib" data-av="row">＋ Fila</button><button class="ib" data-av="imp">Importar CSV…</button>`:''}</div>`;
     if(AV.dok!==3)h+=`<div class="empty">Cargando el registro…</div>`;
     else if(!rows.length)h+=`<div class="empty"><b>Esta partida aún no tiene filas.</b><br>${cfg?'Agrega una con «＋ Fila» o carga el metrado con «Importar CSV…».':'El metrado lo carga el administrador o un ingeniero de producción.'}</div>`;
     else h+=AV.cel?avCelHtml(p,D,rows):AV.e==='*'?avResHtml(p,D,rows):avGridHtml(p,D,rows)}
@@ -86,7 +88,7 @@ function avGridHtml(p,D,rows){const et=avEt(p),ex=D.ex,C=avWeeks(p),reg=avaReg()
   if(!AV.wkO){AV.wkO=new Set([avMon(C.t),addD(avMon(C.t),-7)]);if(!C.W.some(w=>AV.wkO.has(w.m))&&C.W[0])AV.wkO.add(C.W[0].m)}
   const vp=avVisPisos(rows);if(!AV.pc)AV.pc=new Set(rows.length>80?vp.slice(1).map(x=>x.id):[]);/* plegados: con muchas filas solo se abre el primer piso */
   const wo=w=>AV.wkO.has(w.m),dcls=d=>d===C.t?' hoy':nwReason(d)?' nw':'',can=d=>reg&&d>=C.d0&&d<=C.d1&&d<=C.t;
-  let h=`<div class="avbox"><table class="avg"><thead><tr><th rowspan="2" class="avs0">Piso › ambiente › ítem</th><th rowspan="2" class="num">Metrado</th>${p.sum?'<th rowspan="2" class="num">Llegó</th>':''}<th rowspan="2" class="num">Ejec.</th><th rowspan="2" class="num">Pend.</th><th rowspan="2">% ${esc(et.nom)}</th><th rowspan="2">Alerta</th><th rowspan="2" class="num" title="Lo ejecutado antes de empezar el registro diario">Corte inicial${p.corte?'<br>'+fmtD(p.corte):''}</th>`;
+  let h=`<div class="avbox"><table class="avgr"><thead><tr><th rowspan="2" class="avs0">Piso › ambiente › ítem</th><th rowspan="2" class="num">Metrado</th>${p.sum?'<th rowspan="2" class="num">Llegó</th>':''}<th rowspan="2" class="num">Ejec.</th><th rowspan="2" class="num">Pend.</th><th rowspan="2">% ${esc(et.nom)}</th><th rowspan="2">Alerta</th><th rowspan="2" class="num" title="Lo ejecutado antes de empezar el registro diario">Corte inicial${p.corte?'<br>'+fmtD(p.corte):''}</th>`;
   C.W.forEach(w=>h+=`<th class="avwk" data-avwk="${w.m}" colspan="${wo(w)?8:1}" title="Clic para plegar o desplegar la semana">${wo(w)?'▾':'▸'} Semana ${w.n} · ${fmtD(w.days[0])} – ${fmtD(w.days[6])}</th>`);h+='</tr><tr>';
   C.W.forEach(w=>{if(wo(w))w.days.forEach((d,i)=>h+=`<th class="num${dcls(d)}" title="${esc(nwReason(d)||'')}">${'LMXJVSD'[i]} ${d.slice(8)}</th>`);h+='<th class="num">total</th>'});h+='</tr></thead><tbody>';
   const edc=(k,v,cls,ok)=>ok?`<td class="num aved${cls}" contenteditable="true" inputmode="decimal" data-k="${esc(k)}" data-o="${avE(v)}">${avE(v)}</td>`:`<td class="num${cls}">${avE(v)}</td>`;
@@ -103,7 +105,7 @@ function avGridHtml(p,D,rows){const et=avEt(p),ex=D.ex,C=avWeeks(p),reg=avaReg()
     if(o)avAmbGroups(p,rs).forEach(g=>{const ka=pi.id+'|'+g.amb,oa=!AV.ambC.has(ka);h+=line('avam',{t:g.nom,h:'<i class="avi1"></i>'+(oa?'▾ ':'▸ ')+esc(g.nom)},g.rows,`data-avam="${esc(ka)}"`);
       if(oa)g.rows.forEach(r=>{const it=avIt(p,r),tx=`${it.cod} · ${it.des}${r.ub?' · '+r.ub:''}`;h+=line('avrw',{t:tx,h:`<i class="avi2"></i><b>${esc(it.cod)}</b> ${esc(it.des)}${r.ub?` · <em>${esc(r.ub)}</em>`:''}`},[r],'',r)})})});
   return h+`</tbody></table></div><p class="avnote">${reg?'Escribe la cantidad ejecutada en el día. Enter baja a la fila siguiente; clic derecho (o mantener el dedo) en una celda muestra su historial. ':''}Clic en una semana para plegarla.${cfg?' Para quitar una fila, deja su metrado en blanco.':''}</p>`}
-function avResHtml(p,D,rows){const ets=avEts(p),ex=D.ex;let h=`<div class="avbox"><table class="avg"><thead><tr><th class="avs0">Piso › ambiente</th><th class="num">Metrado</th>${ets.map(e=>`<th>${esc(e.nom)} ${avF(e.peso)} %</th>`).join('')}<th>Ponderado</th></tr></thead><tbody>`;
+function avResHtml(p,D,rows){const ets=avEts(p),ex=D.ex;let h=`<div class="avbox"><table class="avgr"><thead><tr><th class="avs0">Piso › ambiente</th><th class="num">Metrado</th>${ets.map(e=>`<th>${esc(e.nom)} ${avF(e.peso)} %</th>`).join('')}<th>Ponderado</th></tr></thead><tbody>`;
   const ln=(cls,lab,rs)=>`<tr class="${cls}"><td class="avs0">${lab}</td><td class="num">${avF(avSumQ(rs))}</td>${ets.map(e=>`<td class="avpc">${avBar(avEtPct(ex,rs,e.id),'a')}</td>`).join('')}<td class="avpc"><b>${avBar(avGrpPct(ets,ex,rs))}</b></td></tr>`;
   avVisPisos(rows).forEach(pi=>{const rs=rows.filter(r=>r.piso===pi.id);h+=ln('avpi',esc(pi.name),rs);avAmbGroups(p,rs).forEach(g=>h+=ln('avrw','<i class="avi1"></i>'+esc(g.nom),g.rows))});
   return h+'</tbody></table></div><p class="avnote">Avance ponderado de todas las etapas (solo lectura). Para registrar, elige una etapa.</p>'}
@@ -213,7 +215,8 @@ function avItParse(txt,old){const byCod=new Map(Object.entries(old||{}).map(([id
 async function avFSave(){avFRead();const f=AVF;if(!f)return;const p=f.id?AVP.get(f.id):null,nom=f.nom.trim();if(!nom){toast('Ponle un nombre a la partida.');return}
   const et=f.et.map(e=>({id:e.id,nom:String(e.nom||'').trim(),peso:Math.round(avNum(e.peso)*100)/100}));if(et.some(e=>!e.nom||!(e.peso>0))){toast('Cada etapa necesita nombre y un peso mayor que 0.');return}
   if(!avPesosOk(et)){toast('Los pesos de las etapas deben sumar 100 %.');return}if(f.d1<f.d0){toast('La fecha de fin es anterior al inicio.');return}
-  let k=0;const used=new Set(et.map(e=>e.id).filter(Boolean));et.forEach(e=>{if(!e.id){do{e.id='e'+(++k)}while(used.has(e.id)||(p&&avEts(p).some(x=>x.id===e.id)));used.add(e.id)}});
+  /* id de etapa que no se repite nunca: reusar el de una etapa quitada haría revivir su avance viejo en la nueva */
+  let k=0;const used=new Set(et.map(e=>e.id).filter(Boolean));et.forEach(e=>{if(!e.id){do{e.id='e'+NOW().toString(36)+(k++).toString(36)}while(used.has(e.id));used.add(e.id)}});
   const items=avItParse(f.items,p&&p.items);
   if(p){const D=avSubP===p.id?avData():{rows:[],ex:{}},usedIt=new Set(D.rows.map(r=>r.it));const lostI=Object.keys(p.items||{}).filter(id=>!items[id]&&usedIt.has(id));
     if(lostI.length){toast(`No se puede quitar ${lostI.map(id=>p.items[id].cod).slice(0,3).join(', ')}: tiene filas con metrado. Quita primero sus filas.`);return}
@@ -227,7 +230,7 @@ async function avFArch(){const p=AVF&&AVP.get(AVF.id);if(!p)return;if(!await uiA
   bgWrite(fcol('avp').doc(p.id).update({arch:avWho()}));AVF=null;lqClose();toast('Partida archivada');requestRender()}
 
 /* ---------- ＋ Fila ---------- */
-function avRowDlg(st){const p=avCur();if(!p||!avaCfg())return;const its=Object.entries(p.items||{}).sort((a,b)=>(a[1].ord||0)-(b[1].ord||0));
+function avRowDlg(st){const p=avCur();if(!p||!avaCfg())return;if(avSubP!==p.id||AV.dok!==3){toast('Espera a que cargue el metrado.');return}const its=Object.entries(p.items||{}).sort((a,b)=>(a[1].ord||0)-(b[1].ord||0));
   if(!its.length){toast('Primero agrega los ítems de la partida en «Editar partida».');return}
   st=st||{piso:U.piso||(pisos()[0]||{}).id||'',amb:'',it:its[0][0],ub:(p.ubi||[])[0]||'',q:''};
   const ambs=[...S.amb.values()].filter(a=>pisoOfAmb(a.id)===st.piso).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es',{numeric:true}));if(!ambs.find(a=>a.id===st.amb))st.amb=ambs[0]?ambs[0].id:'';
