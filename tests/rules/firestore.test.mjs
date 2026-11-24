@@ -1869,3 +1869,36 @@ test('casco: la entrega de un sector se publica como hito de Last Planner (colec
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'cs_hitos/h1'), { n: 'Hito de casco', tipo: 'fin', d: '2099-11-02' }));
   await assertFails(setDoc(doc(user('sc@obra.pe'), 'hitos/cs_k2'), { n: 'x', tipo: 'ini', d: '2099-11-02' }));
 });
+
+test('avance: partidas y metrado los escriben admin y editores; campo solo «Llegó» y el avance diario; nadie borra', async () => {
+  const P = { nom: 'Pintura', und: 'm²', et: [{ id: 'e1', nom: 'Empaste', peso: 100 }], items: {} };
+  const ed = user('editor@obra.pe'), ca = user('campo@obra.pe'), sc = user('sc@obra.pe'), le = user('lector@obra.pe');
+  await assertSucceeds(setDoc(doc(ed, 'avp/a1'), P));
+  await assertFails(setDoc(doc(ca, 'avp/a2'), P));
+  await assertFails(setDoc(doc(ed, 'avp/a3'), { nom: 'Sin etapas', et: [] }));
+  await assertFails(deleteDoc(doc(ed, 'avp/a1')));
+  await assertSucceeds(getDoc(doc(le, 'avp/a1')));
+  await assertSucceeds(getDocs(query(collection(sc, 'avm'), where('p', '==', 'a1'))));
+  // metrado
+  const M = { p: 'a1', piso: 'p1', r: { r1: { it: 'i1', amb: 'x', ub: '', q: 100 } } };
+  await assertFails(setDoc(doc(ca, 'avm/a1_p1'), M));
+  await assertFails(setDoc(doc(ed, 'avm/otro'), M));                       // el id debe calzar con partida y piso
+  await assertSucceeds(setDoc(doc(ed, 'avm/a1_p1'), M));
+  await assertSucceeds(setDoc(doc(ca, 'avm/a1_p1'), { p: 'a1', piso: 'p1', ll: { r1: 40 }, by: 'campo@obra.pe', t: 1 }, { merge: true }));
+  await assertFails(setDoc(doc(ca, 'avm/a1_p1'), { r: { r1: { q: 5 } } }, { merge: true }));   // campo no cambia el metrado
+  await assertFails(setDoc(doc(sc, 'avm/a1_p1'), { ll: { r1: 1 } }, { merge: true }));
+  await assertSucceeds(setDoc(doc(ed, 'avm/a1_p1'), { r: { r1: { q: 120 } } }, { merge: true }));
+  await assertFails(deleteDoc(doc(ed, 'avm/a1_p1')));
+  // avance diario: cada celda con su entrada de historial
+  const cell = (d, q, by) => ({ p: 'a1', piso: 'p1', w: '2099-10-05', c: { [d]: { r1: { e1: q } } }, log: arrayUnion({ d, r: 'r1', e: 'e1', q, a: 0, by, t: q }), by, t: 1 });
+  await assertSucceeds(setDoc(doc(ca, 'ava/a1_p1_2099-10-05'), cell('2099-10-05', 10, 'campo@obra.pe'), { merge: true }));
+  await assertSucceeds(setDoc(doc(ed, 'ava/a1_p1_2099-10-05'), cell('2099-10-06', 20, 'editor@obra.pe'), { merge: true }));
+  const got = (await getDoc(doc(ed, 'ava/a1_p1_2099-10-05'))).data();
+  assert.deepStrictEqual(got.c, { '2099-10-05': { r1: { e1: 10 } }, '2099-10-06': { r1: { e1: 20 } } });   // dos personas, celdas distintas: no se pisan
+  assert.strictEqual(got.log.length, 2);
+  await assertFails(updateDoc(doc(ca, 'ava/a1_p1_2099-10-05'), { log: [] }));          // el historial no se acorta
+  await assertFails(setDoc(doc(ca, 'ava/a1_p1_2099-10-12'), cell('2099-10-12', 1, 'x')));   // el id debe calzar con la semana
+  await assertFails(setDoc(doc(sc, 'ava/a1_p1_2099-10-05'), cell('2099-10-07', 5, 'sc@obra.pe'), { merge: true }));
+  await assertFails(setDoc(doc(le, 'ava/a1_p1_2099-10-05'), cell('2099-10-07', 5, 'lector@obra.pe'), { merge: true }));
+  await assertFails(deleteDoc(doc(ed, 'ava/a1_p1_2099-10-05')));
+});

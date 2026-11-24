@@ -30,7 +30,7 @@ const DNS=(()=>{try{return localStorage.getItem('lps.ns')==='cs'?'cs_':''}catch(
 const CS=()=>DNS==='cs_';
 /* compartidas entre módulos (mismo nombre en Last Planner y Casco): equipo, tareo, módulo Planos y avisos. La misma lista está en
    scripts/reglas-casco.mjs (reglas) y functions/index.js (servidor) */
-const DSHARED=new Set(['members','inv','clock','push','pushp','pushlog','plb','plh','eto','p3d','hhpc','tareo','tfot','tpub','tpubidx','tpexc','tpauto','tper','tperbk','tperp','tpc','tpcbk','tcfg']);
+const DSHARED=new Set(['members','inv','clock','push','pushp','pushlog','plb','plh','eto','p3d','hhpc','tareo','tfot','tpub','tpubidx','tpexc','tpauto','tper','tperbk','tperp','tpc','tpcbk','tcfg','avp','avm','ava']);
 const store={get(k,d){try{const v=localStorage.getItem('lps911.'+(CS()?'cs.':'')+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('lps911.'+(CS()?'cs.':'')+k,JSON.stringify(v))}catch(e){}}};
 
 /* ---------- estado ---------- */
@@ -44,7 +44,7 @@ const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'a
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),tper:new Map(),tpc:new Map(),tcfg:new Map(),loaded:{}};
 const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';if(CS()&&!U.lkV)U.lkV='tren';if(CS()&&U.mod==='lps')U.mod='cas';if(!CS()&&U.mod==='cas')U.mod='lps';
-const saveUI=()=>store.set('ui',{mod:U.mod==='tar'||U.mod==='pla'?U.mod:LPM(),pisoAll:!!U.pisoAll,lbMore:false,legOff:!!U.legOff,tab:U.tab,win:U.win,pvV:U.pvV||'sc',pcAll:!!U.pcAll,lkV:U.lkV==='flujo'||U.lkV==='tren'?U.lkV:'grid',flOpen:Array.isArray(U.flOpen)?U.flOpen:[],qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,grp:U.grp||'',pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAct:U.mxAct||'',mxActDone:!!U.mxActDone,mxFalta:!!U.mxFalta,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxPlOb:!!U.mxPlOb,mxPlEd:!!U.mxPlEd,mxPlObL:!!U.mxPlObL,mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc',cliv:!!U.cliv,csSzV:U.csSzV||'',kmV:U.kmV||'',kmSec:U.kmSec||'',kmVt:U.kmVt||'',kvMode:U.kvMode||''});
+const saveUI=()=>store.set('ui',{mod:U.mod==='tar'||U.mod==='pla'||U.mod==='ava'?U.mod:LPM(),avP:U.avP||'',pisoAll:!!U.pisoAll,lbMore:false,legOff:!!U.legOff,tab:U.tab,win:U.win,pvV:U.pvV||'sc',pcAll:!!U.pcAll,lkV:U.lkV==='flujo'||U.lkV==='tren'?U.lkV:'grid',flOpen:Array.isArray(U.flOpen)?U.flOpen:[],qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,grp:U.grp||'',pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAct:U.mxAct||'',mxActDone:!!U.mxActDone,mxFalta:!!U.mxFalta,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxPlOb:!!U.mxPlOb,mxPlEd:!!U.mxPlEd,mxPlObL:!!U.mxPlObL,mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc',cliv:!!U.cliv,csSzV:U.csSzV||'',kmV:U.kmV||'',kmSec:U.kmSec||'',kmVt:U.kmVt||'',kvMode:U.kvMode||''});
 /* Zona general (`pisos.zg`, 11-11-2026, decidido con el dueño): Fachadas, Exteriores… no son niveles del edificio sino zonas para programar.
    Siguen siendo «pisos» (lookahead, PPC, restricciones, plan diario igual), pero van siempre al final de las listas, aparte de los niveles,
    y no cuentan como nivel en Casco ni en «Niveles del edificio». */
@@ -85,16 +85,22 @@ const canPla=()=>canLps();
 /* Oficina Técnica (área de apoyo «OT» u «Oficina Técnica») también carga: maneja las revisiones (decidido con el dueño, oct 2026) */
 const isOTArea=()=>!!me&&me.role==='area'&&/^\s*(o\.?\s*t\.?|oficina\s+t[eé]cnica.*)\s*$/i.test(me.area||'');
 const plaEd=()=>!!me&&(me.role==='admin'||me.role==='editor'||isOTArea());
+/* Módulo Avance (docs/ia/avance.md): avance físico de partidas de acabados por ambiente. Usa los pisos y ambientes de Last Planner,
+   por eso no se ofrece dentro de Casco. Configuran (partidas, metrado) administrador y editores; registran además los de campo */
+const AVA_TABS=['areg'];
+const canAva=()=>canLps()&&!CS()&&me.role!=='capataz';
+const avaCfg=()=>!!me&&canAva()&&(me.role==='admin'||me.role==='editor');
+const avaReg=()=>!!me&&canAva()&&(me.role==='admin'||me.role==='editor'||me.role==='campo');
 /* módulos de la app: [id, nombre] de los que este usuario puede abrir (el selector aparece si hay más de uno) */
 /* Casco: lo ve quien ve Last Planner (menos el capataz) cuando la obra ya tiene Casco (cs_meta/project, CASCO_ON); el administrador siempre, para crearlo */
 let CASCO_ON=CS();
 const LPM=()=>CS()?'cas':'lps';
-const modOk=m=>m==='tar'?canTar():m==='pla'?canPla():m==='cas'?canLps()&&me.role!=='capataz'&&(CASCO_ON||me.role==='admin'):canLps();
-const MODS=()=>[['lps','Last Planner'],['cas','Casco'],['tar','Tareo'],['pla','Planos']].filter(x=>modOk(x[0]));
-const tabMod=t=>TAR_TABS.includes(t)?'tar':PLA_TABS.includes(t)?'pla':LPM();
-const modHome=m=>m==='tar'?'tdia':m==='pla'?'pbib':'hoy';
+const modOk=m=>m==='tar'?canTar():m==='pla'?canPla():m==='ava'?canAva():m==='cas'?canLps()&&me.role!=='capataz'&&(CASCO_ON||me.role==='admin'):canLps();
+const MODS=()=>[['lps','Last Planner'],['cas','Casco'],['tar','Tareo'],['pla','Planos'],['ava','Avance']].filter(x=>modOk(x[0]));
+const tabMod=t=>TAR_TABS.includes(t)?'tar':PLA_TABS.includes(t)?'pla':AVA_TABS.includes(t)?'ava':LPM();
+const modHome=m=>m==='tar'?'tdia':m==='pla'?'pbib':m==='ava'?'areg':'hoy';
 /** ¿se está en un módulo distinto de Last Planner? (sin piso, semana, deshacer ni exportes de LPS) */
-const offLps=()=>U.mod==='tar'||U.mod==='pla';
+const offLps=()=>U.mod==='tar'||U.mod==='pla'||U.mod==='ava';
 /** cambia de módulo (selector de la barra o «Más» del celular): lleva a la pestaña inicial del módulo */
 function goMod(m){if(!modOk(m))return;closePop();const sh=$('#msheet');if(sh)sh.remove();
   /* Last Planner ↔ Casco: otro juego de datos; se recarga la página en el otro espacio (cs_) */
@@ -826,15 +832,15 @@ $('#bnav').onclick=e=>{const b=e.target.closest('[data-bt]');if(!b)return;if(b.d
 /* ---------- barra superior ---------- */
 /** selector de módulo (barra superior y «Más» del celular): solo para quien usa los dos */
 const modSegHtml=()=>`<span class="seg modseg" role="group" aria-label="Módulo">${MODS().map(([m,l])=>`<button type="button" data-mod="${m}" class="${U.mod===m?'on':''}" aria-pressed="${U.mod===m}">${l}</button>`).join('')}</span>`;
-function modselApply(){const el=$('#modsel');document.body.classList.toggle('ns-cs',CS());document.body.classList.toggle('mod-tar',U.mod==='tar');document.body.classList.toggle('mod-pla',U.mod==='pla');if(!el)return;const ms=MODS(),show=ms.length>1;if(el.hidden!==!show)el.hidden=!show;
+function modselApply(){const el=$('#modsel');document.body.classList.toggle('ns-cs',CS());document.body.classList.toggle('mod-tar',U.mod==='tar');document.body.classList.toggle('mod-pla',U.mod==='pla');document.body.classList.toggle('mod-ava',U.mod==='ava');if(!el)return;const ms=MODS(),show=ms.length>1;if(el.hidden!==!show)el.hidden=!show;
   if(!show)return;const sig=ms.map(x=>x[0]).join();if(el.dataset.sig!==sig){el.dataset.sig=sig;el.innerHTML=ms.map(([m,l])=>`<button type="button" data-mod="${m}">${l}</button>`).join('')}
   el.querySelectorAll('[data-mod]').forEach(b=>{const on=b.dataset.mod===U.mod;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)})}
 $('#modsel').onclick=e=>{const b=e.target.closest('[data-mod]');if(b)goMod(b.dataset.mod)};
 function renderTop(){
   modselApply();
   if(offLps()){/* Tareo y Planos: sin piso, semana, deshacer ni exportes de Last Planner (los oculta también el CSS con body.mod-tar / mod-pla) */
-    let pn=P().name||'';if(!pn)try{pn=localStorage.getItem('lps.pname')||''}catch(e){}const pl=U.mod==='pla';
-    stx('#pname',pl?'Planos del proyecto':'Tareo de personal obrero');$('#pname').title='';stx('#pcode',(pn?pn+' · ':'')+(pl?'Planos':'Tareo'));
+    let pn=P().name||'';if(!pn)try{pn=localStorage.getItem('lps.pname')||''}catch(e){}const pl=U.mod==='pla',av=U.mod==='ava';
+    stx('#pname',av?'Avance de partidas':pl?'Planos del proyecto':'Tareo de personal obrero');$('#pname').title='';stx('#pcode',(pn?pn+' · ':'')+(av?'Avance':pl?'Planos':'Tareo'));
     $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tabKey()));
     navApply();topDateApply();topToolsApply();updUndo();setStatus();renderBnav();return}
   const p=P();stx('#pname',p.name||'Proyecto');$('#pname').title=p.fullName||'';
@@ -902,7 +908,7 @@ function render(){
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')rSafe('presStop',presStop);if(U.tab==='look'||(me&&me.role==='sc'))rSafe('ensureProp',ensureProp);rSafe('pmSync',pmSync);document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
   if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)rSafe('zcClose',()=>window.__plano.zcClose());rSafe('vaBanner',vaBanner);}
-  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,met:renderMet,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,trh:renderTRh,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(typeof PLV!=='undefined'&&PLV&&PLV.dock&&U.tab!==PLV.tab)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=!offLps()?'look':modHome(U.mod);
+  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,met:renderMet,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,trh:renderTRh,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d,areg:renderAReg};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(typeof PLV!=='undefined'&&PLV&&PLV.dock&&U.tab!==PLV.tab)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=!offLps()?'look':modHome(U.mod);
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
   if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}

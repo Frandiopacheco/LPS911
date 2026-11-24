@@ -15,7 +15,7 @@ const FILE = path.join(ROOT, 'firebase/firestore.rules');
 export const PREFIX = 'cs_';
 /* compartidas entre Last Planner y Casco (mismo nombre, sin prefijo): equipo, tareo, módulo Planos, avisos push */
 export const SHARED = new Set(['members', 'inv', 'clock', 'push', 'pushp', 'pushlog', 'plb', 'plh', 'eto', 'p3d', 'hhpc',
-  'tareo', 'tfot', 'tpub', 'tpubidx', 'tpexc', 'tpauto', 'tper', 'tperbk', 'tperp', 'tpc', 'tpcbk', 'tcfg']);
+  'tareo', 'tfot', 'tpub', 'tpubidx', 'tpexc', 'tpauto', 'tper', 'tperbk', 'tperp', 'tpc', 'tpcbk', 'tcfg', 'avp', 'avm', 'ava']);
 const BEGIN = '    // ==== CASCO: generado por scripts/reglas-casco.mjs a partir de las reglas de arriba. No lo edites a mano ====';
 const END = '    // ==== FIN CASCO ====';
 

@@ -31,7 +31,7 @@ setGlobalOptions({ region: 'us-central1', maxInstances: 1, memory: '256MiB', tim
 const { AsyncLocalStorage } = require('node:async_hooks');
 const NSC = new AsyncLocalStorage();
 const SHARED = new Set(['members', 'inv', 'clock', 'push', 'pushp', 'pushlog', 'plb', 'plh', 'eto', 'p3d', 'hhpc',
-  'tareo', 'tfot', 'tpub', 'tpubidx', 'tpexc', 'tpauto', 'tper', 'tperbk', 'tperp', 'tpc', 'tpcbk', 'tcfg']);
+  'tareo', 'tfot', 'tpub', 'tpubidx', 'tpexc', 'tpauto', 'tper', 'tperbk', 'tperp', 'tpc', 'tpcbk', 'tcfg', 'avp', 'avm', 'ava']);
 const nsWrap = (fs, ns) => new Proxy(fs, { get(t, p) { if (p === 'collection') return n => t.collection(SHARED.has(n) ? n : ns + n); const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } });
 const db = () => { const ns = NSC.getStore() || ''; return ns ? nsWrap(admin.firestore(), ns) : admin.firestore(); };
 async function spaces() { const out = ['']; try { if ((await admin.firestore().collection('cs_meta').doc('project').get()).exists) out.push('cs_'); } catch (e) { logger.warn('No se pudo revisar si hay Casco', e); } return out; }
