@@ -64,3 +64,17 @@ Un clic en un fondo (elemento `position:fixed` que cubre la pantalla, como `.lqm
 
 ## Principio: pocas opciones a la vista, ordenadas por momento (dueño, 25-10-2026)
 - Demasiadas opciones repartidas por la pantalla «marean». Las herramientas se agrupan por el **momento** en que se usan (consultar, programar, revisar propuestas) y solo aparecen en ese momento; lo que manda en la pantalla es el contenido (grilla o plano). Ya se aplicó en el Lookahead (barra por momentos, menús ⋯) y en el Plan diario (paneles plegados); toda pantalla nueva sigue el mismo criterio.
+
+## Módulos por rol (25-11-2026, decidido con el dueño)
+
+El dueño quiere pasar módulos nuevos a la obra **apagados** y abrirlos a quien él decida («un check en Equipo para habilitar solo a ciertos roles… incluso podría funcionar con Casco»).
+- **Dónde:** Equipo › **Módulos** (solo el administrador): módulos en filas (Avance, Casco, Planos) y roles en columnas (`MOD_ROLES`: editor, campo, sc, capataz, área, veedor, lector). Last Planner y Tareo no entran: siguen como siempre.
+- **Dato:** `meta/mods` de Last Planner = `{ava:[roles], cas:[roles], pla:[roles], by, t}`. Regla: solo el administrador lo escribe (`id != 'mods'` en la rama del editor de `match /meta/{id}`); lo leen los miembros de Last Planner (los roles de solo Tareo no, y no lo necesitan).
+- **Valores por defecto (`MOD_DEF`):** Avance y Casco **nacen apagados** (sin dato = solo el administrador); Planos, sin dato, como siempre (todos los que ven Last Planner). Con la obra en curso, mientras no exista el documento nada cambia para Last Planner, Tareo ni Planos.
+- **Código (`base.js`):** `modList(m)`, `modRole(m)` (admin siempre), usado en `canAva()` y en `modOk('cas')` / `modOk('pla')`. **No va dentro de `canPla()`**, que también habilita las láminas dentro de Last Planner (▦ del Lookahead, Capas del Plan diario, plano acoplado, `PLBOK`): apagar el módulo Planos a un rol no le quita eso. Se **suma** a lo que ya limita cada módulo (el capataz nunca ve Avance ni Casco; Casco además necesita `cs_meta/project`).
+- **Lectura:** `modSub()` (un `onSnapshot` de `fcolLp('meta').doc('mods')`, también dentro de Casco, donde `S.meta` es `cs_meta`), con copia en `localStorage` `lps.mods` (clave fija, no `store`) para no rebotar a Last Planner al recargar. Al cambiar: `modselApply()` y `requestRender()`; `render()` saca del módulo a quien perdió el permiso. Dentro de Casco nada más lo revisa, así que `modSub` hace la salida (`lps.ns=''` y recarga).
+- **Escritura:** directa con `fcolLp('meta').doc('mods').set(..., {merge:true})` (no `op`/`apply`: dentro de Casco `fcol` iría a `cs_meta`, y no entra al deshacer).
+- **Es visibilidad, no seguridad:** las reglas siguen dejando leer `avp`/`avm`/`ava`, `cs_*` y `plb` a los miembros de la obra. Si un día debe ser un bloqueo real, hay que llevarlo a las reglas.
+- **«Ver como»** simula el rol elegido también aquí (usa `me.role`).
+- Pruebas: `tests/e2e/modulos-rol.spec.js` (3) y `tests/rules` («propuestas: pasado el corte…», bloque `meta/mods`). La obra de prueba (`fake-firebase.js`) siembra `meta/mods` con Avance y Casco encendidos para todos.
+- **Pendiente (decisión del dueño):** con esto se puede hacer el pase completo `main → produccion` con Casco y Avance apagados en vez de pasar corrección por corrección; antes hay que revisar qué más cambia para la obra en esos commits (reglas, tareas del servidor, láminas desde Planos). Hasta que él lo diga, sigue vigente la regla 6 de `CLAUDE.md`.
