@@ -43,8 +43,13 @@ function items(src) {
 
 /* Módulos por rol: toda LECTURA de Casco exige además modOn('cas') (la función de Last Planner, que mira meta/mods; no lleva _cs).
    Se envuelve cada «allow …read…: if COND;» como «if modOn('cas') && (COND);». Las escrituras quedan igual (ver firestore.rules). */
+/* cs_pisos (nombres de los niveles) queda fuera: el módulo Planos los lee desde Last Planner para clasificar los planos por nivel,
+   también para quien no tiene Casco; si no, esos usuarios guardarían los planos con otro criterio. */
+const CASCO_LIBRE = ['cs_pisos'];
+const RE_LEE = /allow\s+([a-z, ]*\b(?:read|get|list)\b[a-z, ]*):\s*if\s+/g;
 function soloConCasco(t) {
-  let out = '', i = 0; const re = /allow\s+([a-z, ]*\bread\b[a-z, ]*):\s*if\s+/g; let m;
+  if (CASCO_LIBRE.some(c => new RegExp('^match\\s+/' + c + '/').test(t))) return t;
+  let out = '', i = 0; const re = new RegExp(RE_LEE.source, 'g'); let m;
   while ((m = re.exec(t))) {
     const s = m.index + m[0].length; let j = s, d = 0;
     for (; j < t.length; j++) { const c = t[j];
@@ -98,6 +103,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const cur = fs.readFileSync(FILE, 'utf8');
   const next = generate(cur);
   if (process.argv.includes('--check')) {
+    /* ningún permiso de lectura de Casco puede quedar sin modOn('cas') (salvo las colecciones libres) */
+    const sec = next.slice(next.indexOf(BEGIN), next.indexOf(END)); let libre = false, mal = 0;
+    for (const ln of sec.split('\n')) { const mm = /^\s*match\s+\/([^/\s]+)\//.exec(ln); if (mm) libre = CASCO_LIBRE.includes(mm[1]);
+      if (!libre && new RegExp(RE_LEE.source).test(ln) && !ln.includes("modOn('cas') && (")) mal++; }
+    if (mal) { console.error(`firebase/firestore.rules: ${mal} permiso(s) de lectura de Casco sin modOn('cas')`); process.exit(1); }
     if (next !== cur) { console.error('firebase/firestore.rules: la sección CASCO no está al día. Corre: node scripts/reglas-casco.mjs'); process.exit(1); }
     console.log('Reglas de Casco al día');
   } else { fs.writeFileSync(FILE, next); console.log('Reglas de Casco generadas'); }

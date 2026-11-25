@@ -1859,6 +1859,13 @@ test('módulos por rol: Avance apagado no se lee ni se escribe; el administrador
   await assertSucceeds(getDoc(doc(ca, 'avm/p1_n1'))); await assertSucceeds(setDoc(doc(ca, 'ava/p1_n1_2099-01-05'), cel));
   await assertFails(setDoc(doc(ca, 'avp/p4'), { v: 2, nom: 'x' }));          // campo sigue sin crear partidas
   await assertFails(getDoc(doc(le, 'avp/p1'))); await assertFails(getDoc(doc(le, 'ava/p1_n1_2099-01-05')));
+  // un lote grande como el de «Importar» (1 partida + una hoja por piso) no choca con el límite de consultas por regla
+  await seed({ ava: ['editor'] });
+  { const b = writeBatch(ed); b.set(doc(ed, 'avp/p9'), { v: 2, nom: 'Lote' }); for (let i = 0; i < 15; i++) b.set(doc(ed, 'avm/p9_n' + i), { p: 'p9', piso: 'n' + i, r: { r1: { desc: 'x', q: 1 } } }, { merge: true }); await assertSucceeds(b.commit()); }
+  // el capataz y un rol sin casilla (área) no entran; planner (retirado) cuenta como lector
+  await assertFails(getDoc(doc(user('ot@obra.pe'), 'avp/p1')));
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'members/pl@obra.pe'), { role: 'planner', name: 'Planner' }); });
+  await assertFails(getDoc(doc(user('pl@obra.pe'), 'avp/p1'))); await seed({ ava: ['lector'] }); await assertSucceeds(getDoc(doc(user('pl@obra.pe'), 'avp/p1'))); await assertSucceeds(getDoc(doc(le, 'avp/p1')));
   // Last Planner no depende de esto
   await seed(null); await assertSucceeds(getDoc(doc(le, 'meta/project'))); await assertSucceeds(getDocs(collection(ed, 'pisos')));
 });
@@ -1874,6 +1881,9 @@ test('módulos por rol: Casco apagado no se puede leer; encendido para un rol, e
   }
   await seed({ cas: ['editor'] });
   await assertSucceeds(getDoc(doc(ed, 'cs_meta/project'))); await assertSucceeds(getDocs(collection(ed, 'cs_acts'))); await assertFails(getDoc(doc(le, 'cs_acts/k1')));
+  // los nombres de los niveles (cs_pisos) sí se leen sin Casco: el módulo Planos clasifica con ellos; nada más de Casco
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'cs_pisos/n1'), { name: 'Nivel 1', order: 1 }); });
+  await seed(null); await assertSucceeds(getDocs(collection(le, 'cs_pisos'))); await assertFails(getDocs(collection(le, 'cs_acts'))); await assertFails(getDoc(doc(le, 'cs_sectors/s1')));
   // Last Planner no cambia con Casco apagado
   await seed(null); await assertSucceeds(getDocs(collection(ed, 'acts'))); await assertSucceeds(getDoc(doc(le, 'meta/project')));
 });

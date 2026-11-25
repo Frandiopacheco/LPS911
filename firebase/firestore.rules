@@ -1196,7 +1196,7 @@ service cloud.firestore {
       allow delete: if isAdmin_cs(); // SEG-02
     }
     match /cs_pisos/{id} {
-      allow read: if modOn('cas') && (lpsMember_cs());
+      allow read: if lpsMember_cs();
       allow create: if isAdmin_cs() || (canEdit_cs() && noResp_cs(request.resource.data));
       allow update: if isAdmin_cs() || (canEdit_cs() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['resp']));
       allow delete: if isAdmin_cs() || (canEdit_cs() && noResp_cs(resource.data));

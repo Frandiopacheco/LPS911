@@ -100,6 +100,8 @@ function modSub(){let un=null;const open=()=>{un=fcolLp('meta').doc('mods').onSn
       /* dentro de Casco nada más lo revisa: si a este rol se le quitó Casco, vuelve a Last Planner */
       if(CS()&&me&&!modOk('cas')){let ok=false;try{localStorage.removeItem('lps.ns');ok=localStorage.getItem('lps.ns')!=='cs'}catch(e){}
         if(ok)setTimeout(()=>location.reload(),1500);/* un momento, para que termine de guardarse lo que estuviera en curso; si no se pudo cambiar de espacio no se recarga (sería un bucle) */return}
+      /* si a este rol se le quitó Avance, se cierran sus escuchas (las reglas las cortarían y quedaría reintentando) */
+      if(me&&!canAva()&&typeof avStop==='function')avStop();
       modselApply();if(ready)requestRender()},()=>{un=null})};open();unsubs.push(()=>{if(un)un();un=null})}
 const canPla=()=>canLps();
 /* Oficina Técnica (área de apoyo «OT» u «Oficina Técnica») también carga: maneja las revisiones (decidido con el dueño, oct 2026) */
