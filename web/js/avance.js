@@ -22,7 +22,7 @@ const avPc=v=>Math.round((+v||0)*100)+' %';
 const avBar=v=>`<span class="avpb"><i style="width:${Math.max(0,Math.min(100,v*100)).toFixed(0)}%"></i></span>${avPc(v)}`;
 const avWho=()=>({by:me.email||'',n:me.name||'',t:NOW()});
 const avNid=p=>p+NOW().toString(36)+Math.random().toString(36).slice(2,6);
-Object.assign(BNI,{areg:SVG('<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M9 9.5v10M14.5 9.5v10"/>')});
+Object.assign(BNI,{areg:SVG('<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M9 9.5v10M14.5 9.5v10"/>'),ares:SVG('<path d="M4 19.5h16"/><path d="M6.5 16V11M11 16V6.5M15.5 16v-7M20 16v-3"/>')});
 
 /* ---------- datos ---------- */
 function ensureAv(){if(!db||avUnP||!me||!canAva())return;
@@ -41,12 +41,14 @@ function avCur(){let p=AVP.get(U.avP);if(!p||p.arch||p.v!==2){p=avParts()[0]||nu
 const avAmb=id=>S.amb.get(id)||ARCH.amb.get(id)||null;
 const avSec=id=>S.sec.get(id)||ARCH.sec.get(id)||null;
 /** filas y ejecutado de la partida en curso, armados una vez por cambio de datos */
-function avData(){if(AV.cv===AV.v&&AV.rows)return AV;const rows=[],ex={};
-  AVM.forEach(m=>{const R=m.r||{};for(const id in R){const r=R[id];if(!r||r.arch)continue;const a=r.amb?avAmb(r.amb):null;
+function avData(){if(AV.cv===AV.v&&AV.rows)return AV;const B=avBuild(AVM,AVD);AV.rows=B.rows;AV.ex=B.ex;AV.cv=AV.v;return AV}
+/** de los documentos avm y ava (Map o lista) → filas y ejecutado; lo usan la planilla y el Resumen */
+function avBuild(MM,DD){const rows=[],ex={};
+  MM.forEach(m=>{const R=m.r||{};for(const id in R){const r=R[id];if(!r||r.arch)continue;const a=r.amb?avAmb(r.amb):null;
     rows.push({id,piso:m.piso,amb:r.amb||'',sec:r.amb?(a&&a.sectorId)||'':r.sec||'',desc:r.desc||'',und:r.und||'und',q:+r.q||0,et:Array.isArray(r.et)&&r.et.length?r.et:null,o:+r.o||0,an:r.an||''})}});
   rows.sort((a,b)=>a.o-b.o||String(a.id).localeCompare(String(b.id)));
-  AVD.forEach(d=>{const c=d.c||{};for(const f in c){const R=c[f]||{};for(const rid in R){const o=R[rid]||{};for(const e in o)((ex[rid]=ex[rid]||{})[e]=ex[rid][e]||{})[f]=+o[e]||0}}});
-  AV.rows=rows;AV.ex=ex;AV.cv=AV.v;return AV}
+  DD.forEach(d=>{const c=d.c||{};for(const f in c){const R=c[f]||{};for(const rid in R){const o=R[rid]||{};for(const e in o)((ex[rid]=ex[rid]||{})[e]=ex[rid][e]||{})[f]=+o[e]||0}}});
+  return{rows,ex}}
 const avRowOf=id=>avData().rows.find(r=>r.id===id);
 /* lunes del calendario (no el de la configuración del proyecto: si cambiara, un mismo día quedaría en dos documentos) */
 const avMon=d=>addD(d,-((pd(d).getUTCDay()+6)%7));

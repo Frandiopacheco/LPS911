@@ -8,8 +8,8 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este m
 
 Un **módulo aparte** en el selector de la barra (`U.mod==='ava'`, junto a Last Planner, Tareo y Planos) para controlar el avance físico de cualquier partida (mobiliario, pintura, enchape, cubículos…). **No se conecta** con el lookahead, el plan diario ni el PPC. Usa los pisos, sectores y ambientes de Last Planner **por su id** (no los copia); por eso no se ofrece dentro de Casco (`canAva()` exige `!CS()`).
 
-- Una sola pestaña: `areg` **Registro** (`AVA_TABS`, base.js).
-- Archivos: `js/avance-calc.js` (cálculo puro), `js/avance.js` (datos, planilla, celular, partida, «⋯» de la fila), `js/avance-imp.js` (importar con equivalencias).
+- Dos pestañas (`AVA_TABS`, base.js): `areg` **Registro** (la planilla) y `ares` **Resumen** (`js/avance-res.js`).
+- Archivos: `js/avance-calc.js` (cálculo puro), `js/avance.js` (datos, planilla, celular, partida, «⋯» de la fila), `js/avance-imp.js` (importar con equivalencias), `js/avance-res.js` (Resumen, curva, Excel y PDF).
 - El piso se filtra con `U.piso` (el mismo estado de toda la app); como en este módulo la barra superior oculta su selector (`body.mod-ava`), la pantalla trae el suyo (`#avpiso`), que escribe el mismo `U.piso`: elegir piso aquí cambia también el filtro de Last Planner (a propósito).
 
 ## Decisiones del dueño
@@ -93,6 +93,26 @@ Están en `DSHARED` (base.js), `SHARED` (`scripts/reglas-casco.mjs` y `functions
 - Historial de una celda: clic derecho o mantener el dedo (`avCtx` → `openPop`), desde `ava.log`.
 - **Celular** (`avCelHtml`): piso → tarjetas de lugar (`avCelGroups`) → filas (o etapas) con − / valor / + para Hoy o Ayer, y «Todo lo que falta». Cada toque suma 1, o 10 % en modo %.
 
+## Más de la planilla (25-11-2026, pasos 2 y 3 que el dueño pidió seguir)
+
+- **Total de la partida** (`tr.avtt`): primera fila de la tabla; con búsqueda dice «Total de lo buscado».
+- **Buscar** (`#avq`, `AV.q`): todas las palabras, en la descripción o en el nombre del ambiente o del sector (`mnk`). Con búsqueda activa no se muestran las líneas de «Editar filas» de los pisos sin coincidencias.
+- **Reordenar:** «⋯» › Subir / Bajar intercambia el `o` de la fila con su vecina del mismo ambiente (una acción para Ctrl+Z).
+- **Rango seleccionado** (`AV.sa`/`AV.sb`, clase `.avsel`, solo en pantalla): Mayús+flechas o Mayús+clic desde la celda con foco. Ctrl+C lo copia como texto con tabulaciones (`avSelCopy`) y Supr lo vacía (`avSelDel`, solo celdas de días, una acción). Cualquier otra tecla, un clic o un redibujo lo quitan.
+- **Tablet vertical:** las columnas fijas (`.avsk`) se activan desde 700 px; la descripción mide 260 / 200 / 170 px según el ancho.
+- **Celular:** sin piso elegido se listan los lugares de **todos los pisos** (`avCelAll`; la clave del lugar es `piso~lugar`); el día se elige con Hoy, Ayer o un `input type=date` limitado al rango de la partida (`AV.day` ya no vuelve solo a hoy); el campo vacío muestra 0.
+
+## Resumen (`avance-res.js`, pestaña `ares`)
+
+Lo que hacía la hoja RESUMEN del Excel del dueño. La ven todos los que ven el módulo.
+
+- **Datos:** una lectura suelta (`get`) de `avm` y `ava` enteras al entrar (`avResLoad` → `ARS.by`: partida → `avBuild`), que se repite si pasaron más de 2 min o con «Actualizar». No queda escuchando. `avBuild(docsAvm, docsAva)` es el mismo armado de la planilla.
+- **Por partida y por piso:** avance de cada partida (solo filas con metrado) y de cada piso; tocar el nombre abre su planilla.
+- **Global con pesos** (decisión tomada por la IA al seguir, a confirmar por el dueño): `avp.peso` (sin valor = 1, todas pesan igual); global = Σ avance × peso ÷ Σ pesos de las partidas **con metrado**. En un piso solo cuentan las partidas con filas ahí. El peso se edita en la misma tabla (administrador y editores).
+- **Avance de cada semana:** avance hasta el domingo − avance hasta el domingo anterior (`hasta` de `avGrpPct`), de las últimas 8 semanas; el corte inicial cuenta desde antes de la primera.
+- **Curva** del global acumulado por semana (`avResCurve`, SVG a mano, hasta 26 semanas).
+- **Excel** (`avResXls`, xlsx-js-style con `loadXlsx`): hoja «Resumen» (`avResSum`) y una hoja por partida con el aspecto de la planilla (`avResAoa`: una fila por fila y por etapa, una columna por día, cantidades). **PDF** (`avResPdf`, jsPDF + autotable): las dos tablas, sin la curva. Sirve para enviar al cliente.
+
 ## Importar (`avance-imp.js`)
 
 - CSV o pegado de Excel. Encabezados (sin tildes ni mayúsculas, `AVI_COL`): `nivel`, `ambiente`, `cantidad` y la descripción: `descripcion`, `codigo` o las dos (queda «código · descripción»); `unidad` es opcional (sin ella, «und»). Las demás columnas se ignoran.
@@ -103,13 +123,15 @@ Están en `DSHARED` (base.js), `SHARED` (`scripts/reglas-casco.mjs` y `functions
 
 ## Pruebas
 
-- `tests/e2e/avance.spec.js`: cálculo; registro con historial, confirmación al superar el metrado y fracción de unidad; interruptor Cantidad | %, pesos de etapas, unidades mezcladas y permisos de lectura; partida nueva, filas desde la tabla y etapas; importar con equivalencias; celular.
+- `tests/e2e/avance.spec.js` (9; incluye «fila de total, buscar, reordenar y rango» y «Resumen»): cálculo; registro con historial, confirmación al superar el metrado y fracción de unidad; interruptor Cantidad | %, pesos de etapas, unidades mezcladas y permisos de lectura; partida nueva, filas desde la tabla y etapas; importar con equivalencias; celular.
 - `tests/rules/firestore.test.mjs` «avance: …».
 
 ## Pendiente
 
-- Resumen por partida y semana (lo que hacía la hoja RESUMEN de su Excel), curva acumulada (`hasta`) y exportar a Excel con el aspecto de su hoja; PDF para el cliente.
-- Copiar las filas de una partida a otra y pegar un bloque de celdas desde Excel.
+- Confirmar con el dueño cómo quiere pesar las partidas en el global (hoy: peso manual, igual por defecto).
+- El PDF no lleva la curva; el Excel no lleva los logos ni el encabezado de la empresa (`excel.js` `xHeader`).
+- Copiar las filas de una partida a otra.
+- El Resumen lee `avm` y `ava` enteras: con muchas partidas y semanas convendrá un resumen guardado.
 - `ava.log` crece sin límite dentro del documento de la semana (y sobre todo en el de `ini`): vigilar el tamaño (límite 1 MiB); si hiciera falta, pasar el historial a una colección aparte. La regla solo exige que no se acorte.
 - Restaurar un respaldo viejo no pisa los `ava` cuyo historial creció después (la regla lo rechaza): esos documentos se saltan.
 - Equipo › Limpieza borra pisos y ambientes de verdad: debería avisar si un piso tiene filas de Avance (hoy quedarían con el nombre guardado en `an`).

@@ -297,6 +297,40 @@ test('Avance: importar filas con el cuadro de equivalencias, sin crear ambientes
   noErrors(errors, 'importar');
 });
 
+test('Avance › Resumen: avance por partida y piso, por semana, global con pesos y hoja para Excel', async ({ page }) => {
+  const errors = await abrir(page);
+  await page.click('#tabs [data-tab="ares"]');
+  await expect(page.locator('#main')).toHaveAttribute('data-view', 'ares');
+  const fila = n => page.locator('.avrtb').first().locator('tbody tr', { hasText: n });
+  await expect(fila('Mobiliario')).toContainText('10 %');               // 2 de 20 und (el corte inicial cuenta)
+  await expect(fila('Mobiliario')).toContainText('14 %');               // Primer piso: 2 de 14
+  await expect(fila('Pintura')).toContainText('22 %');                  // m² y ml mezclados: promedio de (55 + 0 + 10) / 3
+  await expect(page.locator('.avtile').first()).toContainText('16 %');  // global con pesos iguales: (10 + 21,7) / 2
+  await expect(page.locator('#avp option')).toHaveCount(0);             // la partida del formato anterior tampoco entra aquí
+  const r = await page.evaluate(() => { const R = avResData(), x = R.act.find(y => y.p.id === 'pp'), w = R.wk(x); return { n: R.act.length, g: R.g, sem: w[w.length - 1], gsem: R.gWk[R.gWk.length - 1], suma: w.reduce((s, v) => s + v, 0) + avGrpPct(x.ex, x.rows, addD(R.Ws[0], -1)), pct: x.pct }; });
+  expect(r.n).toBe(2); expect(r.g).toBeCloseTo((0.10 + 0.65 / 3) / 2, 6);
+  expect(r.sem).toBeCloseTo(0.65 / 3, 6);                               // todo lo de Pintura se registró esta semana
+  expect(r.gsem).toBeCloseTo(0.65 / 3 / 2, 6);
+  expect(r.suma).toBeCloseTo(r.pct, 6);                                 // lo avanzado por semana suma el acumulado
+  // el peso cambia el global y se guarda en la partida
+  await page.fill('[data-arpw="pm"]', '3'); await page.locator('[data-arpw="pm"]').blur();
+  await expect.poll(() => page.evaluate(() => __dbGet('avp', 'pm').peso)).toBe(3);
+  await expect(page.locator('.avtile').first()).toContainText('13 %');  // (3 × 10 + 21,7) / 4
+  // hoja de la partida para Excel: una fila por etapa y una columna por día
+  const A = await page.evaluate(() => { const B = ARS.by.get('pp'); return avResAoa(AVP.get('pp'), B.rows, B.ex); });
+  expect(A[0].slice(0, 9)).toEqual(['Piso', 'Sector', 'Ambiente', 'Descripción', 'Etapa', 'Und', 'Metrado', 'Acumulado', '% avance']);
+  const dia = A[0].indexOf('29/09');
+  const emp = A.find(x => x[3] === 'Látex en muros' && x[4] === 'Empaste');
+  expect([emp[0], emp[2], emp[7], emp[8], emp[dia]]).toEqual(['Primer piso', 'Dpto 101', 100, 100, 100]);
+  expect(A.find(x => x[3] === 'Látex en muros' && x[4] === '(todas)').slice(6, 9)).toEqual([100, 55, 55]);
+  expect(A.find(x => x[3] === 'Fachada del sector').slice(1, 3)).toEqual(['Sector 1', '']);
+  // de una partida se pasa a su planilla; lector también ve el resumen, sin editar pesos
+  await page.click('[data-argo="pp"]'); await expect(page.locator('#avp')).toHaveValue('pp');
+  noErrors(errors, 'resumen');
+  const e2 = await abrir(page, { as: 'lector' }); await page.click('#tabs [data-tab="ares"]');
+  await expect(page.locator('.avrtb').first()).toContainText('Mobiliario'); await expect(page.locator('[data-arpw]')).toHaveCount(0); noErrors(e2, 'resumen lector');
+});
+
 test('Avance en el celular: piso → ambiente → filas con lo ejecutado hoy, en cantidad o en %', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = await abrir(page, { as: 'campo' });

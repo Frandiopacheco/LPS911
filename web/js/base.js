@@ -87,7 +87,7 @@ const isOTArea=()=>!!me&&me.role==='area'&&/^\s*(o\.?\s*t\.?|oficina\s+t[eé]cni
 const plaEd=()=>!!me&&(me.role==='admin'||me.role==='editor'||isOTArea());
 /* Módulo Avance (docs/ia/avance.md): avance físico de partidas de acabados por ambiente. Usa los pisos y ambientes de Last Planner,
    por eso no se ofrece dentro de Casco. Configuran (partidas, metrado) administrador y editores; registran además los de campo */
-const AVA_TABS=['areg'];
+const AVA_TABS=['areg','ares'];
 const canAva=()=>canLps()&&!CS()&&me.role!=='capataz';
 const avaCfg=()=>!!me&&canAva()&&(me.role==='admin'||me.role==='editor');
 const avaReg=()=>!!me&&canAva()&&(me.role==='admin'||me.role==='editor'||me.role==='campo');
@@ -908,7 +908,7 @@ function render(){
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')rSafe('presStop',presStop);if(U.tab==='look'||(me&&me.role==='sc'))rSafe('ensureProp',ensureProp);rSafe('pmSync',pmSync);document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
   if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)rSafe('zcClose',()=>window.__plano.zcClose());rSafe('vaBanner',vaBanner);}
-  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,met:renderMet,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,trh:renderTRh,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d,areg:renderAReg};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(typeof PLV!=='undefined'&&PLV&&PLV.dock&&U.tab!==PLV.tab)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=!offLps()?'look':modHome(U.mod);
+  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,met:renderMet,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,trh:renderTRh,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d,areg:renderAReg,ares:renderARes};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(typeof PLV!=='undefined'&&PLV&&PLV.dock&&U.tab!==PLV.tab)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=!offLps()?'look':modHome(U.mod);
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
   if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}
