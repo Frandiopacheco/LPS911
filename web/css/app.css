@@ -5326,6 +5326,8 @@ table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height
 .avgr td.aved:hover{box-shadow:inset 0 0 0 1px var(--line)}
 .avgr td.aved:focus,.avgr td.avgh:focus{outline:2px solid var(--accent);outline-offset:-2px;background:var(--panel)}
 .avgr td.avtx{font-family:var(--f-ui);text-align:left}
+.avgr .avnm{display:inline-block;min-width:70px;max-width:calc(100% - 60px);overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;padding:0 3px;border-radius:4px;cursor:text}
+.avgr .avnm:hover{box-shadow:inset 0 0 0 1px var(--line)}.avgr .avnm:focus{outline:2px solid var(--accent);outline-offset:0;background:var(--panel);text-overflow:clip}
 .avgr tr.avgho td{background:var(--panel)}
 .avgr td.avgh{cursor:text;box-shadow:inset 0 0 0 1px var(--line2)}
 .avgr td.avgh:empty::before{content:attr(data-ph);color:var(--muted);font-family:var(--f-ui)}

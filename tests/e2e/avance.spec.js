@@ -73,7 +73,11 @@ test('Avance: el ingeniero registra el día; historial por celda, aviso al super
   // historial y días futuros
   await celda(page, `c|r1|_|${HOY}`).click({ button: 'right' });
   await expect(page.locator('#pop .avhist')).toContainText('3 → 20');
-  await expect(celda(page, 'c|r1|_|2026-10-02')).toHaveCount(0);
+  // los días que vienen también se llenan (dentro del rango de la partida) y la columna de corte solo sale si hay datos de corte
+  await escribir(page, 'c|r2|_|2026-10-02', 1);
+  await expect.poll(() => page.evaluate(k => (__dbGet('ava', k).c['2026-10-02'] || {}).r2, SEM)).toEqual({ _: 1 });
+  await expect(page.locator('.avgr thead')).toContainText('Corte inicial');
+  await expect(page.locator('[data-avv]')).toHaveCount(0);            // sin botón Celular: se detecta solo
   noErrors(errors, 'registro');
 });
 
@@ -82,6 +86,7 @@ test('Avance: interruptor Cantidad | %, etapas con peso y unidades mezcladas', a
   await page.selectOption('#avp', 'pp');
   await expect(page.locator('tr.avse')).toContainText('Sector 1');     // hay una fila a nivel de sector: aparece el nivel
   const madre = page.locator('tr.avmad');
+  await expect(page.locator('.avgr thead')).not.toContainText('Corte inicial');
   await expect(madre).toContainText('55 %'); await expect(page.locator('tr.avet')).toHaveCount(3);
   await expect(madre.locator('.aved[data-k^="c|"]')).toHaveCount(0);    // la fila con etapas se llena por sus etapas
   await expect(page.locator('tr.avam')).toContainText('varias');        // m² y ml en el mismo ambiente: no se suma el metrado
@@ -115,6 +120,21 @@ test('Avance: interruptor Cantidad | %, etapas con peso y unidades mezcladas', a
   expect(await page.evaluate(() => __dbGet('avm', 'pp_p1').r.q3.et)).toBeNull();
   await page.click('#lqm [data-lqx]');
   await expect(page.locator('tr.avmad')).toContainText('50 %');           // Base 100 % + 1.ª mano nueva 0 %: los 50 m² de la anterior no cuentan
+  // como en Excel: flechas entre celdas, renombrar la etapa en su celda y pegar un bloque
+  await celda(page, `c|q2|_|${HOY}`).click(); await page.keyboard.press('ArrowRight');
+  await expect(celda(page, 'c|q2|_|2026-10-02')).toBeFocused();
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowUp');
+  await expect(page.locator(`tr.avet .aved[data-k$="|${HOY}"]`).last()).toBeFocused();          // sube a la última etapa de la fila de arriba
+  const e2 = et2[1].id;
+  await celda(page, `n|q1|${e2}`).click(); await page.keyboard.press('Control+A'); await page.keyboard.type('Primera mano'); await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q1.et.map(e => e.n))).toEqual(['Base', 'Primera mano']);
+  await celda(page, 'c|q1|_|2026-09-22').click();
+  await page.evaluate(() => { const dt = new DataTransfer(); dt.setData('text', '1\t2\r\n3\t4\r\n'); document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
+  await expect.poll(() => page.evaluate(() => { const c = (__dbGet('ava', 'pp_p1_2026-09-21') || {}).c || {}; return [c['2026-09-22'], c['2026-09-23']].map(x => x && x.q1); })).toEqual([{ _: 1, [e2]: 3 }, { _: 2, [e2]: 4 }]);
+  expect(await page.evaluate(() => __dbGet('ava', 'pp_p1_2026-09-21').log.length)).toBe(4);     // cada celda pegada deja su historial
+  // dejar vacío el nombre de una etapa la quita (pide confirmar); la primera no se quita sola
+  ok = true; await celda(page, `n|q1|${e2}`).click(); await page.keyboard.press('Delete'); await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q1.et.map(e => e.id))).toEqual(['_']);
   // unidad y metrado se corrigen en la misma tabla
   await escribir(page, 'q|q2', 40); await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q2.q)).toBe(40);
   await celda(page, 'u|q2').click(); await page.keyboard.press('Control+A'); await page.keyboard.type('m'); await page.keyboard.press('Tab');
@@ -180,6 +200,33 @@ test('Avance: «Traer ambientes» crea la misma fila en los ambientes del Lookah
   const f1 = page.locator('tr.avrw', { hasText: 'Pintura de puertas' }).first();
   await expect(f1).toContainText('por metrar'); await expect(f1.locator('.aved[data-k^="c|"]')).toHaveCount(0);
   await expect(page.locator('tr.avpi').first()).toContainText('14');           // metrado del piso: 10 + 4, sin la fila nueva
+  // pegar un bloque no corre las líneas ni las columnas: la fila sin metrado y la semana plegada quedan «sin pegar»
+  const pegar = txt => page.evaluate(x => { const dt = new DataTransfer(); dt.setData('text', x); document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }, txt);
+  await celda(page, `c|r1|_|${HOY}`).click(); await pegar('1\n2\n3');
+  await expect.poll(() => page.evaluate(k => ((__dbGet('ava', k) || {}).c || {})['2026-10-01'], SEM)).toEqual({ r1: { _: 1 }, r2: { _: 3 } });   // el 2 era de la fila por metrar
+  await expect(page.locator('#toast')).toContainText('1 sin pegar');
+  await celda(page, 'c|r2|_|2026-10-04').click(); await pegar('1\t9');                // el domingo es el último día de la semana abierta
+  await expect.poll(() => page.evaluate(k => (__dbGet('ava', k).c['2026-10-04'] || {}).r2, SEM)).toEqual({ _: 1 });
+  expect(await page.evaluate(() => __dbGet('ava', 'pm_p1_2026-10-05'))).toBeUndefined();
+  // Ctrl+Z deshace el pegado entero (una acción) y luego el anterior; Ctrl+Y lo rehace; deshacer escribe, no borra
+  await page.locator('.avnote').click(); await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-04'].r2._, SEM)).toBe(0);
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'], SEM)).toEqual({ r1: { _: 0 }, r2: { _: 0 } });
+  await page.keyboard.press('Control+y');
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'], SEM)).toEqual({ r1: { _: 1 }, r2: { _: 3 } });
+  expect(await page.evaluate(k => __dbGet('ava', k).log.filter(x => x.r === 'r1').map(x => x.q), SEM)).toEqual([1, 0, 1]);
+  // deshacer «Traer ambientes» archiva las filas creadas (no las borra) y rehacer las repone
+  await page.keyboard.press('Control+y');                                // rehace el pegado del domingo
+  for (let i = 0; i < 3; i++) await page.click('[data-av="undo"]');      // los dos pegados y la creación de las 2 filas
+  await expect(page.locator('tr.avrw', { hasText: 'Pintura de puertas' })).toHaveCount(0);
+  expect((await nuevas()).every(r => r.arch && r.arch.by)).toBe(true);
+  await expect(page.locator('[data-av="undo"]')).toBeDisabled();
+  for (let i = 0; i < 3; i++) await page.click('[data-av="redo"]');
+  await expect(page.locator('tr.avrw', { hasText: 'Pintura de puertas' })).toHaveCount(2);
+  // Enter en la última fila de la tabla también guarda
+  await celda(page, `c|r3|_|${HOY}`).click(); await page.keyboard.type('2'); await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => ((__dbGet('ava', 'pm_p2_2026-09-28') || {}).c || {})['2026-10-01'])).toEqual({ r3: { _: 2 } });
   // se llena el metrado bajando con Enter por la columna
   await celda(page, `q|${N[0].id}`).click(); await page.keyboard.type('6'); await page.keyboard.press('Enter');
   await expect(celda(page, 'q|r2')).toBeFocused();
