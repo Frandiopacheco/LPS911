@@ -54,7 +54,7 @@ function avImpDraw(){const I=AVI,p=AVP.get(I.pid);if(!I||!p)return;let h=`<div c
 function avImpRead(){const ta=$('#avitxt'),r=avImpParse(ta?ta.value:'');if(r.err){AVI.err=r.err;AVI.rows=null}else{AVI.rows=r.rows;AVI.err='';AVI.niv={};AVI.amb={}}avImpDraw()}
 async function avImpGo(){const I=AVI,p=AVP.get(I.pid);if(!I||!p||I.busy||!avaCfg())return;if(!avReady(p)){toast('Espera a que cargue la planilla.');return}const P=avImpPlan();if(P.pend)return;I.busy=true;const w=avWho();
   const byPiso=new Map();let m=0;const t0=NOW();P.agg.forEach(o=>{if(o.old&&Math.abs(o.old.q-o.q)<=1e-9)return;const id=o.old?o.old.id:'r'+t0.toString(36)+(m++).toString(36),q=avR4(o.q);
-    const pk=o.old?o.old.piso:o.piso/* la fila que ya existe se corrige en SU documento */,R=byPiso.get(pk)||{};R[id]=o.old?{q}:{amb:o.amb,sec:'',desc:o.desc.slice(0,160),und:o.und.slice(0,10),q,et:null,o:t0+m,an:o.an};byPiso.set(pk,R)});
+    const pk=o.old?o.old.piso:o.piso/* la fila que ya existe se corrige en SU documento */,R=byPiso.get(pk)||{};R[id]=o.old?{q}:{amb:o.amb,sec:'',desc:o.desc.slice(0,160),und:o.und.slice(0,10),q,et:null,o:t0+m,an:(S.amb.get(o.amb)||{}).name||o.an};byPiso.set(pk,R)});
   const eq={niv:{},amb:{}};for(const a in I.niv)if(I.niv[a])eq.niv[a]=I.niv[a];for(const a in I.amb)if(I.amb[a])eq.amb[a]=I.amb[a];
   try{const b=db.batch();b.set(fcol('avp').doc(p.id),{eq,by:w.by,n:w.n,t:w.t},{merge:true});byPiso.forEach((R,pi)=>b.set(fcol('avm').doc(p.id+'_'+pi),{p:p.id,piso:pi,r:R,by:w.by,t:w.t},{merge:true}));
     await bgWrite(b.commit());AVI=null;lqClose();toast(`Importado: ${P.nu} filas nuevas${P.ch?', '+P.ch+' actualizadas':''}${P.skip?' · '+P.skip+' sin importar':''}`);requestRender()}

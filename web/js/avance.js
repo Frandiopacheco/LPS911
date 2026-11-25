@@ -169,13 +169,14 @@ function avFocus(e){const t=e.target;if(U.tab!=='areg'||!t.classList||!t.classLi
 function avGhoTry(tr,next){const d=tr.querySelector('.gd').textContent.trim(),u=tr.querySelector('.gu').textContent.trim(),qt=tr.querySelector('.gq').textContent.trim(),q=avNum(qt);
   if(!d||!(q>0)||!/^[\d\s.,]+$/.test(qt))return false;if(!avAddRow(tr.dataset.g,d,u,q))return false;tr.querySelectorAll('.gd,.gq').forEach(c=>c.textContent='');if(next)AV.gf={g:tr.dataset.g,c:'gd'};AV.pend=false;requestRender();return true}
 async function avBlur(e){const t=e.target;if(U.tab!=='areg'||!t.classList)return;
+  if(t.matches&&t.matches('input[data-avin]')){if(AV.pend){AV.pend=false;requestRender()}return}
   if(t.classList.contains('avgh')){const tr=t.parentElement;setTimeout(()=>{if(tr.isConnected&&!tr.contains(document.activeElement)){if(!avGhoTry(tr,false)&&AV.pend&&![...tr.querySelectorAll('.gd,.gq')].some(c=>c.textContent.trim())){AV.pend=false;requestRender()}}},0);return}
   if(!t.classList.contains('aved'))return;const txt=t.textContent.trim(),o=t.dataset.o||'';
   const done=()=>{AV.pend=false;requestRender()};if(txt===o){if(AV.pend)done();return}
   const k=t.dataset.k.split('|'),row=avRowOf(k[1]),p=avCur();if(!row||!p){t.textContent=o;done();return}
   if(k[0]==='u'){if(!txt||!avaCfg()){t.textContent=o;done();return}t.dataset.o=txt;avRowPatch(p,row,{und:txt.slice(0,10)});done();return}
-  const v=txt===''?0:avNum(txt),bad=txt!==''&&(!/^[\d\s.,%]+$/.test(txt)||!Number.isFinite(v)||v<0);
-  if(bad){t.textContent=o;toast('Escribe solo un número (p. ej. 12 o 6.5).');done();return}
+  const v=txt===''?0:avNum(txt),bad=txt!==''&&(!/^[\d\s.,%]+$/.test(txt)||!Number.isFinite(v)||v<0||(txt.includes('%')&&!(k[0]==='w'||(k[0]==='c'&&U.avPct))));
+  if(bad){t.textContent=o;toast(txt.includes('%')?'Para tipear porcentajes cambia el interruptor a «%».':'Escribe solo un número (p. ej. 12 o 6.5).');done();return}
   t.dataset.o=txt;/* ya no se considera «a medio escribir»: lo que llegue puede redibujar */
   if(k[0]==='q'){if(!await avSetQ(row,v)){t.dataset.o=o;t.textContent=o}}
   else if(k[0]==='w'){if(!(v>0&&v<100)){t.dataset.o=o;t.textContent=o;toast('El peso de una etapa va entre 0 y 100; las demás se reparten el resto.')}else avRowPatch(p,row,{et:avSetW(row.et,k[2],v)})}
@@ -235,18 +236,20 @@ function avPartDlg(p){if(!avaCfg())return;const t=todayIso(),f={nom:p?p.nom:'',d
     lqClose();toast(p?'Partida guardada':'Partida creada');requestRender()})}
 
 /* ---------- «⋯» de una fila: descripción, etapas, quitar ---------- */
-function avRowMenu(id){const p=avCur(),r=avRowOf(id);if(!p||!r||!avaCfg())return;const he=avHasEt(r),ex=avData().ex,others=avData().rows.filter(x=>x.id!==r.id&&!avHasEt(x)&&x.und===r.und).length;
+function avRowMenu(id){const p=avCur(),r=avRowOf(id);if(!p||!r||!avaCfg())return;const he=avHasEt(r),ex=avData().ex,tgs=()=>avData().rows.filter(x=>x.id!==r.id&&!avHasEt(x)&&x.und===r.und&&(!U.piso||x.piso===U.piso)),others=tgs().length;
   lqModal(`<div class="avh"><b>${esc(r.desc)}</b><button class="ib" data-lqx="1" aria-label="Cerrar">✕</button></div><p class="avnote">${esc(avLoc(r))} · ${avF(r.q)} ${esc(r.und)}</p>
   <label class="avf">Descripción<span class="avfe"><input class="tin" id="avmd" maxlength="160" value="${esc(r.desc)}"><button type="button" class="ib" data-avmk="desc">Guardar</button></span></label>
   <label class="avf">Nueva etapa de esta fila<span class="avfe"><input class="tin" id="avme" maxlength="40" placeholder="p. ej. Empaste, 1.ª mano, Fragua…"><button type="button" class="ib pri" data-avmk="eta">＋ Etapa</button></span></label>
   <p class="avnote">${he?'Etapas: '+r.et.map(e=>esc(e.n)).join(', ')+'. Nacen con el mismo peso; se cambia en la columna «Peso».':'Sin etapas, la fila se llena directo. Al agregar la primera etapa, lo ya registrado en la fila pasa a esa etapa.'}</p>
-  <div class="avmbt">${he&&others?`<button type="button" class="ib" data-avmk="copy">Aplicar estas etapas a las otras ${others} fila${others===1?'':'s'} en ${esc(r.und)} que no tienen etapas</button>`:''}${he?'<button type="button" class="ib" data-avmk="noet">Quitar las etapas de esta fila</button>':''}<button type="button" class="ib" data-avmk="del">Quitar la fila</button></div>`,
+  <div class="avmbt">${he&&others?`<button type="button" class="ib" data-avmk="copy">Aplicar estas etapas a las otras ${others} fila${others===1?'':'s'} en ${esc(r.und)} que no tienen etapas${U.piso?' (solo el piso elegido)':' (todos los pisos)'}</button>`:''}${he?'<button type="button" class="ib" data-avmk="noet">Quitar las etapas de esta fila</button>':''}<button type="button" class="ib" data-avmk="del">Quitar la fila</button></div>`,
   async e=>{const b=e.target.closest('[data-avmk]');if(!b)return;const k=b.dataset.avmk,row=avRowOf(id);if(!row||!avReady(p)){lqClose();return}
     if(k==='desc'){const d=$('#avmd').value.trim();if(!d){toast('La descripción no puede quedar vacía.');return}avRowPatch(p,row,{desc:d.slice(0,160)});lqClose();toast('Descripción guardada');requestRender();return}
     if(k==='eta'){const n=$('#avme').value.trim();if(!n){$('#avme').focus();return}const cur=avHasEt(row)?row.et:[];if(cur.some(x=>mnk(x.n)===mnk(n))){toast('Esa etapa ya está en la fila.');return}
       /* la primera etapa toma el id de la fila sin etapas ('_'): lo ya registrado pasa a ella; las demás, un id que no se repite nunca */
-      const w=cur.length?cur.reduce((s,x)=>s+(+x.w||0),0)/cur.length:1;await avRowPatch(p,row,{et:[...cur,{id:cur.length?avNid('e'):AV_E0,n:n.slice(0,40),w:Math.round(w*100)/100}]});AV.v++;avRowMenu(id);requestRender();return}
-    if(k==='copy'){const tg=avData().rows.filter(x=>x.id!==row.id&&!avHasEt(x)&&x.und===row.und),w=avWho(),by=new Map();
+      const w=cur.length?cur.reduce((s,x)=>s+(+x.w||0),0)/cur.length:1;avRowPatch(p,row,{et:[...cur,{id:cur.length?avNid('e'):AV_E0,n:n.slice(0,40),w:Math.round(w*100)/100}]});avRowMenu(id);requestRender();return}
+    if(k==='copy'){const tg=tgs(),con=tg.filter(x=>avAcc(ex,x.id,AV_E0)>0),w=avWho(),by=new Map();if(!tg.length)return;
+      /* en una fila que ya tiene avance, lo registrado pasa a la primera etapa y su % baja: se avisa antes */
+      if(con.length&&!await uiAsk({title:'Hay filas con avance registrado',text:`${con.length} de las ${tg.length} filas ya tienen avance. En ellas lo registrado pasará a la etapa «${row.et[0].n}», así que su porcentaje bajará hasta que se llenen las demás etapas.`,ok:'Aplicar etapas',tone:'warn'}))return;
       tg.forEach(x=>{const R=by.get(x.piso)||{};R[x.id]={et:row.et.map((s,i)=>({id:i?avNid('e')+i:AV_E0,n:s.n,w:s.w}))};by.set(x.piso,R)});
       const bt=db.batch();by.forEach((R,pi)=>bt.set(avMRef(p,pi),{p:p.id,piso:pi,r:R,by:w.by,t:w.t},{merge:true}));bgWrite(bt.commit());lqClose();toast(`Etapas aplicadas a ${tg.length} fila${tg.length===1?'':'s'}`);requestRender();return}
     if(k==='noet'){const lost=row.et.filter(s=>s.id!==AV_E0&&avAcc(ex,row.id,s.id)>0);

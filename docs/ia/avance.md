@@ -77,7 +77,7 @@ Están en `DSHARED` (base.js), `SHARED` (`scripts/reglas-casco.mjs` y `functions
 - La fila con etapas («madre») no se llena: muestra el combinado de sus etapas, que van debajo como sub-filas (`tr.avet`).
 - **Fila nueva en la tabla:** `tr.avgho` al final de cada ambiente (y de un sector o piso que ya tenga filas sueltas), con `data-g="piso|sector|ambiente"`. Descripción → Enter → metrado → Enter crea la fila (`avGhoTry` → `avAddRow`) y deja el cursor en la línea siguiente (`AV.gf`). La unidad viene sugerida con la de la fila anterior.
 - **Ambiente sin filas todavía:** al final de cada piso, `select.avadd` con los ambientes de la obra por sector, «todo el sector» y «todo el piso»; lo elegido va a `AV.xa` (solo en memoria) para que aparezca su línea en blanco con el cursor puesto.
-- **«⋯» de la fila** (`avRowMenu`, `lqModal`): cambiar la descripción, agregar una etapa, aplicar sus etapas a las demás filas de la misma unidad que no tienen etapas (un lote), quitar las etapas, quitar la fila.
+- **«⋯» de la fila** (`avRowMenu`, `lqModal`): cambiar la descripción, agregar una etapa, aplicar sus etapas a las demás filas de la misma unidad que no tienen etapas (un lote; solo el piso elegido si hay uno, y pide confirmar si alguna ya tiene avance, porque su % baja), quitar las etapas, quitar la fila.
 - **Si llega un dato mientras se escribe** (celda, línea nueva con texto o campo del celular), `renderAReg` no redibuja (`AV.pend`) y lo hace al salir: así no se pierde lo tecleado.
 - `focusin`/`focusout` no tienen propiedad `on…` en Chromium: se escuchan con `addEventListener` una vez por `<main>` (`main.__avf`).
 - Alertas por fila: «supera el metrado», «fracción de unidad». Solo avisan.
@@ -105,5 +105,7 @@ Están en `DSHARED` (base.js), `SHARED` (`scripts/reglas-casco.mjs` y `functions
 - Restaurar un respaldo viejo no pisa los `ava` cuyo historial creció después (la regla lo rechaza): esos documentos se saltan.
 - Equipo › Limpieza borra pisos y ambientes de verdad: debería avisar si un piso tiene filas de Avance (hoy quedarían con el nombre guardado en `an`).
 - El SC lee todas las partidas (como el resto de LPS); revisar si entra a SEG-05 paso 2.
+- `et` se reemplaza entero con `set` + merge: dos editores cambiando las etapas de la misma fila a la vez pueden perder una (su avance quedaría huérfano en `ava`). Si llega a pasar, usar una transacción.
+- Lo escrito a medias en una línea nueva se pierde si el foco pasa a otra línea nueva y justo llega un dato (`renderAReg` solo protege la línea con foco).
 - Reordenar filas dentro de un ambiente (hoy van en el orden en que se crearon).
 - Opcional, si el dueño lo pide: que el SC y su capataz registren solo su partida, y el puente con la Matriz o Productividad.

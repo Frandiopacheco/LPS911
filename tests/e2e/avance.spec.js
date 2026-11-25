@@ -12,7 +12,7 @@ const extra = [
   ['avm', 'pm_p2', { p: 'pm', piso: 'p2', r: { r3: { amb: 'a3', sec: '', desc: 'EO-1 · Escritorio', und: 'und', q: 6, et: null, o: 3, an: 'Dpto 103' } } }],
   ['ava', 'pm_p1_ini', { p: 'pm', piso: 'p1', w: 'ini', c: { ini: { r1: { _: 2 } } }, log: [] }],
   ['avm', 'pp_p1', { p: 'pp', piso: 'p1', r: { q1: { amb: 'a1', sec: '', desc: 'Látex en muros', und: 'm²', q: 100, et: ET, o: 1 }, q2: { amb: 'a1', sec: '', desc: 'Contrazócalo', und: 'ml', q: 20, et: null, o: 2 }, q3: { amb: '', sec: 's1', desc: 'Fachada del sector', und: 'm²', q: 50, et: null, o: 3 } } }],
-  ['ava', 'pp_p1_2026-09-28', { p: 'pp', piso: 'p1', w: '2026-09-28', c: { '2026-09-29': { q1: { _: 100, e2: 50 } } }, log: [] }],
+  ['ava', 'pp_p1_2026-09-28', { p: 'pp', piso: 'p1', w: '2026-09-28', c: { '2026-09-29': { q1: { _: 100, e2: 50 }, q3: { _: 5 } } }, log: [] }],
 ];
 const abrir = async (page, o = {}) => { const errors = await openApp(page, { extra, ...o }); await page.evaluate(() => { U.piso = ''; U.avPct = false; goMod('ava'); }); await expect(page.locator('#main')).toHaveAttribute('data-view', 'areg'); return errors; };
 const celda = (page, k) => page.locator(`.aved[data-k="${k}"]`);
@@ -96,6 +96,25 @@ test('Avance: interruptor Cantidad | %, etapas con peso y unidades mezcladas', a
   await escribir(page, 'w|q1|e2', 50);
   await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q1.et.map(e => e.w))).toEqual([28.57, 50, 21.43]);
   await expect(madre).toContainText('54 %');                            // 28,57 × 100 % + 50 × 50 % = 53,6 %
+  // «50 %» tipeado en modo Cantidad no se guarda como 50 unidades
+  await celda(page, `c|q2|_|${HOY}`).click(); await page.keyboard.press('Control+A'); await page.keyboard.type('50%'); await page.keyboard.press('Tab');
+  await expect(celda(page, `c|q2|_|${HOY}`)).toHaveText('10');
+  expect(await page.evaluate(() => __dbGet('ava', 'pp_p1_2026-09-28').c['2026-10-01'].q2._)).toBe(10);
+  // quitar las etapas y volver a ponerlas: la fila conserva lo de su primera etapa y el avance de la etapa quitada no revive
+  let ok = true; page.on('dialog', d => ok ? d.accept() : d.dismiss());
+  await madre.locator('.avmb').click(); await page.click('[data-avmk="noet"]');
+  await expect(page.locator('tr.avet')).toHaveCount(0);
+  await expect(page.locator('tr.avrw', { hasText: 'Látex en muros' })).toContainText('100 %');     // lo de '_' (Empaste): 100 de 100
+  await page.locator('tr.avrw', { hasText: 'Látex en muros' }).locator('.avmb').click();
+  await page.fill('#avme', 'Base'); await page.click('[data-avmk="eta"]'); await expect(page.locator('#lqm')).toContainText('Etapas: Base');
+  await page.fill('#avme', '1.ª mano'); await page.click('[data-avmk="eta"]'); await expect(page.locator('#lqm')).toContainText('Base, 1.ª mano');
+  const et2 = await page.evaluate(() => __dbGet('avm', 'pp_p1').r.q1.et);
+  expect(et2[0].id).toBe('_'); expect(['e2', 'e3', '_']).not.toContain(et2[1].id);
+  // aplicar etapas a filas que ya tienen avance pide confirmar (su % baja): cancelar no cambia nada
+  ok = false; await page.click('[data-avmk="copy"]');
+  expect(await page.evaluate(() => __dbGet('avm', 'pp_p1').r.q3.et)).toBeNull();
+  await page.click('#lqm [data-lqx]');
+  await expect(page.locator('tr.avmad')).toContainText('50 %');           // Base 100 % + 1.ª mano nueva 0 %: los 50 m² de la anterior no cuentan
   // unidad y metrado se corrigen en la misma tabla
   await escribir(page, 'q|q2', 40); await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q2.q)).toBe(40);
   await celda(page, 'u|q2').click(); await page.keyboard.press('Control+A'); await page.keyboard.type('m'); await page.keyboard.press('Tab');

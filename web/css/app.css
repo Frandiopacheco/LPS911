@@ -5333,6 +5333,7 @@ table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height
 .avi{display:inline-block}
 .avmb{float:right;border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:18px;height:20px;min-height:0!important;padding:0 5px;border-radius:6px}
 .avmb:hover{background:var(--line2);color:var(--ink)}
+@media (pointer:coarse){.avgr .avmb{height:32px;min-width:36px;line-height:30px}.avadd{height:36px}}
 .avpb{display:inline-block;width:50px;height:8px;border-radius:4px;background:var(--line2);vertical-align:middle;margin-right:6px;overflow:hidden}
 .avpb i{display:block;height:100%;background:var(--ok)}
 .avtg{display:inline-block;font-size:12px;border-radius:999px;padding:1px 8px;margin-right:4px;white-space:nowrap;background:var(--panel2);color:var(--ink2)}
