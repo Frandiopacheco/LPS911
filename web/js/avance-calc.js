@@ -23,9 +23,9 @@ function avRowDay(ex,row,d){const q=+row.q||0;if(q<=0)return 0;let s=0;for(const
 const avSumQ=rows=>rows.reduce((s,r)=>s+(+r.q||0),0);
 const avSame=rows=>!rows.length||rows.every(r=>r.und===rows[0].und);
 /** avance de un grupo de filas (0 a 1) */
-function avGrpPct(ex,rows,hasta){if(!rows.length)return 0;if(avSame(rows)){const t=avSumQ(rows);return t?rows.reduce((s,r)=>s+(+r.q||0)*avRowPct(ex,r,hasta),0)/t:0}return rows.reduce((s,r)=>s+avRowPct(ex,r,hasta),0)/rows.length}
+function avGrpPct(ex,rows,hasta){if(!rows.length)return 0;if(avSame(rows)){const t=avSumQ(rows);return t?rows.reduce((s,r)=>s+(+r.q||0)*avRowPct(ex,r,hasta),0)/t:0}const M=rows.filter(r=>+r.q>0);/* las filas «por metrar» (sin metrado) no cuentan */return M.length?M.reduce((s,r)=>s+avRowPct(ex,r,hasta),0)/M.length:0}
 /** lo que aportó un día al avance del grupo (fracción) */
-function avGrpDay(ex,rows,d){if(!rows.length)return 0;if(avSame(rows)){const t=avSumQ(rows);return t?rows.reduce((s,r)=>s+(+r.q||0)*avRowDay(ex,r,d),0)/t:0}return rows.reduce((s,r)=>s+avRowDay(ex,r,d),0)/rows.length}
+function avGrpDay(ex,rows,d){if(!rows.length)return 0;if(avSame(rows)){const t=avSumQ(rows);return t?rows.reduce((s,r)=>s+(+r.q||0)*avRowDay(ex,r,d),0)/t:0}const M=rows.filter(r=>+r.q>0);return M.length?M.reduce((s,r)=>s+avRowDay(ex,r,d),0)/M.length:0}
 /** cambia el peso de una etapa a `pct` (0–100) y reparte el resto entre las demás en la proporción que tenían → etapas nuevas con pesos que suman 100 */
 function avSetW(et,id,pct){const L=et.map(e=>({...e,w:+e.w>0?+e.w:0})),e=L.find(x=>x.id===id);if(!e||L.length<2||!(pct>0)||pct>=100)return L;const ot=L.filter(x=>x!==e),so=ot.reduce((s,x)=>s+x.w,0);
   ot.forEach(x=>x.w=Math.round((so?x.w/so:1/ot.length)*(100-pct)*100)/100);e.w=Math.round(pct*100)/100;return L}
