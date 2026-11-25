@@ -267,7 +267,9 @@ test('Avance: fila de total, buscar, reordenar filas y rango seleccionado (copia
   await page.fill('#avq', 'silla'); await expect(page.locator('tr.avrw')).toHaveCount(1);
   await expect(total).toContainText('Total de lo buscado'); await expect(page.locator('#avq')).toBeFocused();
   await page.fill('#avq', 'dpto 103'); await expect(page.locator('tr.avrw')).toContainText('EO-1');      // también busca por ambiente
-  await page.fill('#avq', ''); await expect(page.locator('tr.avrw')).toHaveCount(3);
+  await page.fill('#avq', 'silla, dpto 103'); await expect(page.locator('tr.avrw')).toHaveCount(2);       // varios términos separados por coma, como en el Lookahead
+  await page.fill('#avq', 'segundo piso'); await expect(page.locator('tr.avrw')).toHaveCount(1);          // también por piso
+  await page.click('[data-av="qclr"]'); await expect(page.locator('tr.avrw')).toHaveCount(3); await expect(page.locator('#avq')).toHaveValue('');
   // reordenar dentro del ambiente
   await page.selectOption('#avp', 'pp');
   await page.locator('tr.avrw', { hasText: 'Contrazócalo' }).locator('.avmb').click(); await page.click('[data-avmk="up"]'); await page.click('#lqm [data-lqx]');

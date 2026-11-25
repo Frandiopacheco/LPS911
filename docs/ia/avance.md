@@ -99,7 +99,7 @@ Están en `DSHARED` (base.js), `SHARED` (`scripts/reglas-casco.mjs` y `functions
 ## Más de la planilla (25-11-2026, pasos 2 y 3 que el dueño pidió seguir)
 
 - **Total de la partida** (`tr.avtt`): primera fila de la tabla; con búsqueda dice «Total de lo buscado».
-- **Buscar** (`#avq`, `AV.q`): todas las palabras, en la descripción o en el nombre del ambiente o del sector (`mnk`). Con búsqueda activa no se muestran las líneas de «Editar filas» de los pisos sin coincidencias.
+- **Buscar** (`#avq`, `AV.q`; igualado al del Lookahead el 25-11-2026, pedido del dueño): va primero en la barra; varios términos separados por coma (basta uno) y, dentro de un término, todas sus palabras; busca en la descripción y en los nombres del ambiente, sector y piso (`mnk`); espera 180 ms al teclear; «✕ Quitar búsqueda» aparece mientras hay texto. Con búsqueda activa no se muestran las líneas de «Editar filas» de los pisos sin coincidencias.
 - **Reordenar:** «⋯» › Subir / Bajar intercambia el `o` de la fila con su vecina del mismo ambiente (una acción para Ctrl+Z).
 - **Rango seleccionado** (`AV.sa`/`AV.sb`, clase `.avsel`, solo en pantalla): Mayús+flechas o Mayús+clic desde la celda con foco. Ctrl+C lo copia como texto con tabulaciones (`avSelCopy`) y Supr lo vacía (`avSelDel`, solo celdas de días, una acción). Cualquier otra tecla, un clic o un redibujo lo quitan.
 - **Tablet vertical:** las columnas fijas (`.avsk`) se activan desde 700 px; la descripción mide 260 / 200 / 170 px según el ancho.
@@ -132,7 +132,6 @@ Lo que hacía la hoja RESUMEN del Excel del dueño. La ven todos los que ven el 
 ## Pendiente
 
 - El global del Resumen suma también lo registrado en días futuros; las columnas por semana llegan hasta la semana actual, así que pueden no cuadrar si se llenó hacia adelante.
-- El buscador redibuja en cada tecla: con cientos de filas convendrá esperar unos 150 ms.
 - Idea del dueño para más adelante: que los pesos de las partidas en el global salgan del presupuesto (hoy: peso manual, igual por defecto).
 - El PDF no lleva la curva; el Excel no lleva los logos ni el encabezado de la empresa (`excel.js` `xHeader`).
 - Copiar las filas de una partida a otra.
