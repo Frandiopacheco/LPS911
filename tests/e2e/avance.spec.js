@@ -517,3 +517,44 @@ test('Avance: desde el Excel, el ingeniero de campo solo cambia los días (no fi
   await expect(page.locator('[data-av="xexp"]')).toHaveCount(1); await expect(page.locator('[data-av="ximp"]')).toHaveCount(1); await expect(page.locator('[data-av="imp"]')).toHaveCount(0);
   noErrors(errors);
 });
+
+test('Avance: material en obra por tipo de fila (llegó, instalado, saldo) y marca «sin material» en la tabla', async ({ page }) => {
+  const errors = await abrir(page);
+  await expect(page.locator('tr.avrw')).toHaveCount(3); await expect(page.locator('.avdt.b')).toHaveCount(0);
+  await page.click('[data-av="mat"]');
+  // «EO-1 · Escritorio» está en dos pisos (10 + 6): es un solo tipo; «SO-3 · Silla» es otro
+  await expect(page.locator('#lqm tr[data-avmr]')).toHaveCount(2);
+  const esc = page.locator('#lqm tr[data-avmr]', { hasText: 'Escritorio' });
+  await expect(esc).toContainText('2 filas'); await expect(esc).toContainText('16'); await expect(esc).toContainText('no se controla');
+  // llegó 2 y ya hay 2 instalados (acumulado inicial): sin saldo
+  await esc.locator('input').fill('2'); await page.locator('#lqm tr[data-avmr]', { hasText: 'Silla' }).locator('input').focus();
+  await expect(esc).toContainText('sin material');
+  const key = await page.evaluate(() => avMatKey('EO-1 · Escritorio', 'und'));
+  let m = (await page.evaluate(() => __dbGet('avp', 'pm'))).mat[key];
+  expect([m.q, m.d, m.u, m.log.length, m.log[0].a]).toEqual([2, 'EO-1 · Escritorio', 'und', 1, null]);
+  expect((await page.evaluate(() => __dbGet('avp', 'pm'))).nom).toBe('Mobiliario');          // la partida no se toca
+  await page.click('#lqm [data-lqx]');
+  await expect(page.locator('tr.avrw .avdt.b')).toHaveCount(2);                                // las dos filas del tipo, no la silla
+  await expect(page.locator('[data-av="mat"]')).toContainText('1 sin saldo');
+  // llega todo el lote
+  await page.click('[data-av="mat"]'); await esc.locator('[data-avmall]').click();
+  await expect(esc).toContainText('completo'); await expect(esc.locator('input')).toHaveValue('16');
+  m = (await page.evaluate(() => __dbGet('avp', 'pm'))).mat[key]; expect([m.q, m.log.length, m.log[1].a]).toEqual([16, 2, 2]);
+  // en blanco deja de controlarse; un texto que no es número no se guarda
+  await esc.locator('input').fill('abc'); await esc.locator('input').press('Tab'); expect((await page.evaluate(() => __dbGet('avp', 'pm'))).mat[key].q).toBe(16);
+  await esc.locator('input').fill(''); await esc.locator('input').press('Tab'); await expect(esc).toContainText('no se controla');
+  expect((await page.evaluate(() => __dbGet('avp', 'pm'))).mat[key].q).toBe(null);
+  await page.click('#lqm [data-lqx]'); await expect(page.locator('.avdt.b')).toHaveCount(0);
+  // cálculo puro: con etapas cuenta el avance ponderado; llegó menos que lo instalado = revisar, no «sin material» si ya se instaló todo
+  const r = await page.evaluate(() => { const rows = [{ id: 'a', desc: 'P-3 · Puerta', und: 'und', q: 4, et: null }, { id: 'b', desc: 'p-3 · puerta ', und: 'UND', q: 6, et: null }];
+    const ex = { a: { _: { '2026-10-01': 4 } }, b: { _: { '2026-10-01': 1 } } }, k = avMatKey('P-3 · Puerta', 'und');
+    return [avMatTypes(rows, ex, {}).map(x => [x.n, x.q, x.inst, x.ll, x.sin]), avMatTypes(rows, ex, { [k]: { q: 5 } }).map(x => [x.saldo, x.sin]), avMatTypes(rows, ex, { [k]: { q: 7 } }).map(x => [x.saldo, x.sin])]; });
+  expect(r).toEqual([[[2, 10, 5, null, false]], [[0, true]], [[2, false]]]);
+  // dos tipos distintos no comparten clave: otra unidad, o descripciones largas que solo cambian al final
+  expect(await page.evaluate(() => { const L = 'x'.repeat(98); return [avMatKey('Zócalo m', 'l') === avMatKey('Zócalo', 'm l'), avMatKey(L + ' porcelanato', 'm2') === avMatKey(L + ' porcelanato', 'ml'), /^[a-z0-9_]+$/.test(avMatKey('Ñandú 60×60 (gris)', 'm²'))]; })).toEqual([false, false, true]);
+  noErrors(errors);
+  // quien solo consulta ve la lista sin poder escribir
+  const e2 = await abrir(page, { as: 'lector', extra: [...extra.filter(x => x[1] !== 'pm' || x[0] !== 'avp'), ['avp', 'pm', { ...PM, mat: { [key]: { q: 5, d: 'EO-1 · Escritorio', u: 'und' } } }]] });
+  await page.click('[data-av="mat"]'); await expect(page.locator('#lqm tr[data-avmr]')).toHaveCount(2); await expect(page.locator('#lqm input')).toHaveCount(0);
+  noErrors(e2);
+});
