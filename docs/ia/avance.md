@@ -141,9 +141,19 @@ Lo que hacía la hoja RESUMEN del Excel del dueño. La ven todos los que ven el 
 
 Con «Editar filas» encendido cada fila y cada cabecera de piso, sector y ambiente muestra una **✕** (`.avdel`, `data-avdel="r:<fila>"` o `g:<clave del grupo>`; `AV.gr` guarda las filas de cada grupo al dibujar). `avDelAsk` siempre pide confirmación (lista las filas; en rojo si alguna tiene avance), **archiva** las filas (`arch`) en un solo grupo de deshacer y no toca los ambientes de la obra. Con una búsqueda activa quita solo las filas que se ven.
 
+## Material en obra (`avance-mat.js`, 25-11-2026, decidido con el dueño)
+
+El dueño propuso un interruptor para columnas de llegada de material; se analizó el proceso (puertas, mobiliario, cerámico especial, pintura) y se decidió: **el material llega por tipo, no por ambiente**.
+- **Tipo** = filas con la misma descripción y unidad (`avMatKey`: texto normalizado a `[a-z0-9_]`). De cada tipo se anota un solo número: cuánto **llegó** a obra (acumulado).
+- Botón **«Material»** de la barra (`avMatDlg`): lista de tipos con metrado total, Llegó (lo único que se tipea), instalado (avance ponderado × metrado), saldo «En obra» y estado; botón «Llegó todo». **En blanco = no se controla** (pintura y lo que llega a granel quedan fuera sin apagar nada); no hay interruptor por partida.
+- **Sin columnas nuevas en la tabla:** las filas de un tipo **sin material** (controlado, falta instalar y llegó ≤ instalado) llevan un punto rojo (`.avdt.b`, `avMatSin`) y el botón muestra «N sin saldo». Si llegó < instalado se marca «revisar».
+- **Datos:** `avp/{id}.mat[clave] = {q|null, d, u, by, n, t, log:[{q,a,by,n,t}]}` (últimos 20 cambios). Campo nuevo y opcional; sin cambio de reglas (la de `avp` ya pide `canEdit`). Lo editan admin y editores; el resto consulta.
+- **No hace (a propósito):** repartir lo llegado entre ambientes, ni calendario de llegadas (la fecha de cada cambio queda en `log`). Depende de que el mismo material se llame igual en todas sus filas. Si se renombra la descripción o la unidad de un tipo, pasa a ser otro tipo sin control (lo anotado queda guardado en `mat` con la clave anterior, pero ya no se ve). No entra al deshacer de la planilla (es un dato de la partida; su historial está en `log`).
+- **Sin hacer:** llegado en el Resumen y en el Excel; que almacén o el ingeniero de campo lo registren (pediría cambiar la regla de `avp`).
+
 ## Pruebas
 
-- `tests/e2e/avance.spec.js` (13; las cuatro últimas: quitar filas y grupos, ida y vuelta con Excel, mover entre días y conflictos, y permisos del ingeniero de campo; incluye «fila de total, buscar, reordenar y rango» y «Resumen»): cálculo; registro con historial, confirmación al superar el metrado y fracción de unidad; interruptor Cantidad | %, pesos de etapas, unidades mezcladas y permisos de lectura; partida nueva, filas desde la tabla y etapas; importar con equivalencias; celular.
+- `tests/e2e/avance.spec.js` (14; la última es «material en obra por tipo»; las cuatro últimas: quitar filas y grupos, ida y vuelta con Excel, mover entre días y conflictos, y permisos del ingeniero de campo; incluye «fila de total, buscar, reordenar y rango» y «Resumen»): cálculo; registro con historial, confirmación al superar el metrado y fracción de unidad; interruptor Cantidad | %, pesos de etapas, unidades mezcladas y permisos de lectura; partida nueva, filas desde la tabla y etapas; importar con equivalencias; celular.
 - `tests/rules/firestore.test.mjs` «avance: …».
 
 ## Pendiente
