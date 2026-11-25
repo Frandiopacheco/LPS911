@@ -88,6 +88,11 @@ test('Avance: interruptor Cantidad | %, etapas con peso y unidades mezcladas', a
   const madre = page.locator('tr.avmad');
   await expect(page.locator('.avgr thead')).not.toContainText('Corte inicial');
   await expect(madre).toContainText('55 %'); await expect(page.locator('tr.avet')).toHaveCount(3);
+  // las etapas se pliegan con la flecha de su fila o con el botón de la barra; la fila sigue mostrando su % combinado
+  await madre.locator('.avetg').click(); await expect(page.locator('tr.avet')).toHaveCount(0); await expect(madre).toContainText('55 %');
+  await page.click('[data-av="ets"]'); await expect(page.locator('tr.avet')).toHaveCount(3);
+  await page.click('[data-av="ets"]'); await expect(page.locator('tr.avet')).toHaveCount(0);
+  await madre.locator('.avetg').click(); await expect(page.locator('tr.avet')).toHaveCount(3);
   await expect(madre.locator('.aved[data-k^="c|"]')).toHaveCount(0);    // la fila con etapas se llena por sus etapas
   await expect(madre.locator('td.avro')).toHaveText(Array(await madre.locator('td.avro').count()).fill(''));   // en cantidad sus días van en blanco
   await expect(page.locator('tr.avgho')).toHaveCount(0);                // sin «Editar filas» no hay líneas en blanco
