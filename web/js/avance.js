@@ -29,7 +29,9 @@ function ensureAv(){if(!db||avUnP||!me||!canAva())return;
   const open=()=>{avUnP=fcol('avp').onSnapshot(sn=>{snapOk('avp');AVP.clear();sn.docs.forEach(d=>AVP.set(d.id,{...d.data(),id:d.id}));avOk=true;if(U.mod==='ava')snapRender(sn)},
     err=>{avUnP=null;snapFail('avp',err,()=>{if(me&&canAva()&&!avUnP)open()})})};
   open();if(!avReg1){avReg1=true;unsubs.push(()=>{avReg1=false;avStop()})}}
-function avStop(){if(avUnP)try{avUnP()}catch(e){}avUnP=null;avUnD.forEach(f=>{try{f()}catch(e){}});avUnD=[];avSubP='';avOk=false;AVP.clear();AVM.clear();AVD.clear();AV.v++}
+function avStop(){if(avUnP)try{avUnP()}catch(e){}avUnP=null;avUnD.forEach(f=>{try{f()}catch(e){}});avUnD=[];avSubP='';avOk=false;AVP.clear();AVM.clear();AVD.clear();AV.v++;
+  /* al cerrar sesión no queda nada que el siguiente usuario pueda deshacer a su nombre */
+  AVU.u=[];AVU.r=[];AVU.g=null;AV.key='';AV.q='';if(typeof ARS!=='undefined'){ARS.ok=false;ARS.by=new Map();ARS.err='';ARS.t=0}}
 /** filas y avance de UNA partida (la elegida): se reabre al cambiar de partida */
 function avSubData(pid){if(avSubP===pid)return;avUnD.forEach(f=>{try{f()}catch(e){}});avUnD=[];AVM.clear();AVD.clear();AV.v++;AV.dok=0;avSubP=pid;if(!pid||!db)return;
   const mk=(col,M,bit)=>{const open=()=>{if(avSubP!==pid)return;const un=fcol(col).where('p','==',pid).onSnapshot(sn=>{if(avSubP!==pid)return;snapOk(col+'_p');M.clear();sn.docs.forEach(d=>M.set(d.id,{...d.data(),id:d.id}));AV.v++;AV.dok|=bit;if(U.mod==='ava')snapRender(sn)},
@@ -154,7 +156,7 @@ function avCelGroups(pid,rows){const T=avTree(pid,rows.filter(r=>r.q>0)/* sin me
 /** lugares de todos los pisos a la vista (el elegido arriba, o todos); la clave lleva el piso */
 function avCelAll(rows){return[...pisos(),...ARCH.pis.values()].filter(x=>(!U.piso||x.id===U.piso)&&rows.some(r=>r.piso===x.id&&r.q>0)).map(pi=>({pi,G:avCelGroups(pi.id,rows).map(g=>({...g,k:pi.id+'~'+g.k}))}))}
 function avCelHtml(p,D,rows){const ex=D.ex,reg=avaReg(),t=todayIso(),pct=!!U.avPct,d0=p.d0||t,d1=p.d1||t;if(!AV.day)AV.day=t;const d=AV.day,A=avCelAll(rows);
-  if(!A.length)return`<div class="empty"><b>${rows.length?'Las filas de aquí aún no tienen metrado.':'Esta partida aún no tiene filas.'}</b><br>Se cargan desde la computadora o la tablet.</div>`;let h=`<div class="avcel">`;
+  if(!A.length)return`<div class="empty"><b>${rows.some(r=>!U.piso||r.piso===U.piso)?'Las filas de aquí aún no tienen metrado.':U.piso&&rows.length?'Este piso no tiene filas en esta partida.':'Esta partida aún no tiene filas.'}</b><br>Se cargan desde la computadora o la tablet.</div>`;let h=`<div class="avcel">`;
   /* el día: Hoy y Ayer a un toque, o cualquier otro del rango de la partida */
   const dsel=`<div class="avcday"><span class="seg" role="group" aria-label="Día"><button type="button" data-avd="${t}" class="${d===t?'on':''}">Hoy</button><button type="button" data-avd="${addD(t,-1)}" class="${d===addD(t,-1)?'on':''}">Ayer</button></span><input class="tin" type="date" data-avday="1" data-fk="avday" value="${esc(d)}" min="${esc(d0)}" max="${esc(d1)}" aria-label="Otro día"></div>`;
   let g=null,gp=null;A.forEach(x=>x.G.forEach(y=>{if(y.k===AV.grp){g=y;gp=x.pi}}));
@@ -178,11 +180,14 @@ function avURec(op){if(AVU.lock)return;if(AVU.g)AVU.g.push(op);else avUPush([op]
 /** todo lo que se escriba dentro de fn cuenta como UNA acción (pegar un bloque, «todo lo que falta»…) */
 function avUGroup(fn){if(AVU.g||AVU.lock)return fn();AVU.g=[];try{return fn()}finally{const g=AVU.g;AVU.g=null;avUPush(g)}}
 function avUndo(redo){const p=avCur(),from=redo?AVU.r:AVU.u,to=redo?AVU.u:AVU.r;if(!p||!avReady(p))return;const g=from.pop();if(!g){toast(redo?'No hay nada que rehacer.':'No hay nada que deshacer.');return}
-  const ex=avData().ex,cells=[];AVU.lock=true;
-  try{(redo?g:[...g].reverse()).forEach(o=>{if(o.k==='c')cells.push({row:o.row,et:o.et,d:o.d,q:redo?o.b:o.a,old:avCell(ex,o.row.id,o.et,o.d)});
-      else if(o.k==='r')avRowPatch(p,o.row,redo?o.b:o.a);else avRowPatch(p,o.row,{arch:redo?null:avWho()})});
+  /* solo se deshace lo que sigue como lo dejó esta acción: si otra persona cambió después esa celda o esa fila, no se toca y se avisa */
+  const ex=avData().ex,cells=[],nz=v=>JSON.stringify(v===undefined?null:v);let skip=0;AVU.lock=true;
+  try{(redo?g:[...g].reverse()).forEach(o=>{
+      if(o.k==='c'){const cur=avCell(ex,o.row.id,o.et,o.d);if(Math.abs(cur-(redo?o.a:o.b))>1e-9){skip++;return}cells.push({row:o.row,et:o.et,d:o.d,q:redo?o.b:o.a,old:cur})}
+      else if(o.k==='r'){const cur=((AVM.get(p.id+'_'+o.row.piso)||{}).r||{})[o.row.id]||{},exp=redo?o.a:o.b;if(Object.keys(exp).some(k=>nz(cur[k])!==nz(exp[k]))){skip++;return}avRowPatch(p,o.row,redo?o.b:o.a)}
+      else avRowPatch(p,o.row,{arch:redo?null:avWho()})});
     avPutCells(p,cells.filter(c=>Math.abs(c.q-c.old)>1e-9))}finally{AVU.lock=false}
-  to.push(g);const n=g.length;toast(`${redo?'Rehecho':'Deshecho'}: ${n===1?'1 cambio':n+' cambios'}`);AV.pend=false;requestRender()}
+  to.push(g);const n=g.length-skip;toast((n>0?`${redo?'Rehecho':'Deshecho'}: ${n===1?'1 cambio':n+' cambios'}`:`No se ${redo?'rehízo':'deshizo'} nada`)+(skip?` · ${skip} ${skip===1?'lo cambió':'los cambió'} otra persona después y no se ${skip===1?'tocó':'tocaron'}`:''));AV.pend=false;requestRender()}
 /* Ctrl+Z / Ctrl+Y (o Ctrl+Mayús+Z). Si se está tecleando en una celda o en un campo, deshace lo tecleado (lo hace el navegador) */
 document.addEventListener('keydown',e=>{if(U.mod!=='ava'||U.tab!=='areg'||!(e.ctrlKey||e.metaKey)||e.altKey)return;const k=e.key.toLowerCase();if(k!=='z'&&k!=='y')return;
   const ae=document.activeElement;if(ae&&ae.closest&&ae.closest('#lqm,input,textarea'))return;
@@ -253,7 +258,7 @@ function avNext(t,dir){const tr=t.closest('tr');
 function avMove(t,dir){const c=avNext(t,dir);if(c)c.focus();return!!c}
 /* Rango seleccionado, como en Excel: Mayús+flechas o Mayús+clic desde la celda con foco. Vive solo en la pantalla (clase .avsel):
    Ctrl+C lo copia como texto con tabulaciones (se pega tal cual en Excel) y Supr lo vacía (una sola acción para Ctrl+Z). */
-const avColRank=c=>c[0]==='c'?'z'+c.slice(2):({d:'a0',u:'a1',q:'a2',w:'a3'}[c]||'a9');
+const avColRank=c=>c[0]==='c'?(c.slice(2)===AV_INI?'z0':'z'+c.slice(2)):({d:'a0',w:'a05',u:'a1',q:'a2'}[c]||'a9');
 const avSelKey=k=>[...document.querySelectorAll('#main .aved')].find(x=>x.dataset.k===k)||null;
 function avSelClear(){if(!AV.sa&&!AV.sb)return;AV.sa=AV.sb=null;document.querySelectorAll('#main .avsel').forEach(x=>x.classList.remove('avsel'))}
 /** celdas del rango, por filas: [[el|null,…],…] */
@@ -376,7 +381,9 @@ function avRowMenu(id){const p=avCur(),r=avRowOf(id);if(!p||!r||!avaCfg())return
     if(k==='up'||k==='dn'){const G=avData().rows.filter(x=>x.piso===row.piso&&x.amb===row.amb&&x.sec===row.sec),i=G.findIndex(x=>x.id===row.id),o=G[i+(k==='up'?-1:1)];
       if(!o){toast(k==='up'?'Ya es la primera de su ambiente.':'Ya es la última de su ambiente.');return}
       /* se intercambian sus números de orden (si coincidían, se separan) */
-      const a=row.o,b=o.o===row.o?row.o+(k==='up'?-1:1):o.o;avUGroup(()=>{avRowPatch(p,row,{o:b});avRowPatch(p,o,{o:a})});requestRender();avRowMenu(id);return}
+      /* se intercambian sus números de orden; si en el grupo hay números repetidos, se renumera el grupo entero para que no salte de más */
+      const j=i+(k==='up'?-1:1),N=G.slice();N[i]=o;N[j]=row;const dup=new Set(G.map(x=>x.o)).size<G.length,base=Math.min(...G.map(x=>x.o));
+      avUGroup(()=>{if(dup)N.forEach((x,n)=>{if(x.o!==base+n)avRowPatch(p,x,{o:base+n})});else{avRowPatch(p,row,{o:o.o});avRowPatch(p,o,{o:row.o})}});requestRender();avRowMenu(id);return}
     if(k==='del'){const has=avEtOf(row).some(s=>avAcc(ex,row.id,s.id)>0);
       if(!await uiAsk({title:'¿Quitar esta fila?',text:`${row.desc} (${avLoc(row)}).${has?' Tiene avance registrado: se conserva en la base, pero deja de contar.':''}`,ok:'Quitar fila',tone:has?'danger':'warn'}))return;
       avRowPatch(p,row,{arch:avWho()});lqClose();toast('Fila quitada');requestRender()}})}

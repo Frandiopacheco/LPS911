@@ -24,7 +24,10 @@ function avResData(){const t=todayIso(),mon=avMon(t),P=avParts().map(p=>{const B
     gPiso:pi=>{let w=0,s=0;act.forEach(x=>{const rs=x.rows.filter(r=>r.piso===pi.id);if(rs.length){w+=x.peso;s+=x.peso*avGrpPct(x.ex,rs)}});return w?s/w:null}}}
 const avP1=v=>(Math.round(v*1000)/10).toLocaleString('es-PE',{maximumFractionDigits:1})+' %';
 const avDl=v=>Math.abs(v)<0.0005?'':(v>0?'+':'')+avP1(v);
-function renderARes(main){ensureAv();if(ARS.who!==(me.email||'')){ARS.ok=false;ARS.by=new Map()}if(!ARS.loading&&avOk&&(!ARS.ok||NOW()-ARS.t>120000)&&!ARS.err)avResLoad();
+function renderARes(main){ensureAv();if(ARS.who!==(me.email||'')){ARS.ok=false;ARS.by=new Map();ARS.err='';ARS.who=me.email||''}
+  /* se lee al entrar la primera vez y luego cada 15 min o con «Actualizar» (son colecciones enteras); la partida abierta en Registro va siempre con sus datos en vivo */
+  if(!ARS.loading&&avOk&&(!ARS.ok||NOW()-ARS.t>9e5)&&!ARS.err)avResLoad();
+  if(ARS.ok&&avSubP&&AV.dok===3&&AVP.has(avSubP)){const D=avData();ARS.by.set(avSubP,{rows:D.rows,ex:D.ex})}
   let h=`<div class="scroll"><div class="avpage">`;
   if(!avOk||(!ARS.ok&&!ARS.err))h+='<div class="empty">Calculando el resumen…</div>';
   else if(!ARS.ok)h+=`<div class="empty"><b>No se pudo leer el avance.</b><br><button class="ib" data-ar="load">Reintentar</button></div>`;
@@ -33,14 +36,14 @@ function renderARes(main){ensureAv();if(ARS.who!==(me.email||'')){ARS.ok=false;A
     if(!R.act.length)h+=`<div class="empty"><b>Aún no hay partidas con metrado.</b><br>Se cargan en la pestaña Registro.</div>`;
     else{h+=`<div class="avtiles"><div class="avtile"><span>Avance global</span><b>${avPc(R.g)}</b><small>${R.act.length} partida${R.act.length===1?'':'s'} con metrado</small></div><div class="avtile"><span>Falta</span><b>${avPc(1-R.g)}</b><small>&nbsp;</small></div><div class="avtile"><span>Esta semana</span><b>${avDl(cur)||'0 %'}</b><small>Semana ${weekOf(R.Ws[R.Ws.length-1])}</small></div></div>
       <div class="avrcard"><h3>Por partida y por piso</h3><div class="avrbox"><table class="avrtb"><thead><tr><th>Partida</th><th class="num" title="Cuánto pesa la partida en el avance global">Peso</th><th>Avance</th>${R.ps.map(pi=>`<th class="num">${esc(pi.name)}</th>`).join('')}</tr></thead><tbody>${R.P.map(x=>`<tr${x.has?'':' class="avmu"'}><td><button type="button" class="lnkb" data-argo="${esc(x.p.id)}" title="Abrir su planilla">${esc(x.p.nom)}</button></td><td class="num">${cfg?`<input class="tin avrpw" type="number" min="0" step="any" data-arpw="${esc(x.p.id)}" data-fk="arpw-${esc(x.p.id)}" value="${x.peso}" aria-label="Peso de ${esc(x.p.nom)}">`:x.peso}</td><td>${x.has?avBar(x.pct):(x.all?'por metrar':'sin filas')}</td>${R.ps.map(pi=>{const v=x.has?R.piso(x,pi):null;return`<td class="num">${v==null?'':avPc(v)}</td>`}).join('')}</tr>`).join('')}</tbody>
-        <tfoot><tr><th>Global</th><th class="num">${R.act.reduce((s,x)=>s+x.peso,0)}</th><th>${avBar(R.g)}</th>${R.ps.map(pi=>{const v=R.gPiso(pi);return`<th class="num">${v==null?'':avPc(v)}</th>`}).join('')}</tr></tfoot></table></div>
+        <tfoot><tr><th>Global</th><th class="num">${avF(R.act.reduce((s,x)=>s+x.peso,0))}</th><th>${avBar(R.g)}</th>${R.ps.map(pi=>{const v=R.gPiso(pi);return`<th class="num">${v==null?'':avPc(v)}</th>`}).join('')}</tr></tfoot></table></div>
         <p class="avnote">El global pondera cada partida por su peso; sin cambiarlo, todas pesan igual. En un piso solo cuentan las partidas que tienen filas ahí.</p></div>
       <div class="avrcard"><h3>Avance de cada semana</h3><div class="avrbox"><table class="avrtb"><thead><tr><th>Partida</th>${Wv.map(m=>`<th class="num" title="${fmtD(m)} – ${fmtD(addD(m,6))}">S${weekOf(m)}<small>${fmtD(m)}</small></th>`).join('')}<th class="num">Acumulado</th></tr></thead><tbody>${R.act.map(x=>{const w=R.wk(x);return`<tr><td>${esc(x.p.nom)}</td>${Wv.map((m,i)=>`<td class="num">${avDl(w[off+i])}</td>`).join('')}<td class="num"><b>${avPc(x.pct)}</b></td></tr>`}).join('')}</tbody>
         <tfoot><tr><th>Global</th>${Wv.map((m,i)=>`<th class="num">${avDl(R.gWk[off+i])}</th>`).join('')}<th class="num">${avPc(R.g)}</th></tr></tfoot></table></div></div>
       <div class="avrcard"><h3>Avance global acumulado</h3>${avResCurve(R)}</div>`}}
   main.innerHTML=h+'</div></div>';
   main.onclick=e=>{if(U.tab!=='ares')return;const b=e.target.closest('[data-ar],[data-argo]');if(!b)return;if(b.dataset.argo){U.avP=b.dataset.argo;saveUI();goTab('areg');return}
-    const k=b.dataset.ar;if(k==='load')avResLoad();else if(k==='xls')avResXls();else if(k==='pdf')avResPdf();requestRender()};
+    const k=b.dataset.ar;if(k==='load'){ARS.err='';avResLoad()}else if(k==='xls')avResXls();else if(k==='pdf')avResPdf();requestRender()};
   main.onchange=e=>{const t=e.target;if(U.tab!=='ares'||!t.dataset||!t.dataset.arpw||!avaCfg())return;const v=avNum(t.value);if(!(v>0)){toast('El peso debe ser mayor que 0.');requestRender();return}
     const p=AVP.get(t.dataset.arpw);if(p){AVP.set(p.id,{...p,peso:v});bgWrite(fcol('avp').doc(p.id).update({peso:v,...avWho()}))}requestRender()};
   main.onkeydown=null;main.oncontextmenu=null;main.oninput=null}
@@ -67,10 +70,10 @@ function avResAoa(p,rows,ex){const C=avWeeks(p),days=C.W.flatMap(w=>w.days).filt
 /** hoja Resumen → matriz */
 function avResSum(R){const out=[['Resumen de avance',P().name||''],['Al',R.t],['Avance global',Math.round(R.g*1000)/10],[],['Partida','Peso','Avance %'].concat(R.ps.map(p=>p.name))];
   R.act.forEach(x=>out.push([x.p.nom,x.peso,Math.round(x.pct*1000)/10].concat(R.ps.map(pi=>{const v=R.piso(x,pi);return v==null?'':Math.round(v*1000)/10}))));
-  out.push(['Global',R.act.reduce((s,x)=>s+x.peso,0),Math.round(R.g*1000)/10].concat(R.ps.map(pi=>{const v=R.gPiso(pi);return v==null?'':Math.round(v*1000)/10})),[],['Avance de cada semana (%)'].concat(R.Ws.map(m=>'S'+weekOf(m)+' '+fmtD(m))));
+  out.push(['Global',Math.round(R.act.reduce((s,x)=>s+x.peso,0)*100)/100,Math.round(R.g*1000)/10].concat(R.ps.map(pi=>{const v=R.gPiso(pi);return v==null?'':Math.round(v*1000)/10})),[],['Avance de cada semana (%)'].concat(R.Ws.map(m=>'S'+weekOf(m)+' '+fmtD(m))));
   R.act.forEach(x=>out.push([x.p.nom].concat(R.wk(x).map(v=>Math.round(v*1000)/10))));out.push(['Global'].concat(R.gWk.map(v=>Math.round(v*1000)/10)),['Global acumulado'].concat(R.gAt.map(v=>Math.round(v*1000)/10)));return out}
 async function avResXls(){if(!ARS.ok)return;try{toast('Generando el Excel…');await loadXlsx();const X=window.XLSX,R=avResData(),wb=X.utils.book_new(),bold={font:{bold:true},fill:{fgColor:{rgb:'E4E7E2'}}};
-    const sheet=(aoa,name,hr,w)=>{const ws=X.utils.aoa_to_sheet(aoa);(aoa[hr]||[]).forEach((v,c)=>{const k=X.utils.encode_cell({r:hr,c});if(ws[k])ws[k].s=bold});ws['!cols']=w;const used=new Set(wb.SheetNames);let n=String(name).replace(/[\\/?*[\]:]/g,' ').slice(0,28)||'Hoja',i=2;while(used.has(n))n=n.slice(0,25)+' '+(i++);X.utils.book_append_sheet(wb,ws,n)};
+    const sheet=(aoa,name,hr,w)=>{const ws=X.utils.aoa_to_sheet(aoa);(aoa[hr]||[]).forEach((v,c)=>{const k=X.utils.encode_cell({r:hr,c});if(ws[k])ws[k].s=bold});ws['!cols']=w;const used=new Set(wb.SheetNames.map(x=>x.toLowerCase()));let n=String(name).replace(/[\\/?*[\]:]/g,' ').slice(0,28)||'Hoja',i=2;while(used.has(n.toLowerCase()))n=n.slice(0,25)+' '+(i++);/* Excel no distingue mayúsculas en los nombres de hoja */X.utils.book_append_sheet(wb,ws,n)};
     sheet(avResSum(R),'Resumen',4,[{wch:28},{wch:10},{wch:10}]);
     R.act.forEach(x=>{const B=ARS.by.get(x.p.id);sheet(avResAoa(x.p,B.rows,B.ex),x.p.nom,0,[{wch:16},{wch:14},{wch:24},{wch:40},{wch:14},{wch:6},{wch:10},{wch:10},{wch:9}])});
     saveBlob(`${P().code||'LPS'}_Avance_${R.t}.xlsx`,new Blob([X.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));toast('Excel descargado.')}
@@ -78,7 +81,7 @@ async function avResXls(){if(!ARS.ok)return;try{toast('Generando el Excel…');a
 async function avResPdf(){if(!ARS.ok)return;try{toast('Generando el PDF…');await loadPdf();const{jsPDF}=window.jspdf,R=avResData(),doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'}),M=12;
     const T=v=>String(v??'').normalize('NFC').replace(/[^\x09\x0A\x20-\x7E\xA0-\xFF–—‘’“”•…]/g,''),pc=v=>v==null?'':avPc(v),HS={fillColor:[31,95,122],textColor:255,fontStyle:'bold'},ST={fontSize:9,cellPadding:1.6,lineColor:[210,210,210]};
     doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text(T('Avance físico de partidas'),M,18);doc.setFont('helvetica','normal');doc.setFontSize(10);doc.text(T(`${P().name||''} · al ${fmtD(R.t)} ${R.t.slice(0,4)} · Avance global: ${avPc(R.g)}`),M,25);
-    doc.autoTable({startY:31,margin:{left:M,right:M},head:[['Partida','Peso','Avance',...R.ps.map(p=>T(p.name))]],body:R.act.map(x=>[T(x.p.nom),x.peso,pc(x.pct),...R.ps.map(pi=>pc(R.piso(x,pi)))]),foot:[['Global',R.act.reduce((s,x)=>s+x.peso,0),pc(R.g),...R.ps.map(pi=>pc(R.gPiso(pi)))]],theme:'grid',styles:ST,headStyles:HS,footStyles:{fillColor:[228,231,226],textColor:20,fontStyle:'bold'}});
+    doc.autoTable({startY:31,margin:{left:M,right:M},head:[['Partida','Peso','Avance',...R.ps.map(p=>T(p.name))]],body:R.act.map(x=>[T(x.p.nom),x.peso,pc(x.pct),...R.ps.map(pi=>pc(R.piso(x,pi)))]),foot:[['Global',avF(R.act.reduce((s,x)=>s+x.peso,0)),pc(R.g),...R.ps.map(pi=>pc(R.gPiso(pi)))]],theme:'grid',styles:ST,headStyles:HS,footStyles:{fillColor:[228,231,226],textColor:20,fontStyle:'bold'}});
     const nw=Math.min(R.Ws.length,10),Wv=R.Ws.slice(-nw),off=R.Ws.length-nw;
     doc.autoTable({startY:doc.lastAutoTable.finalY+8,margin:{left:M,right:M},head:[['Avance de cada semana',...Wv.map(m=>'S'+weekOf(m)+' '+T(fmtD(m))),'Acumulado']],body:R.act.map(x=>{const w=R.wk(x);return[T(x.p.nom),...Wv.map((m,i)=>avDl(w[off+i])),pc(x.pct)]}),foot:[['Global',...Wv.map((m,i)=>avDl(R.gWk[off+i])),pc(R.g)]],theme:'grid',styles:ST,headStyles:HS,footStyles:{fillColor:[228,231,226],textColor:20,fontStyle:'bold'}});
     doc.save(`${P().code||'LPS'}_Avance_${R.t}.pdf`);toast('PDF descargado.')}

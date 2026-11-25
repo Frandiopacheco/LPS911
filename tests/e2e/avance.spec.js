@@ -266,6 +266,15 @@ test('Avance: fila de total, buscar, reordenar filas y rango seleccionado (copia
   await expect.poll(() => page.evaluate(() => { const c = __dbGet('ava', 'pp_p1_2026-09-28').c; return [c['2026-10-01'].q2._, c['2026-10-02'].q2._]; })).toEqual([0, 0]);
   await page.locator('.avtot').click(); await page.keyboard.press('Control+z');
   await expect.poll(() => page.evaluate(() => { const c = __dbGet('ava', 'pp_p1_2026-09-28').c; return [c['2026-10-01'].q2._, c['2026-10-02'].q2._]; })).toEqual([5, 6]);
+  // deshacer no pisa lo que cambió otra persona después: esa celda no se toca y se avisa
+  await escribir(page, `c|q2|_|${HOY}`, 7);
+  await expect.poll(() => page.evaluate(() => __dbGet('ava', 'pp_p1_2026-09-28').c['2026-10-01'].q2._)).toBe(7);
+  await page.evaluate(() => { window.__dbRemote = true; return firebase.firestore().collection('ava').doc('pp_p1_2026-09-28').set({ c: { '2026-10-01': { q2: { _: 9 } } } }, { merge: true }); });
+  await expect(celda(page, `c|q2|_|${HOY}`)).toHaveText('9');
+  await page.evaluate(() => { window.__dbRemote = false; });
+  await page.locator('.avtot').click(); await page.keyboard.press('Control+z');
+  await expect(page.locator('#toast')).toContainText('otra persona');
+  expect(await page.evaluate(() => __dbGet('ava', 'pp_p1_2026-09-28').c['2026-10-01'].q2._)).toBe(9);
   noErrors(errors, 'total y rango');
 });
 
