@@ -281,6 +281,10 @@ test('propuestas: pasado el corte el SC queda en solo lectura hasta que el ingen
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} })); // el ingeniero sí revisa
   await assertFails(setDoc(doc(sc, 'meta/propwin'), { closeAt: Date.now() + 864e5 })); // el SC no se habilita solo
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
+  // meta/mods (qué roles ven cada módulo): solo el administrador; el editor no
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'meta/mods'), { ava: ['editor'] }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'meta/mods'), { ava: ['editor', 'campo'], cas: [] }));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'meta/mods'), { ava: ['editor', 'sc'] }, { merge: true }));
   await assertSucceeds(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x9: { sent: false } } }, { merge: true }));
   // bloquear a mano antes del corte: el ingeniero pone closeAt = ahora y el SC queda en solo lectura
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() - 1000, man: true }));

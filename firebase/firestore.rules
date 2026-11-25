@@ -852,9 +852,10 @@ service cloud.firestore {
     // plan y el fin de obra los usan el PPC y las tareas del servidor: solo el administrador los cambia (también engCutHH, Cierre del
     // ingeniero, y rstHasta, ventana para restaurar un respaldo). El editor sigue guardando
     // lo demás de meta/project (calendario, especialidades, plantillas, causas, encabezado, PPC histórico…) y meta/propwin.
+    // meta/mods (qué roles ven cada módulo, Equipo › Módulos): solo el administrador.
     // Lectura y borrado: regla general de abajo (borrar meta, solo el administrador).
     match /meta/{id} {
-      allow create, update: if isAdmin() || (canEdit() && (id != 'project'
+      allow create, update: if isAdmin() || (canEdit() && id != 'mods' && (id != 'project'
         || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
           .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'closeCutHH', 'engCutHH', 'rstHasta', 'finObra', 'pushIni', 'pushFin', 'pushOff'])));
     }
@@ -1391,7 +1392,7 @@ service cloud.firestore {
           || resource.data.get('frozenAt', null) == null || request.resource.data.get('frozenAt', null) == null);
     }
     match /cs_meta/{id} {
-      allow create, update: if isAdmin_cs() || (canEdit_cs() && (id != 'project'
+      allow create, update: if isAdmin_cs() || (canEdit_cs() && id != 'mods' && (id != 'project'
         || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
           .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'closeCutHH', 'engCutHH', 'rstHasta', 'finObra', 'pushIni', 'pushFin', 'pushOff'])));
     }

@@ -14,7 +14,7 @@ const tabOrder=()=>U.mod==='tar'?TAR_TABS:U.mod==='pla'?PLA_TABS:U.mod==='ava'?A
 /** ¿Puede este usuario abrir la pestaña? (las reglas de seguridad siguen mandando sobre lo que puede guardar) */
 function tabAllowed(t){if(!me)return false;
   if(AVA_TABS.includes(t))return U.mod==='ava'&&canAva();
-  if(PLA_TABS.includes(t)){if(U.mod!=='pla'||!canPla())return false;return t==='pcar'?plaEd():t==='p3d'?me.role==='admin':true}
+  if(PLA_TABS.includes(t)){if(U.mod!=='pla'||!modOk('pla'))return false;return t==='pcar'?plaEd():t==='p3d'?me.role==='admin':true}
   if(TAR_TABS.includes(t)){if(U.mod!=='tar'||!canTar())return false;if(t==='tcfg')return me.role==='admin'||TASIS();
     /* F3: costos no entra a Tareos del día (su inicio es Costos); Publicación: admin y jefe de producción (tareo-pub.js) */
     if(t==='tdia')return me.role!=='tcos'&&me.role!=='trh';if(t==='trh')return typeof trhOk==='function'&&trhOk();if(t==='tpc'&&me.role==='tcap')return false;/* el capataz elige las partidas dentro del tareo (20-10-2026) */if(t==='tpub')return tpPubOk();if(t==='tcos')return tpCosOk();return true}

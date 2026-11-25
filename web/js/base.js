@@ -81,6 +81,25 @@ const tarEdit=()=>!!me&&(me.role==='admin'||TASIS());
 /* Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto. La ve el equipo de Last Planner, también el capataz de un SC
    (11-11-2026, pedido del dueño: consulta los planos en obra; los ETO solo de su partida); cargan y editan los planos el administrador, los editores y Oficina Técnica */
 const PLA_TABS=['pbib','pcar','p3d'];
+/* Módulos por rol (Equipo › Módulos, solo el administrador; docs/ia/interfaz.md «Módulos por rol», 25-11-2026, pedido del dueño para
+   pasar módulos nuevos a la obra apagados): meta/mods de Last Planner = {ava:[roles], cas:[roles], pla:[roles]}.
+   - El administrador siempre ve todo. Avance y Casco NACEN APAGADOS (sin dato = nadie más); Planos, sin dato, sigue como siempre.
+   - Se suma a lo que ya limita cada módulo (p. ej. el capataz nunca ve Avance ni Casco); no lo reemplaza.
+   - Es visibilidad de la interfaz, no seguridad: las reglas siguen dejando leer esos datos a los miembros de la obra.
+   - Se lee con modSub() también dentro de Casco (allí S.meta es cs_meta) y se guarda una copia en el equipo (lps.mods) para que
+     al recargar no se rebote a Last Planner antes de que llegue el dato. */
+const MOD_ROLES=['editor','campo','sc','capataz','area','veedor','lector'],MOD_DEF={ava:[],cas:[],pla:null};
+let MODCFG=null;try{MODCFG=JSON.parse(localStorage.getItem('lps.mods')||'null')}catch(e){MODCFG=null}
+/** roles que ven el módulo; null = todos los que ya podían */
+const modList=m=>{const c=MODCFG&&MODCFG[m];return Array.isArray(c)?c:(m in MOD_DEF?MOD_DEF[m]:null)};
+const modRole=m=>{if(!me)return false;if(me.role==='admin')return true;const l=modList(m);return l===null||l.includes(me.role)};
+function modSub(){let un=null;const open=()=>{un=fcolLp('meta').doc('mods').onSnapshot(d=>{/* sin conexión y sin copia local del documento: no es «apagado», todavía no se sabe (se conserva lo último conocido) */
+      if(d&&!d.exists&&d.metadata&&d.metadata.fromCache)return;
+      const v=d&&d.exists?(d.data()||{}):{};MODCFG={ava:v.ava,cas:v.cas,pla:v.pla};try{localStorage.setItem('lps.mods',JSON.stringify(MODCFG))}catch(e){}
+      /* dentro de Casco nada más lo revisa: si a este rol se le quitó Casco, vuelve a Last Planner */
+      if(CS()&&me&&!modOk('cas')){let ok=false;try{localStorage.removeItem('lps.ns');ok=localStorage.getItem('lps.ns')!=='cs'}catch(e){}
+        if(ok)setTimeout(()=>location.reload(),1500);/* un momento, para que termine de guardarse lo que estuviera en curso; si no se pudo cambiar de espacio no se recarga (sería un bucle) */return}
+      modselApply();if(ready)requestRender()},()=>{un=null})};open();unsubs.push(()=>{if(un)un();un=null})}
 const canPla=()=>canLps();
 /* Oficina Técnica (área de apoyo «OT» u «Oficina Técnica») también carga: maneja las revisiones (decidido con el dueño, oct 2026) */
 const isOTArea=()=>!!me&&me.role==='area'&&/^\s*(o\.?\s*t\.?|oficina\s+t[eé]cnica.*)\s*$/i.test(me.area||'');
@@ -88,14 +107,15 @@ const plaEd=()=>!!me&&(me.role==='admin'||me.role==='editor'||isOTArea());
 /* Módulo Avance (docs/ia/avance.md): avance físico de partidas de acabados por ambiente. Usa los pisos y ambientes de Last Planner,
    por eso no se ofrece dentro de Casco. Configuran (partidas, metrado) administrador y editores; registran además los de campo */
 const AVA_TABS=['areg','ares'];
-const canAva=()=>canLps()&&!CS()&&me.role!=='capataz';
+const canAva=()=>canLps()&&!CS()&&me.role!=='capataz'&&modRole('ava');
 const avaCfg=()=>!!me&&canAva()&&(me.role==='admin'||me.role==='editor');
 const avaReg=()=>!!me&&canAva()&&(me.role==='admin'||me.role==='editor'||me.role==='campo');
 /* módulos de la app: [id, nombre] de los que este usuario puede abrir (el selector aparece si hay más de uno) */
 /* Casco: lo ve quien ve Last Planner (menos el capataz) cuando la obra ya tiene Casco (cs_meta/project, CASCO_ON); el administrador siempre, para crearlo */
 let CASCO_ON=CS();
 const LPM=()=>CS()?'cas':'lps';
-const modOk=m=>m==='tar'?canTar():m==='pla'?canPla():m==='ava'?canAva():m==='cas'?canLps()&&me.role!=='capataz'&&(CASCO_ON||me.role==='admin'):canLps();
+/* Planos: el control por rol va aquí y no en canPla(), que también habilita las láminas dentro de Last Planner (▦ del Lookahead, Capas del Plan diario) */
+const modOk=m=>m==='tar'?canTar():m==='pla'?canPla()&&modRole('pla'):m==='ava'?canAva():m==='cas'?canLps()&&me.role!=='capataz'&&(CASCO_ON||me.role==='admin')&&modRole('cas'):canLps();
 const MODS=()=>[['lps','Last Planner'],['cas','Casco'],['tar','Tareo'],['pla','Planos'],['ava','Avance']].filter(x=>modOk(x[0]));
 const tabMod=t=>TAR_TABS.includes(t)?'tar':PLA_TABS.includes(t)?'pla':AVA_TABS.includes(t)?'ava':LPM();
 const modHome=m=>m==='tar'?'tdia':m==='pla'?'pbib':m==='ava'?'areg':'hoy';
@@ -558,7 +578,7 @@ async function startSession(u,fdb){
   me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;me.tpub=md.tpub===true;me.tasis=md.tasis===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','pull','mat','restr','plan','mapa','campo','cap','lib','ind','prod','planos','cfg','team'].includes(ht)){U.tab=ht;U.mod=LPM()}else if(TAR_TABS.includes(ht)){U.tab=ht;U.mod='tar'}}
   /* módulo: el de solo tareo siempre en Tareo; el resto vuelve al último que usó si puede verlo (render() lleva a la pestaña inicial) */
   if(TAR_ONLY())U.mod='tar';else if(!offLps()||!modOk(U.mod))U.mod=LPM();isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
-  db=fdb;hideLogin();if(!CS()&&canLps()&&me.role!=='capataz')fcolLp('cs_meta').doc('project').get().then(d=>{CASCO_ON=!!(d&&d.exists);modselApply()}).catch(()=>{});$('#blogout').hidden=false;$('#tabTeam').hidden=false;
+  db=fdb;hideLogin();if(!TAR_ONLY())modSub();if(!CS()&&canLps()&&me.role!=='capataz')fcolLp('cs_meta').doc('project').get().then(d=>{CASCO_ON=!!(d&&d.exists);modselApply()}).catch(()=>{});$('#blogout').hidden=false;$('#tabTeam').hidden=false;
   $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role)+(me.role==='campo'&&me.tasis?' y asistente de tareo':'');
   /* los roles de solo tareo no cargan nada de Last Planner (en el celular pesa y las reglas no se lo permiten) */
   if(!TAR_ONLY()){for(const[col,k]of Object.entries(COLS))subCol(col,k,true);
