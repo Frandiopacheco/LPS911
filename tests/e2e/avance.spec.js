@@ -57,7 +57,7 @@ test('Avance: el ingeniero registra el día; historial por celda, aviso al super
   const log = await page.evaluate(k => __dbGet('ava', k).log, SEM);
   expect(log).toHaveLength(1); expect(log[0]).toMatchObject({ d: HOY, r: 'r1', e: '_', q: 3, a: 0, by: 'campo@obra.pe' });
   const fila = page.locator('tr.avrw', { hasText: 'EO-1' }).first();
-  await expect(fila).toContainText('50 %'); await expect(fila.locator('.avtg')).toHaveCount(0);   // 2 del corte + 3 = 5 de 10
+  await expect(fila).toContainText('50 %'); await expect(fila.locator('.avdt')).toHaveCount(0);   // 2 del corte + 3 = 5 de 10
   // supera el metrado: cancelar no guarda; aceptar guarda y avisa
   let acepta = false; page.on('dialog', d => acepta ? d.accept() : d.dismiss());
   await escribir(page, `c|r1|_|${HOY}`, 20);
@@ -65,11 +65,11 @@ test('Avance: el ingeniero registra el día; historial por celda, aviso al super
   expect(await page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(3);
   acepta = true; await escribir(page, `c|r1|_|${HOY}`, 20);
   await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(20);
-  await expect(fila.locator('.avtg.w')).toContainText('supera el metrado');
+  await expect(fila.locator('.avdt.w[title*="upera el metrado"]')).toHaveCount(1);          // el aviso es un punto junto al %
   // 2,5 sillas: se guarda y se avisa, no se bloquea
   await escribir(page, `c|r2|_|${HOY}`, '2,5');
   await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r2._, SEM)).toBe(2.5);
-  await expect(page.locator('tr.avrw', { hasText: 'SO-3' }).locator('.avtg')).toContainText('fracción de unidad');
+  await expect(page.locator('tr.avrw', { hasText: 'SO-3' }).locator('.avdt[title*="racción de unidad"]')).toHaveCount(1);
   // historial y días futuros
   await celda(page, `c|r1|_|${HOY}`).click({ button: 'right' });
   await expect(page.locator('#pop .avhist')).toContainText('3 → 20');
@@ -89,6 +89,9 @@ test('Avance: interruptor Cantidad | %, etapas con peso y unidades mezcladas', a
   await expect(page.locator('.avgr thead')).not.toContainText('Corte inicial');
   await expect(madre).toContainText('55 %'); await expect(page.locator('tr.avet')).toHaveCount(3);
   await expect(madre.locator('.aved[data-k^="c|"]')).toHaveCount(0);    // la fila con etapas se llena por sus etapas
+  await expect(madre.locator('td.avro')).toHaveText(Array(await madre.locator('td.avro').count()).fill(''));   // en cantidad sus días van en blanco
+  await expect(page.locator('tr.avgho')).toHaveCount(0);                // sin «Editar filas» no hay líneas en blanco
+  await page.click('[data-av="edf"]'); await expect(page.locator('tr.avgho[data-g]')).toHaveCount(2); await page.click('[data-av="edf"]');
   await expect(page.locator('tr.avam')).toContainText('varias');        // m² y ml en el mismo ambiente: no se suma el metrado
   // en %: 50 sobre 20 ml son 10 ml; se guarda la cantidad
   await page.click('[data-avpct="1"]');
@@ -153,6 +156,8 @@ test('Avance: partida nueva, filas desde la tabla y etapas agregadas en la fila'
   const pid = await page.evaluate(() => { const p = Object.entries(__dbAll('avp'))[0]; return p[1].v === 2 && p[1].nom === 'Enchape' ? p[0] : ''; });
   expect(pid).not.toBe('');
   // se elige el ambiente y se escribe en su línea en blanco: Enter crea la fila y deja lista la siguiente
+  await expect(page.locator('.avemp')).toContainText('aún no tiene filas');
+  await page.click('.avemp [data-av="edf"]');                           // «Agregar filas a mano» enciende «Editar filas»
   await page.selectOption('[data-avadd="p1"]', 'A:a2');
   await expect(page.locator('tr.avgho[data-g="p1||a2"] .gd')).toBeFocused();
   await page.keyboard.type('Porcelanato 60x60'); await page.keyboard.press('Tab'); await page.keyboard.press('Control+A'); await page.keyboard.type('m²'); await page.keyboard.press('Tab'); await page.keyboard.type('85.5'); await page.keyboard.press('Enter');
@@ -209,7 +214,7 @@ test('Avance: «Traer ambientes» crea la misma fila en los ambientes del Lookah
   await expect.poll(() => page.evaluate(k => (__dbGet('ava', k).c['2026-10-04'] || {}).r2, SEM)).toEqual({ _: 1 });
   expect(await page.evaluate(() => __dbGet('ava', 'pm_p1_2026-10-05'))).toBeUndefined();
   // Ctrl+Z deshace el pegado entero (una acción) y luego el anterior; Ctrl+Y lo rehace; deshacer escribe, no borra
-  await page.locator('.avnote').click(); await page.keyboard.press('Control+z');
+  await page.locator('.avtot').click(); await page.keyboard.press('Control+z');
   await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-04'].r2._, SEM)).toBe(0);
   await page.keyboard.press('Control+z');
   await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'], SEM)).toEqual({ r1: { _: 0 }, r2: { _: 0 } });
