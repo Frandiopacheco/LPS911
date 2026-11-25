@@ -472,11 +472,43 @@ test('Avance: ida y vuelta con Excel (exportar, editar e importar con resumen; c
   noErrors(errors);
 });
 
+test('Avance: Excel · mover cantidad entre días no pierde avance; lo que cambió en la app después de la descarga no se pisa', async ({ page }) => {
+  const errors = await abrir(page);
+  // r2 (metrado 4) completa: 1 el 28 y 3 el 29
+  await escribir(page, 'c|r2|_|2026-09-28', 1); await escribir(page, 'c|r2|_|2026-09-29', 3);
+  const orig = await page.evaluate(() => { const D = avData(); return avXlAoa(avCur(), D.rows, D.ex, NOW()); });
+  const aoa = JSON.parse(JSON.stringify(orig)), col = d => aoa[1].indexOf(d), fila = id => aoa.find(r => r[0] === id);
+  fila('r2')[col('28/09/2026')] = 3; fila('r2')[col('29/09/2026')] = 1;       // el usuario invierte los días: el total sigue en 4
+  const plan = (a, pisar, o) => page.evaluate(([a, pisar, o]) => { const P = avXlPlan(a, pisar, o); return { cells: P.cells.map(c => [c.row.id, c.d, c.q]), rows: P.rowsP.map(x => x.patch), conf: P.conf, adj: P.adj, errs: P.errs }; }, [a, pisar, o]);
+  expect(await plan(aoa, false, orig)).toMatchObject({ cells: [['r2', '2026-09-28', 3], ['r2', '2026-09-29', 1]], adj: 0, conf: 0 });
+  // si además sube otro día, solo se recorta lo que sobra
+  fila('r2')[col('30/09/2026')] = 2;
+  expect(await plan(aoa, false, orig)).toMatchObject({ cells: [['r2', '2026-09-28', 3], ['r2', '2026-09-29', 1]], adj: 1 });
+  fila('r2')[col('30/09/2026')] = '';
+  // después de la descarga, en la app cambian el nombre y el metrado de r1 y una celda; el Excel no tocó nada de eso → no se pisa ni se cuenta
+  await page.evaluate(() => { const p = avCur(), r = avData().rows.find(x => x.id === 'r1'); avRowPatch(p, r, { desc: 'Nombre nuevo en la app', q: 15 }); });
+  await escribir(page, 'c|r1|_|2026-09-30', 5);
+  const p2 = await plan(aoa, false, orig); expect([p2.rows, p2.conf, p2.cells.length]).toEqual([[], 0, 2]);
+  // el Excel sí cambió esos mismos datos → conflicto: se conservan los de la app salvo que se marque pisarlos
+  fila('r1')[4] = 'Nombre del Excel'; fila('r1')[col('30/09/2026')] = 1;
+  const p3 = await plan(aoa, false, orig); expect([p3.rows, p3.conf, p3.cells.length]).toEqual([[], 2, 2]);
+  const p4 = await plan(aoa, true, orig); expect(p4.rows).toEqual([{ desc: 'Nombre del Excel' }]); expect(p4.cells).toContainEqual(['r1', '2026-09-30', 1]);
+  // encabezado con fecha imposible («mes 25»), día repetido y dos filas nuevas iguales: se avisa, no se crean datos raros
+  const b = JSON.parse(JSON.stringify(orig)); b[1].push('11/25/2026', '30/09/2026'); b.slice(2).forEach(r => r.push(1, 1));
+  const n = () => { const x = Array(b[1].length).fill(''); x[1] = 'Primer piso'; x[4] = 'Repetida'; x[7] = 1; return x; }; b.push(n(), n());
+  const x = Array(b[1].length).fill(''); x[4] = 'Sin piso'; x[7] = 1; b.push(x);
+  const r5 = await page.evaluate(a => { const P = avXlPlan(a, false, null); return { news: P.news.length, d: P.cells.map(c => c.d), errs: P.errs.join(' | ') }; }, b);
+  expect(r5.news).toBe(1); expect(r5.d.every(d => /^2026-(09|10)-\d\d$/.test(d))).toBe(true);
+  expect(r5.errs).toMatch(/11\/25\/2026.*no es una fecha/); expect(r5.errs).toMatch(/repetido/); expect(r5.errs).toMatch(/ya existe/); expect(r5.errs).toMatch(/no reconozco el piso/);
+  noErrors(errors);
+});
+
 test('Avance: desde el Excel, el ingeniero de campo solo cambia los días (no filas ni metrados)', async ({ page }) => {
   const errors = await abrir(page, { as: 'campo' }); await expect(page.locator('tr.avrw')).toHaveCount(3);
   const r = await page.evaluate(() => { const D = avData(), a = avXlAoa(avCur(), D.rows, D.ex, NOW()), c = a[1].indexOf('30/09/2026'), f = a.find(x => x[0] === 'r1');
     f[4] = 'Otro nombre'; f[7] = 50; f[c] = 2; const n = Array(a[1].length).fill(''); n[1] = 'Primer piso'; n[4] = 'Nueva'; n[7] = 1; a.push(n);
     const P = avXlPlan(a, false); return [P.rowsP.length, P.news.length, P.cells.map(x => [x.row.id, x.d, x.q]), P.noperm]; });
   expect(r).toEqual([0, 0, [['r1', '2026-09-30', 2]], 2]);
+  await expect(page.locator('[data-av="xexp"]')).toHaveCount(1); await expect(page.locator('[data-av="ximp"]')).toHaveCount(1); await expect(page.locator('[data-av="imp"]')).toHaveCount(0);
   noErrors(errors);
 });
