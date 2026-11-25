@@ -258,6 +258,10 @@ test('Avance: «Traer ambientes» crea la misma fila en los ambientes del Lookah
 test('Avance: fila de total, buscar, reordenar filas y rango seleccionado (copiar, vaciar, deshacer)', async ({ page }) => {
   const errors = await abrir(page);
   const total = page.locator('tr.avtt');
+  // el filtro de piso solo ofrece los pisos con filas en la partida; con «Editar filas», todos
+  await page.selectOption('#avp', 'pp'); await expect(page.locator('#avpiso option')).toHaveCount(2);
+  await page.click('[data-av="edf"]'); await expect(page.locator('#avpiso option')).toHaveCount(3); await page.click('[data-av="edf"]');
+  await page.selectOption('#avp', 'pm'); await expect(page.locator('#avpiso option')).toHaveCount(3);
   await expect(total).toContainText('Total de la partida'); await expect(total).toContainText('20');     // 10 + 4 + 6 und
   // nombres largos: completos al pasar el mouse y, con «Ajustar texto», en varias líneas (se recuerda)
   await expect(page.locator('tr.avrw .avnm').first()).toHaveAttribute('title', 'EO-1 · Escritorio');

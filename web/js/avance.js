@@ -89,7 +89,7 @@ function renderAReg(main){ensureAv();const p=avCur();avSubData(p?p.id:'');
        Se busca en la descripción y en los nombres del ambiente, del sector y del piso */
     const rows=qw.length?rows0.filter(r=>{const a=r.amb?avAmb(r.amb):null,s=r.sec?avSec(r.sec):null,pi=S.pis.get(r.piso)||ARCH.pis.get(r.piso),tx=mnk(r.desc+' '+(a?a.name||'':r.an||'')+' '+(s?s.name||'':'')+' '+(pi?pi.name||'':''));return qw.some(W=>W.every(w=>tx.includes(w)))}):rows0;AV.nf=rows0.length-rows.length;
     h+=`<div class="avbar">${rows0.length?`<input class="tin avq" id="avq" data-fk="avq" type="search" placeholder="Buscar ambiente o fila (varios: separa con coma)" value="${esc(AV.q||'')}" aria-label="Buscar">${qw.length?`<button class="ib" data-av="qclr" title="Quitar la búsqueda">✕ Quitar búsqueda</button>`:''}`:''}<select class="tin" id="avp" aria-label="Partida">${parts.map(x=>`<option value="${esc(x.id)}"${x.id===p.id?' selected':''}>${esc(x.nom)}</option>`).join('')}</select>
-      <select class="tin" id="avpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisoOptsZG(ps,U.piso)}</select>
+      <select class="tin" id="avpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisoOptsZG(avPisoOpts(ps,rows0),U.piso)}</select>
       <span class="seg" role="group" aria-label="Cómo se ven y se tipean las celdas"><button type="button" data-avpct="0" class="${pct?'':'on'}">Cantidad</button><button type="button" data-avpct="1" class="${pct?'on':''}">%</button></span>
       <span class="avtot">${rows.length?`Avance${qw.length?' de lo buscado':''}: <b>${avPc(avGrpPct(D.ex,rows))}</b>`:''}</span><span class="avsp"></span>
       ${AV.cel?'':`<button class="ib${U.avWrap?' avon':''}" data-av="wrap" aria-pressed="${!!U.avWrap}" title="Muestra los nombres largos completos, en varias líneas (como «Ajustar texto» de Excel)">Ajustar texto</button><button class="ib" data-av="hoy" title="Lleva la planilla al día de hoy">Hoy</button>${rows.some(avHasEt)?`<button class="ib" data-av="ets" title="Oculta o muestra las etapas de todas las filas (cada fila también tiene su flecha)">${rows.filter(avHasEt).every(r=>AV.C.has('e:'+r.id))?'Mostrar etapas':'Plegar etapas'}</button>`:''}<button class="ib" data-av="wks" title="Despliega todas las semanas, o deja solo la actual y la anterior">${AV.wkAll?'Plegar semanas':'Todas las semanas'}</button>`}
@@ -109,6 +109,8 @@ function renderAReg(main){ensureAv();const p=avCur();avSubData(p?p.id:'');
   if(fk){const el=main.querySelector(`.aved[data-k="${CSS.escape(fk)}"]`);if(el)el.focus({preventScroll:true})}
   else if(AV.gf){const tr=[...main.querySelectorAll('tr.avgho[data-g]')].find(x=>x.dataset.g===AV.gf.g),el=tr&&tr.querySelector('.'+AV.gf.c);AV.gf=null;if(el)el.focus()}}
 
+/** pisos del filtro: solo los que tienen filas en la partida (más el elegido); con «Editar filas» o sin filas, todos, para poder agregar */
+function avPisoOpts(ps,rows){if(AV.edf||!rows.length)return ps;const has=new Set(rows.map(r=>r.piso));return ps.filter(x=>has.has(x.id)||x.id===U.piso)}
 function avVisPisos(rows,xa){const has=new Set(rows.map(r=>r.piso).concat(xa.map(x=>x.piso)));const all=[...pisos(),...ARCH.pis.values()];return all.filter(x=>(has.has(x.id)||avaCfg()&&S.pis.has(x.id))&&(!U.piso||x.id===U.piso))}
 const avFrac=(ex,r)=>String(r.und).trim().toLowerCase()==='und'&&avEtOf(r).some(e=>Object.values((ex[r.id]||{})[e.id]||{}).some(q=>Math.abs(q-Math.round(q))>1e-6));
 const avOver=(ex,r)=>avEtOf(r).some(e=>avAcc(ex,r.id,e.id)>r.q+1e-9);
