@@ -52,3 +52,13 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 ## Versión guardada y sesión de Netlify (10/10/2026)
 - `sw.js` sirve la página con «lo guardado primero» (`staleWhileRevalidate`). En la copia de prueba (protegida por Netlify) una sesión vencida hacía que el servidor respondiera 401/redirección y la app seguía mostrando la versión vieja en silencio, sin aviso de «Actualizar».
 - Ahora, si la página del servidor no llega bien, el service worker avisa (`postMessage {t:'nav-bad'}`) y la app muestra «Tu sesión de Netlify… venció» con **Volver a entrar** (`?fresh=1`: esa dirección no pasa por el service worker, así aparece el login de Netlify). Abrir `/sw.js` ya no devuelve la app.
+
+## Módulos por rol (25-11-2026, decidido con el dueño)
+
+El dueño quiere pasar módulos nuevos a la obra **apagados** y abrirlos a quien él decida. En esta rama (producción) aplica a **Avance** y **Planos**; Casco sigue solo en `main` hasta que el dueño lo termine.
+- **Dónde:** Equipo › **Módulos** (solo el administrador): módulos en filas (Avance, Planos) y roles en columnas (`MOD_ROLES`). Last Planner y Tareo no entran: siguen como siempre.
+- **Dato:** `meta/mods` = `{ava:[roles], pla:[roles], by, t}`. Solo el administrador lo escribe (regla `id != 'mods'` en la rama del editor de `match /meta/{id}`).
+- **Valores por defecto (`MOD_DEF`):** Avance **nace apagado** (sin dato = solo el administrador); Planos, sin dato, como siempre. Mientras no exista el documento nada cambia para Last Planner, Tareo ni Planos.
+- **Código (`base.js`):** `modList(m)`, `modRole(m)` (admin siempre), usado en `canAva()` y en `modOk('pla')`. **No va dentro de `canPla()`**, que también habilita las láminas dentro de Last Planner (▦ del Lookahead, Capas del Plan diario). `modSub()` lo lee (`onSnapshot` de `meta/mods`) con copia en `localStorage` `lps.mods`; al perder Avance cierra sus escuchas (`avStop`).
+- **Reglas:** `modOn(m)` = administrador, o el rol está en `meta/mods[m]` (un `get`; sin documento = apagado; `planner` cuenta como `lector`). Se exige en `avp`/`avm`/`ava` para leer y escribir. Planos no se bloquea en reglas.
+- Pruebas: `tests/e2e/modulos-rol.spec.js`, `tests/e2e/avance.spec.js` y en `tests/rules` «avance: …» y «módulos por rol: Avance apagado…».

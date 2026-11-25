@@ -62,6 +62,10 @@ Secretos de GitHub: `FIREBASE_SA_PRUEBAS` y `FIREBASE_SA_PRODUCCION` (instalan r
 
 En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontratista en modo propuesta), `ENG()` (ingeniero en Campo), `SCK()` (subcontratista), `AREA()` (área de apoyo), `isCal()`, `canNP()` (registra no programado: campo/editor/admin, Calidad y veedor) y `VEED()` (lo registra pero no verifica el avance).
 
+**Módulo Avance** (selector de módulos de la barra superior; `docs/ia/avance.md`): avance físico de partidas de acabados por ambiente, pestañas `areg` Registro y `ares` Resumen; archivos `web/js/avance*.js` (`avance-calc`, `avance`, `avance-imp`, `avance-res`, `avance-xls`, `avance-mat`), colecciones `avp`, `avm`, `ava`.
+
+**Módulos por rol** (Equipo › Módulos, solo el administrador): qué roles ven Avance y Planos (`meta/mods`, `modRole()` en la app y `modOn()` en las reglas; Avance nace apagado y bloqueado también en reglas; en Planos es solo visibilidad). Detalle en `docs/ia/interfaz.md` «Módulos por rol».
+
 **Ver como** (solo copia de prueba, `LPS_ENV==='pruebas'`): el admin simula otro rol; se guarda en `sessionStorage` `lps.va` y lo aplica `vaApply()`. Solo cambia la interfaz: las escrituras van con el usuario real y las reglas reales. **📱 Vista celular** (`phonePreview`) abre la app en un `iframe` con medidas de teléfono; dentro del marco `html.in-frame` oculta esos controles.
 
 ## Guía por tema (`docs/ia/`): lee solo la que toca tu tarea
@@ -84,6 +88,7 @@ Este archivo tiene lo esencial. El detalle de cada módulo está aparte para no 
 | `docs/ia/tareo.md` | Módulo Tareo (personal obrero): selector de módulo, roles `tcap`/`tasis`/`tcos`, máster, partidas de control, jornada. |
 | `docs/ia/pull.md` | Sesión pull: tablero de pósits, hitos de ingreso/entrega, sincronización laptop/tablet, aplicar al lookahead. |
 | `docs/ia/productividad.md` | Pestaña Productividad: partidas críticas de los SC (`pcrit`, `pav`), ritmo y proyección; plan del IP de casa. |
+| `docs/ia/avance.md` | Módulo Avance: planilla única por partida (filas por piso › sector › ambiente con unidad y metrado, etapas por fila, registro diario en cantidad o %), Excel de ida y vuelta, material en obra; colecciones `avp`, `avm`, `ava`. |
 | `docs/ia/planos.md` | Módulo Planos (biblioteca de planos): selector de 3 módulos, `plb`, Firebase Storage (mosaicos), carga masiva, visor, medir y vínculos entre láminas. |
 | `docs/ia/avisos.md` | Avisos de detenciones al celular y la computadora (push): `avisos.js`, `sw.js`, `avisoDetenido`. |
 | `docs/ia/pendientes.md` | Pendientes conocidos de las auditorías: revísalo antes de una auditoría nueva. |

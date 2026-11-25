@@ -39,6 +39,8 @@ window.__pfOpen = true;
     S('members', 'tcos@obra.pe', { role: 'tcos', name: 'Cosme Costos' });
     S('members', 'jefe@obra.pe', { role: 'editor', name: 'Jaime Jefe', tpub: true });
     S('meta', 'project', { name: 'Obra de prueba', code: 'OP', refWeek: 58, refDate: '2026-09-28' });
+    /* módulos por rol: en la obra de prueba Avance está encendido para todos (en una obra real nace apagado) */
+    S('meta', 'mods', { ava: ['editor', 'campo', 'sc', 'area', 'veedor', 'lector'] });
     /* ventana de propuestas de los SC habilitada (sin ella están cerradas hasta que el ingeniero las habilite) */
     S('meta', 'propwin', { closeAt: Date.parse('2027-01-01T00:00:00-05:00') });
     S('pisos', 'p1', { code: 'P1', name: 'Primer piso', order: 1, resp: ['editor@obra.pe'] });

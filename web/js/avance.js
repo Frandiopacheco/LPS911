@@ -1,0 +1,456 @@
+"use strict";
+/* LPS 911 · Módulo Avance (docs/ia/avance.md): avance físico de partidas por ambiente. Módulo aparte (U.mod==='ava'); no toca el
+   lookahead, el plan diario ni el PPC; usa los pisos, sectores y ambientes de Last Planner por su id.
+   PLANILLA ÚNICA (25-11-2026, rediseño decidido con el dueño sobre su Excel de metrados): un solo formato para cualquier partida.
+   - avp/{id}: partida {v:2, nom, d0, d1, corte, ord, eq, by, n, t, arch?}. Solo nombre y fechas: sin ítems, plantillas ni «Llegó».
+     Las partidas del primer formato (sin v:2) eran de prueba: quedan en la base, pero ya no se muestran.
+   - avm/{partida}_{piso}: filas {p, piso, r:{filaId:{amb, sec, desc, und, q, et:[{id,n,w}]|null, o, an, arch?}}}.
+     La fila cuelga de un ambiente (`amb`), de un sector (`sec`, sin amb) o de todo el piso (ninguno). Unidad por fila.
+     `et` = etapas de esa fila, definidas en la misma planilla; la primera lleva el id '_' (el de la fila sin etapas), así lo ya
+     registrado pasa a ella sin mover datos. Los ids de etapa no se reusan nunca.
+   - ava/{partida}_{piso}_{lunes|ini}: {p, piso, w, c:{fecha|'ini':{filaId:{etapaId|'_':cantidad}}}, log:[{d,r,e,q,a,by,n,t}]}.
+     Se guarda siempre la CANTIDAD; el interruptor Cantidad | % solo cambia cómo se ve y se tipea. Cada celda se escribe sola
+     (set con merge + arrayUnion): dos personas en celdas distintas no se pisan. `log` es el historial por celda.
+   El cálculo está en avance-calc.js (funciones puras). */
+const AVP=new Map(),AVM=new Map(),AVD=new Map();let avUnP=null,avUnD=[],avSubP='',avOk=false,avReg1=false;
+const AV={cel:null,day:'',C:new Set(),wkO:null,key:'',grp:null,v:0,cv:-1,rows:null,ex:null,pend:false,dok:0,xa:[],gf:null};
+const avR4=n=>Math.round((+n||0)*1e4)/1e4;
+const avF=n=>Number(+n||0).toLocaleString('es-PE',{maximumFractionDigits:2});
+const avE=n=>{const v=Math.round((+n||0)*100)/100;return v?String(v):''};/* texto de una celda editable: sin separador de miles */
+const avE1=n=>{const v=Math.round((+n||0)*10)/10;return v?String(v):''};
+const avPc=v=>Math.round((+v||0)*100)+' %';
+const avBar=v=>`<span class="avpb"><i style="width:${Math.max(0,Math.min(100,v*100)).toFixed(0)}%"></i></span>${avPc(v)}`;
+const avWho=()=>({by:me.email||'',n:me.name||'',t:NOW()});
+const avNid=p=>p+NOW().toString(36)+Math.random().toString(36).slice(2,6);
+Object.assign(BNI,{areg:SVG('<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M9 9.5v10M14.5 9.5v10"/>'),ares:SVG('<path d="M4 19.5h16"/><path d="M6.5 16V11M11 16V6.5M15.5 16v-7M20 16v-3"/>')});
+
+/* ---------- datos ---------- */
+function ensureAv(){if(!db||avUnP||!me||!canAva())return;
+  const open=()=>{avUnP=fcol('avp').onSnapshot(sn=>{snapOk('avp');AVP.clear();sn.docs.forEach(d=>AVP.set(d.id,{...d.data(),id:d.id}));avOk=true;if(U.mod==='ava')snapRender(sn)},
+    err=>{avUnP=null;snapFail('avp',err,()=>{if(me&&canAva()&&!avUnP)open()})})};
+  open();if(!avReg1){avReg1=true;unsubs.push(()=>{avReg1=false;avStop()})}}
+function avStop(){if(avUnP)try{avUnP()}catch(e){}avUnP=null;avUnD.forEach(f=>{try{f()}catch(e){}});avUnD=[];avSubP='';avOk=false;AVP.clear();AVM.clear();AVD.clear();AV.v++;
+  /* al cerrar sesión no queda nada que el siguiente usuario pueda deshacer a su nombre */
+  AVU.u=[];AVU.r=[];AVU.g=null;AV.key='';AV.q='';if(typeof ARS!=='undefined'){ARS.ok=false;ARS.by=new Map();ARS.err='';ARS.t=0}}
+/** filas y avance de UNA partida (la elegida): se reabre al cambiar de partida */
+function avSubData(pid){if(avSubP===pid)return;avUnD.forEach(f=>{try{f()}catch(e){}});avUnD=[];AVM.clear();AVD.clear();AV.v++;AV.dok=0;avSubP=pid;if(!pid||!db)return;
+  const mk=(col,M,bit)=>{const open=()=>{if(avSubP!==pid||!canAva())return;/* sin el módulo (Equipo › Módulos) no se reintenta: las reglas lo niegan */const un=fcol(col).where('p','==',pid).onSnapshot(sn=>{if(avSubP!==pid)return;snapOk(col+'_p');M.clear();sn.docs.forEach(d=>M.set(d.id,{...d.data(),id:d.id}));AV.v++;AV.dok|=bit;if(U.mod==='ava')snapRender(sn)},
+    err=>{snapFail(col+'_p',err,open)});avUnD.push(un)};open()};
+  mk('avm',AVM,1);mk('ava',AVD,2)}
+const avReady=p=>!!p&&avSubP===p.id&&AV.dok===3;
+const avParts=()=>[...AVP.values()].filter(p=>!p.arch&&p.v===2).sort((a,b)=>(a.ord||0)-(b.ord||0)||String(a.nom).localeCompare(String(b.nom),'es'));
+function avCur(){let p=AVP.get(U.avP);if(!p||p.arch||p.v!==2){p=avParts()[0]||null;if(avOk)U.avP=p?p.id:''}return p}
+const avAmb=id=>S.amb.get(id)||ARCH.amb.get(id)||null;
+const avSec=id=>S.sec.get(id)||ARCH.sec.get(id)||null;
+/** filas y ejecutado de la partida en curso, armados una vez por cambio de datos */
+function avData(){if(AV.cv===AV.v&&AV.rows)return AV;const B=avBuild(AVM,AVD);AV.rows=B.rows;AV.ex=B.ex;AV.cv=AV.v;return AV}
+/** de los documentos avm y ava (Map o lista) → filas y ejecutado; lo usan la planilla y el Resumen */
+function avBuild(MM,DD){const rows=[],ex={};
+  MM.forEach(m=>{const R=m.r||{};for(const id in R){const r=R[id];if(!r||r.arch)continue;const a=r.amb?avAmb(r.amb):null;
+    rows.push({id,piso:m.piso,amb:r.amb||'',sec:r.amb?(a&&a.sectorId)||'':r.sec||'',desc:r.desc||'',und:r.und||'und',q:+r.q||0,et:Array.isArray(r.et)&&r.et.length?r.et:null,o:+r.o||0,an:r.an||''})}});
+  rows.sort((a,b)=>a.o-b.o||String(a.id).localeCompare(String(b.id)));
+  DD.forEach(d=>{const c=d.c||{};for(const f in c){const R=c[f]||{};for(const rid in R){const o=R[rid]||{};for(const e in o)((ex[rid]=ex[rid]||{})[e]=ex[rid][e]||{})[f]=+o[e]||0}}});
+  return{rows,ex}}
+const avRowOf=id=>avData().rows.find(r=>r.id===id);
+/* lunes del calendario (no el de la configuración del proyecto: si cambiara, un mismo día quedaría en dos documentos) */
+const avMon=d=>addD(d,-((pd(d).getUTCDay()+6)%7));
+/** semanas (lunes a domingo) del rango de la partida */
+function avWeeks(p){const t=todayIso();const d0=p.d0||addD(t,-7),d1=p.d1&&p.d1>=d0?p.d1:addD(d0,41);const W=[];for(let m=avMon(d0);m<=d1&&W.length<104;m=addD(m,7))W.push({m,n:weekOf(m),days:[0,1,2,3,4,5,6].map(i=>addD(m,i))});return{W,d0,d1,t}}
+const avLoc=r=>{const a=r.amb?avAmb(r.amb):null,s=r.sec?avSec(r.sec):null;return a?(a.name||a.code||'Ambiente'):r.amb?(r.an?r.an+' (ya no existe)':'Ambiente eliminado'):s?(s.name||s.code||'Sector')+' (todo el sector)':'Todo el piso'};
+/** árbol de un piso: filas sueltas del piso y sus sectores, cada uno con sus filas sueltas y sus ambientes. `xa` = lugares pedidos
+    con «＋ agregar…» que aún no tienen filas (para que aparezca su línea en blanco) */
+function avTree(pid,rows,xa){const rp=rows.filter(r=>r.piso===pid),X=xa.filter(x=>x.piso===pid),secs=new Map();
+  const sec=id=>{let s=secs.get(id);if(!s){const o=id?avSec(id):null;s={id,nom:o?(o.name||o.code||'Sector'):'Sin sector',ord:o?(o.order||0):9e9,direct:[],gho:false,ambs:new Map()};secs.set(id,s)}return s};
+  const amb=(s,id,an)=>{let a=s.ambs.get(id);if(!a){const o=avAmb(id);a={id,nom:o?(o.name||o.code||'Ambiente'):(an?an+' (ya no existe)':'Ambiente eliminado'),ord:o?(o.order||0):9e9,rows:[]};s.ambs.set(id,a)}return a};
+  const T={direct:[],gho:false,secs:[]};
+  rp.forEach(r=>{if(r.amb)amb(sec(r.sec),r.amb,r.an).rows.push(r);else if(r.sec)sec(r.sec).direct.push(r);else T.direct.push(r)});
+  X.forEach(x=>{if(x.amb){const a=avAmb(x.amb);amb(sec((a&&a.sectorId)||''),x.amb,'')}else if(x.sec)sec(x.sec).gho=true;else T.gho=true});
+  T.secs=[...secs.values()].sort((a,b)=>a.ord-b.ord||a.nom.localeCompare(b.nom,'es',{numeric:true}));
+  T.secs.forEach(s=>{s.ambs=[...s.ambs.values()].sort((a,b)=>a.ord-b.ord||a.nom.localeCompare(b.nom,'es',{numeric:true}));s.rows=s.direct.concat(...s.ambs.map(a=>a.rows))});
+  /* con un solo sector y sin filas a nivel de sector, el nivel «sector» no aporta: los ambientes van directo bajo el piso */
+  T.showSec=T.secs.length>1||T.secs.some(s=>s.direct.length||s.gho);T.rows=rp;return T}
+
+/* ---------- pantalla ---------- */
+function renderAReg(main){ensureAv();const p=avCur();avSubData(p?p.id:'');
+  /* si alguien está escribiendo en una celda y llega un dato, no se redibuja encima: se redibuja al salir de la celda */
+  const ae=document.activeElement,inm=ae&&ae.classList&&main.contains(ae),ed=inm&&ae.classList.contains('aved'),gh=inm&&ae.classList.contains('avgh');
+  if(ed&&ae.textContent.trim()!==(ae.dataset.o||'')){AV.pend=true;return}
+  if(gh&&[...ae.parentElement.querySelectorAll('.gd,.gq')].some(c=>c.textContent.trim())){AV.pend=true;return}
+  if(inm&&ae.matches('input[data-avin]')&&ae.value!==ae.defaultValue){AV.pend=true;return}
+  const fk=ed?ae.dataset.k:null;if(gh&&!AV.gf)AV.gf={g:ae.parentElement.dataset.g,c:ae.classList.contains('gq')?'gq':ae.classList.contains('gu')?'gu':'gd'};
+  const box=main.querySelector('.avbox'),st=box?[box.scrollTop,box.scrollLeft]:null;
+  AV.cel=isMob();/* el celular se detecta solo: no hay botón (decisión del dueño) */const cfg=avaCfg(),parts=avParts(),pct=!!U.avPct;
+  let h=`<div class="scroll"><div class="avpage">`;
+  if(!avOk)h+=`<div class="empty">Cargando partidas…</div>`;
+  else if(!p)h+=`<div class="empty"><b>Todavía no hay partidas.</b><br>${cfg?'Crea la primera: solo necesita un nombre y sus fechas.<br><br><button class="ib pri" data-av="new">＋ Partida</button>':'El administrador o un ingeniero de producción las crea.'}</div>`;
+  else{const D=avData();if(AV.key!==p.id){AV.key=p.id;AV.wkAll=false;AVU.u=[];AVU.r=[];AV.C=new Set();AV.cinit=false;AV.wkO=null;AV.grp=null;AV.xa=[];AV.mf=''}
+    const ps=pisos(),rows0=D.rows.filter(r=>S.pis.has(r.piso)||ARCH.pis.has(r.piso)),qw=String(AV.q||'').split(',').map(x=>mnk(x).split(' ').filter(Boolean)).filter(x=>x.length);
+    /* buscar, como en el Lookahead: varios términos separados por coma (basta uno); dentro de un término, todas sus palabras.
+       Se busca en la descripción y en los nombres del ambiente, del sector y del piso */
+    let rows=qw.length?rows0.filter(r=>{const a=r.amb?avAmb(r.amb):null,s=r.sec?avSec(r.sec):null,pi=S.pis.get(r.piso)||ARCH.pis.get(r.piso),tx=mnk(r.desc+' '+(a?a.name||'':r.an||'')+' '+(s?s.name||'':'')+' '+(pi?pi.name||'':''));return qw.some(W=>W.every(w=>tx.includes(w)))}):rows0;
+    /* material: «qué puedo instalar» = filas por terminar con material (aunque sea para una parte); «sin material» = las frenadas */
+    const MA=avMatOf(p,D);if(!MA)AV.mf='';if(AV.mf)rows=rows.filter(r=>{const a=MA.R.get(r.id);return!!a&&(AV.mf==='con'?a.st==='ok'||a.st==='par':a.st==='sin')});AV.nf=rows0.length-rows.length;
+    h+=`<div class="avbar">${rows0.length?`<input class="tin avq" id="avq" data-fk="avq" type="search" placeholder="Buscar ambiente o fila (varios: separa con coma)" value="${esc(AV.q||'')}" aria-label="Buscar">${qw.length?`<button class="ib" data-av="qclr" title="Quitar la búsqueda">✕ Quitar búsqueda</button>`:''}`:''}<select class="tin" id="avp" aria-label="Partida">${parts.map(x=>`<option value="${esc(x.id)}"${x.id===p.id?' selected':''}>${esc(x.nom)}</option>`).join('')}</select>
+      ${MA?`<select class="tin" id="avmf" aria-label="Filtrar por material" title="Según lo que hay en obra (botón «Material»)"><option value="">Material: todo</option><option value="con"${AV.mf==='con'?' selected':''}>Con material (se puede instalar)</option><option value="sin"${AV.mf==='sin'?' selected':''}>Sin material</option></select>`:''}
+      <select class="tin" id="avpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisoOptsZG(avPisoOpts(ps,rows0),U.piso)}</select>
+      <span class="seg" role="group" aria-label="Cómo se ven y se tipean las celdas"><button type="button" data-avpct="0" class="${pct?'':'on'}">Cantidad</button><button type="button" data-avpct="1" class="${pct?'on':''}">%</button></span>
+      <span class="avtot">${rows.length?`Avance${qw.length?' de lo buscado':''}: <b>${avPc(avGrpPct(D.ex,rows))}</b>`:''}</span><span class="avsp"></span>
+      ${AV.cel?'':`<button class="ib${U.avWrap?' avon':''}" data-av="wrap" aria-pressed="${!!U.avWrap}" title="Muestra los nombres largos completos, en varias líneas (como «Ajustar texto» de Excel)">Ajustar texto</button><button class="ib" data-av="hoy" title="Lleva la planilla al día de hoy">Hoy</button>${rows.some(avHasEt)?`<button class="ib" data-av="ets" title="Oculta o muestra las etapas de todas las filas (cada fila también tiene su flecha)">${rows.filter(avHasEt).every(r=>AV.C.has('e:'+r.id))?'Mostrar etapas':'Plegar etapas'}</button>`:''}<button class="ib" data-av="wks" title="Despliega todas las semanas, o deja solo la actual y la anterior">${AV.wkAll?'Plegar semanas':'Todas las semanas'}</button>`}
+      ${avaReg()&&!AV.cel?`<button class="ib" data-av="undo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"${AVU.u.length?'':' disabled'}>↶</button><button class="ib" data-av="redo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"${AVU.r.length?'':' disabled'}>↷</button>`:''}${avReady(p)&&rows0.length&&(cfg||p.mat&&Object.keys(p.mat).length)?(n=>`<button class="ib" data-av="mat" title="Cuánto material ha llegado a obra de cada tipo de fila">Material${n?` <span class="avtg b">${n} sin saldo</span>`:''}</button>`)(avMatSinN(p,D)):''}${cfg?`${avReady(p)&&!AV.cel?`<button class="ib${AV.edf?' avon':''}" data-av="edf" aria-pressed="${!!AV.edf}" title="Muestra una línea en blanco en cada ambiente para agregar filas">Editar filas</button>`:''}${avReady(p)?'<button class="ib" data-av="amb" title="Crea la misma fila en muchos ambientes del Lookahead a la vez">Traer ambientes…</button><button class="ib" data-av="xexp" title="Descarga la planilla de esta partida en Excel: la editas y la vuelves a importar">Exportar</button><button class="ib" data-av="imp">Importar…</button>':''}<button class="ib" data-av="pmenu" aria-haspopup="menu">Partida ▾</button>`:''}${!cfg&&avaReg()&&avReady(p)&&!AV.cel?'<button class="ib" data-av="xexp" title="Descarga la planilla de esta partida en Excel: llenas los días y la vuelves a importar">Exportar</button><button class="ib" data-av="ximp" title="Carga la planilla descargada con «Exportar», con los días que llenaste">Importar Excel…</button>':''}</div>`;
+    if(!avReady(p))h+=`<div class="empty">Cargando la planilla…</div>`;
+    else if(qw.length&&!rows.length&&!AV.mf)h+=`<div class="empty"><b>Ninguna fila coincide con «${esc(AV.q)}».</b><br><button class="ib" data-av="qclr">Quitar la búsqueda</button></div>`;
+    else if(AV.mf&&!rows.length)h+=`<div class="empty"><b>${AV.mf==='con'?'No hay filas por instalar con material en obra':'Ninguna fila está frenada por falta de material'}${qw.length?' en lo buscado':''}.</b><br>Cambia el filtro «Material» para ver las demás.</div>`;
+    else if(!rows.length&&!AV.cel&&!(cfg&&AV.edf))h+=`<div class="empty avemp"><b>Esta partida aún no tiene filas.</b>${cfg?`<span>Empieza por una de estas:</span><div class="avact"><button class="ib pri" data-av="amb">Traer ambientes…</button><button class="ib" data-av="imp">Importar desde Excel…</button><button class="ib" data-av="edf">Agregar filas a mano</button></div><small>«Traer ambientes» crea la misma fila en los ambientes del Lookahead que elijas.</small>`:'<span>El administrador o un ingeniero de producción las carga.</span>'}</div>`;
+    else h+=AV.cel?avCelHtml(p,D,rows):avGridHtml(p,D,rows)}
+  AV.sa=AV.sb=null;main.innerHTML=h+'</div></div>';
+  main.onclick=avClick;main.onchange=avChange;main.oninput=e=>{if(U.tab==='areg'&&e.target.id==='avq'){AV.q=e.target.value;clearTimeout(AV.qt);AV.qt=setTimeout(requestRender,180)}};/* espera breve al teclear, como el Lookahead */main.onkeydown=avKey;main.oncontextmenu=avCtx;
+  /* focusin/focusout no tienen propiedad on…: se escuchan una sola vez por <main> (los manejadores revisan U.tab) */
+  if(!main.__avf){main.__avf=true;main.addEventListener('focusout',avBlur);main.addEventListener('focusin',avFocus);main.addEventListener('paste',avPaste);main.addEventListener('mousedown',e=>{const c=U.tab==='areg'&&e.target.closest?e.target.closest('.aved'):null,ae=document.activeElement;
+    if(c&&e.shiftKey&&ae&&ae.classList&&ae.classList.contains('aved')&&ae!==c){e.preventDefault();AV.sa=ae.dataset.k;AV.sb=c.dataset.k;avSelPaint()}else if(AV.sa)avSelClear()});main.addEventListener('dblclick',e=>{if(U.tab==='areg'&&e.target.closest&&e.target.closest('.aved'))AV.edit=true})}
+  const b2=main.querySelector('.avbox');if(b2&&st){b2.scrollTop=st[0];b2.scrollLeft=st[1]}
+  if(b2&&(!st||AV.goHoy)){AV.goHoy=false;const th=b2.querySelector('th.hoy'),fx=b2.querySelector('th.avskl');/* al entrar (y con «Hoy»): hoy queda a la vista, con tres días antes */
+    if(th)b2.scrollLeft=Math.max(0,th.offsetLeft-(fx?fx.offsetLeft+fx.offsetWidth:0)-th.offsetWidth*3)}
+  if(fk){const el=main.querySelector(`.aved[data-k="${CSS.escape(fk)}"]`);if(el)el.focus({preventScroll:true})}
+  else if(AV.gf){const tr=[...main.querySelectorAll('tr.avgho[data-g]')].find(x=>x.dataset.g===AV.gf.g),el=tr&&tr.querySelector('.'+AV.gf.c);AV.gf=null;if(el)el.focus()}}
+
+/** pisos del filtro: solo los que tienen filas en la partida (más el elegido); con «Editar filas» o sin filas, todos, para poder agregar */
+function avPisoOpts(ps,rows){if(AV.edf||!rows.length)return ps;const has=new Set(rows.map(r=>r.piso));return ps.filter(x=>has.has(x.id)||x.id===U.piso)}
+function avVisPisos(rows,xa){const has=new Set(rows.map(r=>r.piso).concat(xa.map(x=>x.piso)));const all=[...pisos(),...ARCH.pis.values()];return all.filter(x=>(has.has(x.id)||avaCfg()&&S.pis.has(x.id))&&(!U.piso||x.id===U.piso))}
+const avFrac=(ex,r)=>String(r.und).trim().toLowerCase()==='und'&&avEtOf(r).some(e=>Object.values((ex[r.id]||{})[e.id]||{}).some(q=>Math.abs(q-Math.round(q))>1e-6));
+const avOver=(ex,r)=>avEtOf(r).some(e=>avAcc(ex,r.id,e.id)>r.q+1e-9);
+function avGridHtml(p,D,rows){const ex=D.ex,C=avWeeks(p),reg=avaReg(),cfg=avaCfg(),pct=!!U.avPct,edf=cfg&&!!AV.edf;
+  if(!AV.wkO){AV.wkO=new Set([avMon(C.t),addD(avMon(C.t),-7)]);if(!C.W.some(w=>AV.wkO.has(w.m))&&C.W[0])AV.wkO.add(C.W[0].m)}
+  const vp=avVisPisos(rows,AV.xa);if(!AV.cinit){AV.cinit=true;if(rows.length>80)vp.slice(1).forEach(x=>AV.C.add(x.id))}/* con muchas filas solo se abre el primer piso */
+  const wo=w=>AV.wkO.has(w.m),dcls=d=>d===C.t?' hoy':nwReason(d)?' nw':'',can=d=>reg&&(d===AV_INI||(d>=C.d0&&d<=C.d1));
+  /* corte inicial: ya no se usa (el acumulado previo se pone el día anterior al inicio del control); la columna solo sale si la partida tiene datos de corte guardados */
+  const ini=rows.some(r=>Object.values(ex[r.id]||{}).some(o=>o&&o[AV_INI]));
+  const ncol=5+(ini?1:0)+C.W.reduce((s,w)=>s+(wo(w)?8:1),0),ind=n=>`<i class="avi" style="width:${n*12}px"></i>`;
+  /* Und, Metrado, Acum. y % quedan fijas a la izquierda junto a la descripción (en pantallas angostas solo la descripción).
+     Anchos justos para que quepan más días: el peso de la etapa va junto a su nombre y la alerta es un punto junto al % */
+  const wide=innerWidth>=700,SW=[46,80,80,104];let sx=innerWidth>=1000?260:innerWidth>760?200:170;const SK=SW.map((w,i)=>{const o=wide?{c:' avsk'+(i===3?' avskl':''),a:` style="left:${sx}px;min-width:${w}px;max-width:${w}px"`}:{c:'',a:''};sx+=w;return o}),kU=SK[0],kQ=SK[1],kA=SK[2],kP=SK[3];
+  let h=`<div class="avbox"><table class="avgr${U.avWrap?' avwr':''}"><thead><tr><th rowspan="2" class="avs0${wide?'':' avskl'}">Piso › sector › ambiente › descripción</th><th rowspan="2" class="${kU.c}"${kU.a}>Und</th><th rowspan="2" class="num${kQ.c}"${kQ.a}>Metrado</th><th rowspan="2" class="num${kA.c}"${kA.a}>Acum.</th><th rowspan="2" class="${kP.c}"${kP.a}>% avance</th>${ini?`<th rowspan="2" class="num" title="Lo ejecutado antes de empezar el registro diario (formato anterior)">Corte inicial${p.corte?'<br>'+fmtD(p.corte):''}</th>`:''}`;
+  C.W.forEach(w=>h+=`<th class="avwk" data-avwk="${w.m}" colspan="${wo(w)?8:1}" title="Clic para plegar o desplegar la semana">${wo(w)?'▾':'▸'} Semana ${w.n} · ${fmtD(w.days[0])} – ${fmtD(w.days[6])}</th>`);h+='</tr><tr>';
+  C.W.forEach(w=>{if(wo(w))w.days.forEach((d,i)=>h+=`<th class="num${dcls(d)}" title="${esc(nwReason(d)||'')}">${'LMXJVSD'[i]} ${d.slice(8)}</th>`);h+='<th class="num">total</th>'});h+='</tr></thead><tbody>';
+  const edc=(k,txt,cls,ok,at='')=>ok?`<td class="num aved${cls}"${at} contenteditable="true" inputmode="decimal" data-k="${esc(k)}" data-o="${esc(txt)}">${esc(txt)}</td>`:`<td class="num${cls}"${at}>${esc(txt)}</td>`;
+  const ro=v=>v?(pct?avE1(v)+' %':avF(v)):'';
+  /* celdas de días: fn(d) → valor a mostrar (número) ; con `ek` son editables */
+  const days=(fn,ek,on=true)=>{let t='';const c=(d,x)=>{const v=fn(d);return ek?edc(ek+'|'+d,pct?avE1(v):avE(v),x,on&&can(d)):`<td class="num avro${x}">${ro(v)}</td>`};
+    if(ini)t+=c(AV_INI,'');C.W.forEach(w=>{if(wo(w))w.days.forEach(d=>t+=c(d,dcls(d)));const s=w.days.reduce((a,d)=>a+(fn(d)||0),0);t+=`<td class="num avwt">${ro(s)}</td>`});return t};
+  const MA=avMatOf(p,D);
+  const dot=(c,tx)=>`<i class="avdt ${c}" title="${esc(tx)}" aria-label="${esc(tx)}"></i>`;
+  const grp=(cls,lab,rs,key,dep)=>{const sm=avSame(rs),v=avGrpPct(ex,rs),t=avSumQ(rs),o=!AV.C.has(key),n=rs.filter(r=>avOver(ex,r)||avFrac(ex,r)).length;
+    return`<tr class="${cls}" data-avcol="${esc(key)}"><td class="avs0${wide?'':' avskl'}" title="${esc(lab)}"><div class="avdw">${ind(dep)}<span class="avnt">${o?'▾':'▸'} ${esc(lab)}</span>${MA&&cls==='avam'&&rs.length?avMatTag(avMatGrp(MA,rs[0].amb&&MA.byAmb.get(rs[0].piso+'|'+rs[0].amb)||rs)):''}${edf&&key&&rs.length?(AV.gr.set(key,{lab,ids:rs.map(r=>r.id)}),`<button type="button" class="avdel" data-avdel="g:${esc(key)}" title="Quitar de la partida las ${rs.length} filas de ${esc(lab)}" aria-label="Quitar las filas de ${esc(lab)}">✕</button>`):''}</div></td><td class="${kU.c}"${kU.a}>${!rs.length?'':sm?esc(rs[0].und):'<span class="avmu">varias</span>'}</td><td class="num${kQ.c}"${kQ.a}>${sm&&rs.length?avF(t):''}</td><td class="num${kA.c}"${kA.a}>${sm&&rs.length?avF(v*t):''}</td><td class="avpc${kP.c}"${kP.a}>${rs.length?avBar(v):''}${n?dot('w',n+(n===1?' fila con aviso':' filas con aviso')):''}</td>${days(d=>!rs.length?0:pct?avGrpDay(ex,rs,d)*100:sm?avGrpDay(ex,rs,d)*t:0)}</tr>`};
+  const row=(r,dep)=>{const v=avRowPct(ex,r),he=avHasEt(r);let al='';if(avOver(ex,r))al+=dot('w','Supera el metrado');const ma=MA&&MA.R.get(r.id);if(ma&&ma.st==='sin')al+=dot('b','Sin material: lo que hay en obra de este tipo no alcanza para esta fila (ver «Material»)');else if(ma&&ma.st==='par')al+=dot('p',`Material para ${avF(avR4(ma.give))} de ${avF(avR4(ma.falta))} que faltan`);else if(ma&&ma.st==='ok')al+=dot('g','Hay material en obra para terminar esta fila');if(avFrac(ex,r))al+=dot('n','Fracción de unidad (p. ej. 2.5 und)');
+    let t=`<tr class="avrw${he?' avmad':''}"><td class="avs0${wide?'':' avskl'}" title="${esc(r.desc)}"><div class="avdw">${ind(dep)}${he?`<button type="button" class="avetg" data-avet="${esc(r.id)}" aria-expanded="${!AV.C.has('e:'+r.id)}" title="${AV.C.has('e:'+r.id)?'Mostrar':'Ocultar'} las etapas de esta fila" aria-label="${AV.C.has('e:'+r.id)?'Mostrar':'Ocultar'} las etapas">${AV.C.has('e:'+r.id)?'▸':'▾'}</button>`:''}${cfg?`<span class="aved avnm" contenteditable="true" data-k="d|${esc(r.id)}" data-o="${esc(r.desc)}" title="${esc(r.desc)}">${esc(r.desc)}</span><button type="button" class="avmb" data-avm="${esc(r.id)}" title="Etapas y opciones de la fila" aria-label="Opciones de la fila">⋯</button>${edf?`<button type="button" class="avdel" data-avdel="r:${esc(r.id)}" title="Quitar esta fila" aria-label="Quitar la fila">✕</button>`:''}`:`<span class="avnt" title="${esc(r.desc)}">${esc(r.desc)}</span>`}</div></td>${cfg?`<td class="aved avtx${kU.c}"${kU.a} contenteditable="true" data-k="u|${esc(r.id)}" data-o="${esc(r.und)}">${esc(r.und)}</td>`:`<td class="${kU.c}"${kU.a}>${esc(r.und)}</td>`}${edc('q|'+r.id,avE(r.q),kQ.c,cfg,kQ.a)}<td class="num${kA.c}"${kA.a}>${r.q>0?avF(v*r.q):''}</td><td class="avpc${kP.c}"${kP.a}>${r.q>0?avBar(v)+al:'<span class="avmu" title="Escribe su metrado para poder registrar el avance">por metrar</span>'}</td>`;
+    /* la fila con etapas no se llena: en % muestra lo que aportó cada día; en cantidad queda en blanco (sumar etapas no da una cantidad real) */
+    t+=he?days(d=>pct?avRowDay(ex,r,d)*100:0):days(d=>avCell(ex,r.id,AV_E0,d)*(pct?(r.q?100/r.q:0):1),'c|'+r.id+'|'+AV_E0,r.q>0);t+='</tr>';
+    if(he&&!AV.C.has('e:'+r.id)){const sw=avSumW(r);r.et.forEach(e=>{const a=avAcc(ex,r.id,e.id),wt=avE((+e.w||0)/sw*100);t+=`<tr class="avet"><td class="avs0${wide?'':' avskl'}"><div class="avdw">${ind(dep+1)}<span class="avmu">↳</span>${cfg?`<span class="aved avnm" contenteditable="true" data-k="n|${esc(r.id)}|${esc(e.id)}" data-o="${esc(e.n)}" title="Escribe para cambiar el nombre; déjalo vacío para quitar la etapa">${esc(e.n)}</span><span class="aved avpw" contenteditable="true" inputmode="decimal" data-k="w|${esc(r.id)}|${esc(e.id)}" data-o="${wt}" title="Peso de la etapa dentro de la fila (%)">${wt}</span><span class="avmu">%</span>`:`<span class="avnt">${esc(e.n)}</span><span class="avmu">${wt} %</span>`}</div></td><td class="${kU.c}"${kU.a}></td><td class="${kQ.c}"${kQ.a}></td><td class="num${kA.c}"${kA.a}>${avF(a)}</td><td class="avpc${kP.c}"${kP.a}>${avBar(r.q?Math.min(a/r.q,1):0)}${a>r.q+1e-9?dot('w','Supera el metrado'):''}</td>${days(d=>avCell(ex,r.id,e.id,d)*(pct?(r.q?100/r.q:0):1),'c|'+r.id+'|'+e.id,r.q>0)}</tr>`})}return t};
+  /* líneas en blanco para agregar filas y selector de ambientes: solo con «Editar filas» encendido (si no, son decenas de líneas vacías) */
+  const gho=(g,dep,und)=>edf?`<tr class="avgho" data-g="${esc(g)}"><td class="avs0 avgh gd" contenteditable="true" data-ph="＋ nueva fila: escribe la descripción" style="padding-left:${7+dep*12}px"></td><td class="avgh gu${kU.c}"${kU.a} contenteditable="true">${esc(und)}</td><td class="num avgh gq${kQ.c}"${kQ.a} contenteditable="true" inputmode="decimal" data-ph="metrado"></td><td colspan="${ncol-3}" class="avmu">Enter para agregarla y seguir con otra</td></tr>`:'';
+  const last=rs=>rs.length?rs[rs.length-1].und:'und';
+  /* total de la partida (o de lo buscado): la primera fila, como el total de una hoja de Excel */
+  AV.gr=new Map();if(rows.length){const vr=rows.filter(r=>vp.some(x=>x.id===r.piso));h+=grp('avtt',AV.nf?'Total de lo buscado':'Total de la partida',vr,'',0).replace('▾ ','')}
+  vp.forEach(pi=>{const T=avTree(pi.id,rows,AV.xa);if(!T.rows.length&&!(edf&&!AV.nf))return;h+=grp('avpi',pi.name,T.rows,pi.id,0);if(AV.C.has(pi.id))return;
+    T.direct.forEach(r=>h+=row(r,1));if(T.direct.length||T.gho)h+=gho(pi.id+'||',1,last(T.direct));
+    T.secs.forEach(s=>{let dep=1;if(T.showSec){const ks=pi.id+'|'+s.id;h+=grp('avse',s.nom,s.rows,ks,1);if(AV.C.has(ks))return;dep=2;s.direct.forEach(r=>h+=row(r,2));if(s.direct.length||s.gho)h+=gho(pi.id+'|'+s.id+'|',2,last(s.direct))}
+      s.ambs.forEach(a=>{const ka=pi.id+'|'+s.id+'|'+a.id;h+=grp('avam',a.nom,a.rows,ka,dep);if(AV.C.has(ka))return;a.rows.forEach(r=>h+=row(r,dep+1));h+=gho(pi.id+'||'+a.id,dep+1,last(a.rows))})});
+    if(edf&&S.pis.has(pi.id)){const used=new Set(T.rows.map(r=>r.amb).concat(AV.xa.map(x=>x.amb)).filter(Boolean)),ss=[...S.sec.values()].filter(s=>s.pisoId===pi.id).sort(byOrder);
+      h+=`<tr class="avgho"><td class="avs0" style="padding-left:19px"><select class="avadd" data-avadd="${esc(pi.id)}" aria-label="Agregar un ambiente a ${esc(pi.name)}"><option value="">＋ agregar ambiente a ${esc(pi.name)}…</option>${ss.map(s=>{const L=[...S.amb.values()].filter(a=>a.sectorId===s.id&&!used.has(a.id)).sort(byOrder);return`<optgroup label="${esc(s.name||s.code||'Sector')}">${L.map(a=>`<option value="A:${esc(a.id)}">${esc(a.name||a.code||a.id)}</option>`).join('')}<option value="S:${esc(s.id)}">(todo el sector: fila sin ambiente)</option></optgroup>`}).join('')}<option value="P:">(todo el piso: fila sin ambiente)</option></select></td><td colspan="${ncol-1}"></td></tr>`}});
+  return h+`</tbody></table></div><details class="avhlp"><summary>Atajos y ayuda</summary><p class="avnote">${reg?`Como en Excel: flechas y Enter para moverte, escribe encima para reemplazar, F2 o doble clic para corregir dentro, Supr para borrar, Ctrl+V para pegar un bloque copiado de Excel y Ctrl+Z para deshacer. Mayús+flechas o Mayús+clic seleccionan un rango: Ctrl+C lo copia y Supr lo vacía. Clic derecho en una celda: su historial. `:''}${cfg?'Para agregar filas enciende «Editar filas»: aparece una línea en blanco en cada ambiente. «⋯» en una fila: agregar etapas. Una etapa se renombra escribiendo sobre su nombre y se quita dejándolo vacío; su peso se cambia en el número junto al nombre. ':''}Los puntos junto al % avisan: amarillo = supera el metrado, gris = fracción de unidad; y, si se controla el material (botón «Material»), verde = hay para terminar la fila, naranja = alcanza para una parte, rojo = sin material. Clic en una semana o en un grupo para plegarlo.</p></details>`}
+/** celular: piso → lugar → filas (o etapas) con lo ejecutado del día */
+function avCelGroups(pid,rows){const T=avTree(pid,rows.filter(r=>r.q>0)/* sin metrado no se registra */,[]),G=[];if(T.direct.length)G.push({k:'P',nom:'Todo el piso',rows:T.direct});
+  T.secs.forEach(s=>{if(s.direct.length)G.push({k:'S'+s.id,nom:s.nom+' (todo el sector)',rows:s.direct});s.ambs.forEach(a=>G.push({k:'A'+a.id,nom:a.nom,sub:T.showSec?s.nom:'',rows:a.rows}))});return G}
+/** lugares de todos los pisos a la vista (el elegido arriba, o todos); la clave lleva el piso */
+function avCelAll(rows){return[...pisos(),...ARCH.pis.values()].filter(x=>(!U.piso||x.id===U.piso)&&rows.some(r=>r.piso===x.id&&r.q>0)).map(pi=>({pi,G:avCelGroups(pi.id,rows).map(g=>({...g,k:pi.id+'~'+g.k}))}))}
+function avCelHtml(p,D,rows){const ex=D.ex,reg=avaReg(),t=todayIso(),pct=!!U.avPct,d0=p.d0||t,d1=p.d1||t;if(!AV.day)AV.day=t;const d=AV.day,A=avCelAll(rows);
+  if(!A.length)return`<div class="empty"><b>${rows.some(r=>!U.piso||r.piso===U.piso)?'Las filas de aquí aún no tienen metrado.':U.piso&&rows.length?'Este piso no tiene filas en esta partida.':'Esta partida aún no tiene filas.'}</b><br>Se cargan desde la computadora o la tablet.</div>`;let h=`<div class="avcel">`;
+  /* el día: Hoy y Ayer a un toque, o cualquier otro del rango de la partida */
+  const dsel=`<div class="avcday"><span class="seg" role="group" aria-label="Día"><button type="button" data-avd="${t}" class="${d===t?'on':''}">Hoy</button><button type="button" data-avd="${addD(t,-1)}" class="${d===addD(t,-1)?'on':''}">Ayer</button></span><input class="tin" type="date" data-avday="1" data-fk="avday" value="${esc(d)}" min="${esc(d0)}" max="${esc(d1)}" aria-label="Otro día"></div>`;
+  let g=null,gp=null;A.forEach(x=>x.G.forEach(y=>{if(y.k===AV.grp){g=y;gp=x.pi}}));
+  if(!g){h+=dsel;A.forEach(x=>{h+=`<div class="avch"><b>${esc(x.pi.name)}</b><span>${avPc(avGrpPct(ex,rows.filter(r=>r.piso===x.pi.id)))}</span></div>`;
+      x.G.forEach(y=>{const v=avGrpPct(ex,y.rows);h+=`<button type="button" class="avcard" data-avgrp="${esc(y.k)}"><span><b>${esc(y.nom)}</b><small>${y.sub?esc(y.sub)+' · ':''}${v>=1?'100 % ✓':avPc(v)} · ${y.rows.length} fila${y.rows.length===1?'':'s'}</small></span><i aria-hidden="true">›</i></button>`})})}
+  else{const ok=reg&&d>=d0&&d<=d1;h+=`<div class="avch"><button type="button" class="ib avbk" data-avgrp="">‹ Volver</button><span>${esc(gp.name)}</span></div><b class="avcti">${esc(g.nom)}</b>${dsel}`;
+    g.rows.forEach(r=>avEtOf(r).forEach(e=>{const a=avAcc(ex,r.id,e.id),c=avCell(ex,r.id,e.id,d),k=r.id+'|'+e.id,val=pct?avE1(r.q?c/r.q*100:0):avE(c);h+=`<div class="avcrow"><span><b>${esc(r.desc)}</b>${e.id!==AV_E0||avHasEt(r)?' · '+esc(e.n):''}<small>${avF(a)} de ${avF(r.q)} ${esc(r.und)} · ${avPc(r.q?Math.min(a/r.q,1):0)}</small></span>
+      ${ok?`<span class="avstp"><button type="button" data-avst="-1" data-r="${esc(k)}" aria-label="Menos">−</button><input type="number" inputmode="decimal" min="0" step="any" placeholder="0" data-avin="${esc(k)}" data-fk="avin-${esc(k)}" value="${val}" aria-label="${pct?'Porcentaje':'Cantidad'} del día"><button type="button" data-avst="1" data-r="${esc(k)}" aria-label="Más">+</button></span>`:`<b class="mono">${val||'0'}${pct?' %':''}</b>`}</div>`}));
+    if(ok)h+=`<button type="button" class="ib pri" data-av="todo">Todo lo que falta</button><p class="avnote">${fmtD(d)} · en ${pct?'porcentaje: cada toque en + suma 10 %':'cantidad: cada toque en + suma 1'}.</p>`;else if(reg)h+='<p class="avnote">Ese día está fuera de las fechas de la partida.</p>'}
+  return h+'</div>'}
+
+/* ---------- escritura ---------- */
+const avMRef=(p,piso)=>fcol('avm').doc(p.id+'_'+piso);
+/* ---------- deshacer / rehacer (Ctrl+Z, Ctrl+Y) ----------
+   Pila propia del módulo, de esta sesión y de la partida abierta (se vacía al cambiar de partida). Cada acción es una lista de
+   operaciones: 'c' celda de avance {row,et,d,a,b}, 'r' campos de una fila {row,a,b} y 'new' fila creada (deshacer = archivarla).
+   Deshacer ESCRIBE de nuevo en la base (queda en el historial de la celda): no borra nada. Importar no entra en la pila. */
+const AVU={u:[],r:[],g:null,lock:false};
+function avUPush(g){if(!g.length)return;AVU.u.push(g);AVU.r=[];if(AVU.u.length>100)AVU.u.shift()}
+function avURec(op){if(AVU.lock)return;if(AVU.g)AVU.g.push(op);else avUPush([op])}
+/** todo lo que se escriba dentro de fn cuenta como UNA acción (pegar un bloque, «todo lo que falta»…) */
+function avUGroup(fn){if(AVU.g||AVU.lock)return fn();AVU.g=[];try{return fn()}finally{const g=AVU.g;AVU.g=null;avUPush(g)}}
+function avUndo(redo){const p=avCur(),from=redo?AVU.r:AVU.u,to=redo?AVU.u:AVU.r;if(!p||!avReady(p))return;const g=from.pop();if(!g){toast(redo?'No hay nada que rehacer.':'No hay nada que deshacer.');return}
+  /* solo se deshace lo que sigue como lo dejó esta acción: si otra persona cambió después esa celda o esa fila, no se toca y se avisa */
+  const ex=avData().ex,cells=[],nz=v=>JSON.stringify(v===undefined?null:v);let skip=0;AVU.lock=true;
+  try{(redo?g:[...g].reverse()).forEach(o=>{
+      if(o.k==='c'){const cur=avCell(ex,o.row.id,o.et,o.d);if(Math.abs(cur-(redo?o.a:o.b))>1e-9){skip++;return}cells.push({row:o.row,et:o.et,d:o.d,q:redo?o.b:o.a,old:cur})}
+      else if(o.k==='r'){const cur=((AVM.get(p.id+'_'+o.row.piso)||{}).r||{})[o.row.id]||{},exp=redo?o.a:o.b;if(Object.keys(exp).some(k=>nz(cur[k])!==nz(exp[k]))){skip++;return}avRowPatch(p,o.row,redo?o.b:o.a)}
+      else avRowPatch(p,o.row,{arch:redo?null:avWho()})});
+    avPutCells(p,cells.filter(c=>Math.abs(c.q-c.old)>1e-9))}finally{AVU.lock=false}
+  to.push(g);const n=g.length-skip;toast((n>0?`${redo?'Rehecho':'Deshecho'}: ${n===1?'1 cambio':n+' cambios'}`:`No se ${redo?'rehízo':'deshizo'} nada`)+(skip?` · ${skip} ${skip===1?'lo cambió':'los cambió'} otra persona después y no se ${skip===1?'tocó':'tocaron'}`:''));AV.pend=false;requestRender()}
+/* Ctrl+Z / Ctrl+Y (o Ctrl+Mayús+Z). Si se está tecleando en una celda o en un campo, deshace lo tecleado (lo hace el navegador) */
+document.addEventListener('keydown',e=>{if(U.mod!=='ava'||U.tab!=='areg'||!(e.ctrlKey||e.metaKey)||e.altKey)return;const k=e.key.toLowerCase();if(k!=='z'&&k!=='y')return;
+  const ae=document.activeElement;if(ae&&ae.closest&&ae.closest('#lqm,input,textarea'))return;
+  if(ae&&ae.classList&&((ae.classList.contains('aved')&&ae.textContent.trim()!==(ae.dataset.o||''))||(ae.classList.contains('avgh')&&ae.textContent.trim())))return;
+  e.preventDefault();if(ae&&ae.classList&&ae.classList.contains('aved'))ae.blur();avUndo(k==='y'||e.shiftKey)});
+function avRowPatch(p,row,patch){const w=avWho();
+  if(!AVU.lock){const cur=((AVM.get(p.id+'_'+row.piso)||{}).r||{})[row.id],rw={id:row.id,piso:row.piso};
+    if(!cur)avURec({k:'new',row:rw});else{const a={};for(const key in patch)a[key]=cur[key]===undefined?null:cur[key];avURec({k:'r',row:rw,a,b:patch})}}
+  /* se refleja al instante en memoria (la foto de la base llega después con lo mismo): «⋯» puede redibujarse sin esperar */
+  if(avSubP===p.id){const did=p.id+'_'+row.piso,m=AVM.get(did)||{id:did,p:p.id,piso:row.piso,r:{}};AVM.set(did,{...m,r:{...(m.r||{}),[row.id]:{...((m.r||{})[row.id]||{}),...patch}}});AV.v++}
+  return bgWrite(avMRef(p,row.piso).set({p:p.id,piso:row.piso,r:{[row.id]:patch},by:w.by,t:w.t},{merge:true}))}
+/** la celda se refleja en memoria al instante (la foto de la base llega después con lo mismo): así deshacer y rehacer seguidos, o
+    «＋» varias veces en el celular, parten siempre del valor que se acaba de escribir y no de uno viejo */
+function avCellMem(p,piso,d,rowId,etId,q){if(avSubP!==p.id)return;const wk=d===AV_INI?AV_INI:avMon(d),id=`${p.id}_${piso}_${wk}`,m=AVD.get(id)||{id,p:p.id,piso,w:wk,c:{},log:[]},c={...(m.c||{})};
+  c[d]={...(c[d]||{})};c[d][rowId]={...(c[d][rowId]||{}),[etId]:q};AVD.set(id,{...m,c});AV.v++}
+function avPutCell(p,row,etId,d,q,old){avCellMem(p,row.piso,d,row.id,etId,q);avURec({k:'c',row:{id:row.id,piso:row.piso},et:etId,d,a:old,b:q});const wk=d===AV_INI?AV_INI:avMon(d),id=`${p.id}_${row.piso}_${wk}`,w=avWho();
+  return bgWrite(fcol('ava').doc(id).set({p:p.id,piso:row.piso,w:wk,c:{[d]:{[row.id]:{[etId]:q}}},log:firebase.firestore.FieldValue.arrayUnion({d,r:row.id,e:etId,q,a:old,...w}),by:w.by,t:w.t},{merge:true}))}
+/** varias celdas de una vez (pegar): una escritura por documento de semana, cada celda con su entrada de historial */
+function avPutCells(p,cells){const by=new Map(),w=avWho();cells.forEach(c=>avCellMem(p,c.row.piso,c.d,c.row.id,c.et,c.q));avUGroup(()=>cells.forEach(c=>avURec({k:'c',row:{id:c.row.id,piso:c.row.piso},et:c.et,d:c.d,a:c.old,b:c.q})));cells.forEach(c=>{const wk=c.d===AV_INI?AV_INI:avMon(c.d),id=`${p.id}_${c.row.piso}_${wk}`,o=by.get(id)||{piso:c.row.piso,wk,c:{},log:[]};
+    ((o.c[c.d]=o.c[c.d]||{})[c.row.id]=o.c[c.d][c.row.id]||{})[c.et]=c.q;o.log.push({d:c.d,r:c.row.id,e:c.et,q:c.q,a:c.old,...w});by.set(id,o)});
+  by.forEach((o,id)=>bgWrite(fcol('ava').doc(id).set({p:p.id,piso:o.piso,w:o.wk,c:o.c,log:firebase.firestore.FieldValue.arrayUnion(...o.log),by:w.by,t:w.t},{merge:true})))}
+/** guarda la cantidad de un día; si el acumulado supera el metrado pide confirmar (avisa, no bloquea) */
+async function avSetCell(row,etId,d,q){const p=avCur();if(!p||!row||!avaReg()||!avReady(p))return false;const ex=avData().ex,old=avCell(ex,row.id,etId,d);q=avR4(q);if(Math.abs(q-old)<1e-9)return true;
+  const acc=avAcc(ex,row.id,etId),tot=acc-old+q;if(q>old&&tot>row.q+1e-9){const e=avEtOf(row).find(x=>x.id===etId),fit=avR4(Math.max(old,row.q-(acc-old)));
+    /* supera el metrado (decidido con el dueño, 25-11-2026): o se ajusta el día para cuadrar con el metrado (por defecto), o se sube
+       el metrado para cuadrar con lo ingresado, que pide una segunda confirmación y solo lo hace quien configura */
+    const r=await avOverAsk(row,e,d,q,tot,fit);if(!r)return false;
+    if(r==='fit'){if(Math.abs(fit-old)>1e-9)avPutCell(p,row,etId,d,fit,old);return true}
+    if(!avaCfg()||!await uiAsk({title:'¿Aumentar el metrado?',text:`El metrado de «${row.desc}» (${avLoc(row)}) pasará de ${avF(row.q)} a ${avF(tot)} ${row.und}. Cambia el porcentaje de la fila${avHasEt(row)?' y de todas sus etapas':''}, y el de su ambiente, piso y partida.`,ok:'Sí, aumentar el metrado',tone:'danger'}))return false;
+    avUGroup(()=>{avRowPatch(p,row,{q:avR4(tot)});avPutCell(p,row,etId,d,q,old)});return true}
+  avPutCell(p,row,etId,d,q,old);return true}
+/** ventana de «supera el metrado» con las dos salidas → 'fit' | 'grow' | null (cancelar o cerrar) */
+function avOverAsk(row,e,d,q,tot,fit){return new Promise(res=>{let done=false;const end=v=>{if(done)return;done=true;clearInterval(iv);if($('#lqm'))lqClose();res(v)},cfg=avaCfg(),lleno=fit<=avCell(avData().ex,row.id,e?e.id:AV_E0,d)+1e-9;
+  lqModal(`<div class="avh"><b>Supera el metrado</b><button class="ib" data-avo="x" aria-label="Cerrar">✕</button></div>
+    <p><b>${esc(row.desc)}</b>${e&&e.n?' · '+esc(e.n):''} <span class="avmu">(${esc(avLoc(row))})</span></p>
+    <p class="avnote">Con ${avF(q)} ${esc(row.und)} el ${d===AV_INI?'corte inicial':fmtD(d)}, el acumulado sería <b>${avF(tot)}</b> y el metrado es <b>${avF(row.q)}</b> ${esc(row.und)}.</p>
+    <div class="avmbt"><button type="button" class="ib pri" data-avo="fit" id="avofit">${lleno?`Dejar el día como estaba: la fila ya está completa`:`Ajustar el día a <b>${avF(fit)}</b> ${esc(row.und)} para cuadrar con el metrado`}</button>
+      ${cfg?`<button type="button" class="ib" data-avo="grow">Aumentar el metrado a <b>${avF(tot)}</b> ${esc(row.und)} para cuadrar con lo ingresado…</button>`:'<p class="avnote">Si el metrado está mal, lo corrige el administrador o un ingeniero de producción.</p>'}
+      <button type="button" class="ib" data-avo="x">Cancelar</button></div>`,ev=>{const b=ev.target.closest('[data-avo]');if(b)end(b.dataset.avo==='x'?null:b.dataset.avo)});
+  /* si la ventana se cierra por fuera (clic en el fondo, Esc), cuenta como cancelar */
+  const iv=setInterval(()=>{if(!$('#lqm'))end(null)},200);setTimeout(()=>{const b=$('#avofit');if(b)b.focus()},60)})}
+/** fila nueva desde la línea en blanco de la planilla */
+function avAddRow(g,desc,und,q){const p=avCur();if(!p||!avaCfg()||!avReady(p))return false;const[piso,sec,amb]=g.split('|');const a=amb?S.amb.get(amb):null;
+  const row={id:avNid('r'),piso};avRowPatch(p,row,{amb:amb||'',sec:amb?'':sec||'',desc:desc.slice(0,160),und:(und||'und').slice(0,10),q:avR4(q),et:null,o:NOW(),an:a?a.name||'':''});
+  AV.xa=AV.xa.filter(x=>!(x.piso===piso&&x.sec===(sec||'')&&x.amb===(amb||'')));return true}
+
+/* ---------- eventos ---------- */
+function avFocus(e){const t=e.target;if(U.tab!=='areg'||!t.classList||!t.classList.contains('aved'))return;AV.edit=false;const r=document.createRange();r.selectNodeContents(t);const s=getSelection();s.removeAllRanges();s.addRange(r)}
+function avGhoTry(tr,next){const d=tr.querySelector('.gd').textContent.trim(),u=tr.querySelector('.gu').textContent.trim(),qt=tr.querySelector('.gq').textContent.trim(),q=avNum(qt);
+  if(!d||!(q>0)||!/^[\d\s.,]+$/.test(qt))return false;if(!avAddRow(tr.dataset.g,d,u,q))return false;tr.querySelectorAll('.gd,.gq').forEach(c=>c.textContent='');if(next)AV.gf={g:tr.dataset.g,c:'gd'};AV.pend=false;requestRender();return true}
+async function avBlur(e){const t=e.target;if(U.tab!=='areg'||!t.classList)return;
+  if(t.matches&&t.matches('input[data-avin]')){if(AV.pend){AV.pend=false;requestRender()}return}
+  if(t.classList.contains('avgh')){const tr=t.parentElement;setTimeout(()=>{if(tr.isConnected&&!tr.contains(document.activeElement)){if(!avGhoTry(tr,false)&&AV.pend&&![...tr.querySelectorAll('.gd,.gq')].some(c=>c.textContent.trim())){AV.pend=false;requestRender()}}},0);return}
+  if(!t.classList.contains('aved'))return;const txt=t.textContent.trim(),o=t.dataset.o||'';
+  const done=()=>{AV.pend=false;requestRender()};if(txt===o){if(AV.pend)done();return}
+  const k=t.dataset.k.split('|'),row=avRowOf(k[1]),p=avCur();if(!row||!p){t.textContent=o;done();return}
+  if(k[0]==='u'){if(!txt||!avaCfg()){t.textContent=o;done();return}t.dataset.o=txt;avRowPatch(p,row,{und:txt.slice(0,10)});done();return}
+  if(k[0]==='d'){if(!avaCfg()){t.textContent=o;done();return}if(!txt){t.textContent=o;toast('La descripción no puede quedar vacía. Para quitar la fila usa «⋯».');done();return}t.dataset.o=txt;avRowPatch(p,row,{desc:txt.slice(0,160)});done();return}
+  if(k[0]==='n'){if(!avaCfg()||!avHasEt(row)){t.textContent=o;done();return}if(txt){if(row.et.some(x=>x.id!==k[2]&&mnk(x.n)===mnk(txt))){t.textContent=o;toast('Esa etapa ya está en la fila.')}else{t.dataset.o=txt;avRowPatch(p,row,{et:row.et.map(x=>x.id===k[2]?{...x,n:txt.slice(0,40)}:x)})}done();return}
+    t.textContent=o;await avEtDel(row,k[2]);done();return}
+  const v=txt===''?0:avNum(txt),bad=txt!==''&&(!/^[\d\s.,%]+$/.test(txt)||!Number.isFinite(v)||v<0||(txt.includes('%')&&!(k[0]==='w'||(k[0]==='c'&&U.avPct))));
+  if(bad){t.textContent=o;toast(txt.includes('%')?'Para tipear porcentajes cambia el interruptor a «%».':'Escribe solo un número (p. ej. 12 o 6.5).');done();return}
+  t.dataset.o=txt;/* ya no se considera «a medio escribir»: lo que llegue puede redibujar */
+  if(k[0]==='q'){if(!await avSetQ(row,v)){t.dataset.o=o;t.textContent=o}}
+  else if(k[0]==='w'){if(!(v>0&&v<100)){t.dataset.o=o;t.textContent=o;toast('El peso de una etapa va entre 0 y 100; las demás se reparten el resto.')}else avRowPatch(p,row,{et:avSetW(row.et,k[2],v)})}
+  else if(!await avSetCell(row,k[2],k[3],U.avPct?v/100*row.q:v)){t.dataset.o=o;t.textContent=o}
+  done()}
+async function avSetQ(row,v){const p=avCur();if(!p||!avaCfg())return false;
+  if(!(v>0)){toast('El metrado debe ser mayor que 0. Para quitar la fila usa «⋯».');return false}avRowPatch(p,row,{q:avR4(v)});return true}
+/** quita UNA etapa de la fila (nombre dejado vacío). La primera ('_') guarda lo registrado antes de desglosar: solo sale con todas */
+async function avEtDel(row,etId){const p=avCur(),e=row.et.find(x=>x.id===etId);if(!p||!e)return;
+  if(row.et.length===1){avRowPatch(p,row,{et:null});toast('La fila quedó sin etapas y conserva lo registrado.');return}
+  if(etId===AV_E0){toast('La primera etapa guarda lo registrado antes de desglosar la fila. Puedes cambiarle el nombre; para quitarla, quita todas las etapas desde «⋯».');return}
+  const has=avAcc(avData().ex,row.id,etId)>0;
+  if(!await uiAsk({title:`¿Quitar la etapa «${e.n}»?`,text:has?'Tiene avance registrado: queda en la base, pero deja de verse y de contar. Su peso se reparte entre las demás.':'Su peso se reparte entre las demás etapas.',ok:'Quitar etapa',tone:has?'danger':'warn'}))return;
+  avRowPatch(p,row,{et:row.et.filter(x=>x.id!==etId)});toast('Etapa quitada')}
+/** columna de una celda editable, para moverse con las flechas: los días por su fecha; descripción y nombre de etapa comparten columna */
+const avColOf=el=>{const k=el.dataset.k.split('|');return k[0]==='c'?'c|'+k[3]:k[0]==='n'?'d':k[0]};
+/** la celda editable vecina en esa dirección (o null) */
+function avNext(t,dir){const tr=t.closest('tr');
+  if(dir==='left'||dir==='right'){const L=[...tr.querySelectorAll('.aved')];return L[L.indexOf(t)+(dir==='left'?-1:1)]||null}
+  const col=avColOf(t);let r=tr;for(;;){r=dir==='up'?r.previousElementSibling:r.nextElementSibling;if(!r)return null;const c=[...r.querySelectorAll('.aved')].find(x=>avColOf(x)===col);if(c)return c}}
+function avMove(t,dir){const c=avNext(t,dir);if(c)c.focus();return!!c}
+/* Rango seleccionado, como en Excel: Mayús+flechas o Mayús+clic desde la celda con foco. Vive solo en la pantalla (clase .avsel):
+   Ctrl+C lo copia como texto con tabulaciones (se pega tal cual en Excel) y Supr lo vacía (una sola acción para Ctrl+Z). */
+const avColRank=c=>c[0]==='c'?(c.slice(2)===AV_INI?'z0':'z'+c.slice(2)):({d:'a0',w:'a05',u:'a1',q:'a2'}[c]||'a9');
+const avSelKey=k=>[...document.querySelectorAll('#main .aved')].find(x=>x.dataset.k===k)||null;
+function avSelClear(){if(!AV.sa&&!AV.sb)return;AV.sa=AV.sb=null;document.querySelectorAll('#main .avsel').forEach(x=>x.classList.remove('avsel'))}
+/** celdas del rango, por filas: [[el|null,…],…] */
+function avSelCells(){const a=AV.sa&&avSelKey(AV.sa),b=AV.sb&&avSelKey(AV.sb);if(!a||!b)return[];const ra=avColRank(avColOf(a)),rb=avColRank(avColOf(b)),lo=ra<rb?ra:rb,hi=ra<rb?rb:ra;
+  const T=[...a.closest('tbody').rows],ia=T.indexOf(a.closest('tr')),ib=T.indexOf(b.closest('tr')),out=[];
+  for(let i=Math.min(ia,ib);i<=Math.max(ia,ib);i++){const L=[...T[i].querySelectorAll('.aved')].filter(x=>{const r=avColRank(avColOf(x));return r>=lo&&r<=hi});if(L.length)out.push(L)}return out}
+function avSelPaint(){document.querySelectorAll('#main .avsel').forEach(x=>x.classList.remove('avsel'));avSelCells().forEach(L=>L.forEach(x=>x.classList.add('avsel')))}
+function avSelCopy(){const M=avSelCells();if(!M.length)return false;const cols=[...new Set(M.flat().map(avColOf))].sort((x,y)=>avColRank(x)<avColRank(y)?-1:1);
+  const txt=M.map(L=>cols.map(c=>{const el=L.find(x=>avColOf(x)===c);return el?el.textContent.trim():''}).join('\t')).join('\n'),n=M.flat().length;
+  const ok=()=>toast(`Copiadas ${n} celdas: pégalas en Excel o en otra parte de la planilla.`);
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(ok,()=>toast('El navegador no dejó copiar.'));else toast('El navegador no dejó copiar.');return true}
+function avSelDel(){const p=avCur(),D=avData(),cells=[];if(!p||!avReady(p)||!avaReg())return false;const M=avSelCells();if(!M.length)return false;
+  M.flat().forEach(el=>{const k=el.dataset.k.split('|');if(k[0]!=='c')return;const row=avRowOf(k[1]),old=row?avCell(D.ex,row.id,k[2],k[3]):0;if(row&&old)cells.push({row,et:k[2],d:k[3],q:0,old})});
+  avPutCells(p,cells);avSelClear();toast(cells.length?`Vaciadas ${cells.length} celdas (Ctrl+Z para deshacer).`:'No había avance en esas celdas.');AV.pend=false;requestRender();return true}
+function avKey(e){const t=e.target;if(U.tab!=='areg'||!t.classList)return;
+  if(t.classList.contains('avgh')){if(e.key==='Enter'){e.preventDefault();const tr=t.parentElement;if(t.classList.contains('gq')){if(!avGhoTry(tr,true))tr.querySelector('.gd').focus()}else tr.querySelector('.gq').focus()}
+    else if(e.key==='Escape'){t.parentElement.querySelectorAll('.gd,.gq').forEach(c=>c.textContent='');t.blur()}return}
+  if(!t.classList.contains('aved'))return;
+  const A0={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'}[e.key];
+  if(A0&&e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!AV.edit&&t.textContent.trim()===(t.dataset.o||'')){e.preventDefault();if(!AV.sa)AV.sa=AV.sb=t.dataset.k;const cur=avSelKey(AV.sb)||t,nx=avNext(cur,A0);if(nx){AV.sb=nx.dataset.k;avSelPaint()}return}
+  if(AV.sa&&AV.sa!==AV.sb){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){if(avSelCopy())e.preventDefault();return}
+    if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();avSelDel();return}
+    if(e.key==='Escape'){e.preventDefault();avSelClear();return}}
+  if(AV.sa&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&e.key!=='Shift')avSelClear();
+  /* como en Excel: la celda entra «seleccionada» (escribir reemplaza y las flechas cambian de celda); F2 o doble clic = corregir dentro */
+  if(e.key==='Escape'){t.textContent=t.dataset.o||'';AV.edit=false;t.blur();return}
+  if(e.key==='F2'){e.preventDefault();AV.edit=true;const s=getSelection();s.selectAllChildren(t);s.collapseToEnd();return}
+  if(e.key==='Enter'){e.preventDefault();if(!avMove(t,e.shiftKey?'up':'down'))t.blur();/* en la última fila no hay a dónde bajar: se guarda igual */return}
+  const A={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'}[e.key];
+  if(A&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&(!AV.edit||A==='up'||A==='down')){e.preventDefault();if(!avMove(t,A)&&(A==='up'||A==='down'))t.blur()}}
+/** pegar: texto plano siempre; un bloque copiado de Excel (varias celdas) se reparte desde la celda con foco hacia la derecha y abajo.
+    Cada línea va a la fila de datos siguiente y, en los días, cada columna a SU fecha: lo que caería en una celda que no está
+    (semana plegada, fuera del rango, fila «por metrar») no se corre a otra, se cuenta como «sin pegar». */
+function avPaste(e){const t=e.target&&e.target.closest?e.target.closest('.aved,.avgh'):null;if(U.tab!=='areg'||!t)return;const raw=(e.clipboardData||window.clipboardData).getData('text');e.preventDefault();
+  const M=String(raw||'').replace(/\r\n?/g,'\n').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));const k0=t.classList.contains('aved')?t.dataset.k.split('|'):null;
+  if(!k0||(M.length===1&&M[0].length===1)||k0[0]==='n'||k0[0]==='w'){document.execCommand('insertText',false,String(M[0][0]||'').trim());return}
+  const accM=new Map();let adj=0;
+  const p=avCur(),D=avData();if(!p||!avReady(p))return;const day=k0[0]==='c',sel=day?'tr.avrw:not(.avmad),tr.avet':'tr.avrw',col0=avColOf(t),cells=[],rowsPatch=new Map();let tr=t.closest('tr'),bad=0,n=0,skip=0;
+  for(const line of M){if(!tr)break;const L=[...tr.querySelectorAll('.aved')],i0=L.findIndex(x=>avColOf(x)===col0);
+    line.forEach((txt,j)=>{txt=txt.trim();let c=null;
+      if(day){const d=k0[3]===AV_INI?(j?'':AV_INI):addD(k0[3],j);c=d?L.find(x=>{const k=x.dataset.k.split('|');return k[0]==='c'&&k[3]===d}):null}
+      else{c=i0<0?null:L[i0+j];if(c&&!['d','u','q'].includes(c.dataset.k.split('|')[0]))c=null}
+      if(!c){if(txt)skip++;return}const k=c.dataset.k.split('|'),row=avRowOf(k[1]);if(!row){if(txt)skip++;return}const P=rowsPatch.get(row.id)||{row,patch:{}};
+      if(k[0]==='d'||k[0]==='u'){if(txt&&avaCfg()){P.patch[k[0]==='d'?'desc':'und']=txt.slice(0,k[0]==='d'?160:10);rowsPatch.set(row.id,P);n++}return}
+      const v=txt===''?0:avNum(txt);if(txt!==''&&(!/^[\d\s.,%]+$/.test(txt)||!(v>=0))){bad++;return}
+      if(k[0]==='q'){if(v>0&&avaCfg()){P.patch.q=avR4(v);rowsPatch.set(row.id,P);n++}return}
+      if(row.q>0&&avaReg()){const pc=U.avPct||txt.includes('%'),old=avCell(D.ex,row.id,k[2],k[3]),ak=row.id+'|'+k[2],base=accM.has(ak)?accM.get(ak):avAcc(D.ex,row.id,k[2]);let q=avR4(pc?v/100*row.q:v);
+        /* al pegar no se pregunta celda por celda: lo que superaría el metrado se ajusta para cuadrar y se avisa cuántas */
+        if(q>old&&base-old+q>row.q+1e-9){q=avR4(Math.max(old,row.q-(base-old)));adj++}accM.set(ak,base-old+q);cells.push({row,et:k[2],d:k[3],q,old});n++}else if(txt)skip++});
+    do{tr=tr.nextElementSibling}while(tr&&!tr.matches(sel))}
+  avUGroup(()=>{rowsPatch.forEach(x=>avRowPatch(p,x.row,x.patch));avPutCells(p,cells.filter(c=>Math.abs(c.q-c.old)>1e-9))});
+  t.textContent=t.dataset.o||'';/* lo que estuviera a medio escribir no debe pisar lo pegado */t.blur();AV.pend=false;
+  toast((n?`Pegado: ${n} celda${n===1?'':'s'}`:'No había celdas donde pegar eso')+(skip?` · ${skip} sin pegar (semana plegada, fuera de las fechas o fila sin metrado)`:'')+(adj?` · ${adj} ajustada${adj===1?'':'s'} para no superar el metrado`:'')+(bad?` · ${bad} no eran números`:''));requestRender()}
+/** historial de una celda: quién registró y cuándo */
+function avCtx(e){const t=e.target.closest&&e.target.closest('.aved[data-k^="c|"]');if(U.tab!=='areg'||!t)return;e.preventDefault();const p=avCur(),k=t.dataset.k.split('|'),row=avRowOf(k[1]);if(!p||!row)return;
+  const d=k[3],doc=AVD.get(`${p.id}_${row.piso}_${d===AV_INI?AV_INI:avMon(d)}`),L=((doc&&doc.log)||[]).filter(x=>x.d===d&&x.r===row.id&&x.e===k[2]).sort((a,b)=>b.t-a.t);
+  const hm=ms=>{const x=new Date(ms-5*36e5);return fmtD(x.toISOString().slice(0,10))+' '+x.toISOString().slice(11,16)};
+  openPop(t,`<div class="ph">Historial · ${d===AV_INI?'corte inicial':fmtD(d)}</div><div class="avhist">${L.length?L.map(x=>`<div><b>${avF(x.a)} → ${avF(x.q)} ${esc(row.und)}</b><span>${esc(x.n||String(x.by||'').split('@')[0])} · ${hm(x.t)}</span></div>`).join(''):'<div><span>Sin cambios registrados.</span></div>'}</div>`,{})}
+function avChange(e){const t=e.target;if(U.tab!=='areg')return;
+  if(t.id==='avmf'){AV.mf=t.value;requestRender();return}
+  if(t.id==='avp'){U.avP=t.value;saveUI();requestRender();return}
+  if(t.id==='avpiso'){U.piso=t.value;AV.grp=null;saveUI();requestRender();return}
+  if(t.dataset&&t.dataset.avadd){const v=t.value;if(!v)return;const piso=t.dataset.avadd,x={piso,sec:v[0]==='S'?v.slice(2):'',amb:v[0]==='A'?v.slice(2):''};AV.xa.push(x);AV.gf={g:piso+'|'+x.sec+'|'+x.amb,c:'gd'};
+    const a=x.amb&&S.amb.get(x.amb);AV.C.delete(piso);if(a){AV.C.delete(piso+'|'+a.sectorId);AV.C.delete(piso+'|'+a.sectorId+'|'+a.id)}else if(x.sec)AV.C.delete(piso+'|'+x.sec);requestRender();return}
+  if(t.dataset&&t.dataset.avday){const p=avCur();if(t.value&&p&&t.value>=(p.d0||t.value)&&t.value<=(p.d1||t.value))AV.day=t.value;requestRender();return}
+  if(t.dataset&&t.dataset.avin){const k=t.dataset.avin.split('|'),row=avRowOf(k[0]),v=t.value===''?0:avNum(t.value);if(!row||!(v>=0)){requestRender();return}avSetCell(row,k[1],AV.day,U.avPct?v/100*row.q:v).then(()=>requestRender())}}
+function avClick(e){if(U.tab!=='areg')return;const g=a=>{const el=e.target.closest('['+a+']');return el?el.getAttribute(a):null};let v;
+  if((v=g('data-avdel'))){avDelAsk(v);return}
+  if((v=g('data-avm'))){avRowMenu(v);return}
+  if(e.target.closest('.aved,.avgh,.avadd'))return;
+  if((v=g('data-avpct'))!=null){U.avPct=v==='1';saveUI()}
+  else if((v=g('data-avwk'))){AV.wkO.has(v)?AV.wkO.delete(v):AV.wkO.add(v)}
+  else if((v=g('data-avet'))){v='e:'+v;AV.C.has(v)?AV.C.delete(v):AV.C.add(v)}
+  else if((v=g('data-avcol'))!=null){if(!v)return;AV.C.has(v)?AV.C.delete(v):AV.C.add(v)}
+  else if((v=g('data-avd'))){AV.day=v}
+  else if((v=g('data-avgrp'))!=null){AV.grp=v||null}
+  else if((v=g('data-avst'))){const b=e.target.closest('[data-avst]'),k=b.dataset.r.split('|'),row=avRowOf(k[0]);if(!row)return;const c=avCell(avData().ex,row.id,k[1],AV.day),step=U.avPct?row.q/10:1;avSetCell(row,k[1],AV.day,Math.max(0,c+ +v*step)).then(()=>requestRender());return}
+  else if((v=g('data-av'))){if(v==='new')avPartDlg(null);else if(v==='edit')avPartDlg(avCur());else if(v==='imp')avImpOpen();else if(v==='amb')avAmbDlg();else if(v==='xexp')avXlExport();else if(v==='mat')avMatDlg();else if(v==='ximp')avXlPick();else if(v==='hoy'){const C=avCur()?avWeeks(avCur()):null;if(C&&(C.t<C.d0||C.t>C.d1)){toast('Hoy está fuera de las fechas de la partida (✎ Partida para cambiarlas).');return}AV.wkO&&AV.wkO.add(avMon(todayIso()));AV.goHoy=true;requestRender()}
+    else if(v==='wks'){const p=avCur();if(!p)return;AV.wkAll=!AV.wkAll;const C=avWeeks(p);AV.wkO=AV.wkAll?new Set(C.W.map(w=>w.m)):null;AV.goHoy=!AV.wkAll;requestRender()}
+    else if(v==='edf'){AV.edf=!AV.edf;requestRender()}
+    else if(v==='wrap'){U.avWrap=!U.avWrap;saveUI();requestRender()}
+    else if(v==='ets'){const E=avData().rows.filter(avHasEt),all=E.every(r=>AV.C.has('e:'+r.id));E.forEach(r=>all?AV.C.delete('e:'+r.id):AV.C.add('e:'+r.id));requestRender()}
+    else if(v==='qclr'){clearTimeout(AV.qt);AV.q='';requestRender()}
+    else if(v==='pmenu'){const c=avCur();openPop(e.target.closest('[data-av]'),`<div class="ph">${esc(c?c.nom:'Partida')}</div><button data-do="ed">✎ Nombre y fechas…</button><button data-do="nw">＋ Nueva partida…</button>`,{ed:()=>avPartDlg(avCur()),nw:()=>avPartDlg(null)})}
+    else if(v==='undo')avUndo(false);else if(v==='redo')avUndo(true);else if(v==='todo')avTodo();return}
+  else return;requestRender()}
+/** celular: completa de un toque lo que falta en el lugar abierto */
+function avTodo(){const p=avCur(),D=avData();if(!p||!avaReg()||!avReady(p))return;let g=null;avCelAll(D.rows).forEach(x=>x.G.forEach(y=>{if(y.k===AV.grp)g=y}));if(!g)return;let n=0;
+  avUGroup(()=>g.rows.forEach(r=>avEtOf(r).forEach(e=>{const fa=r.q-avAcc(D.ex,r.id,e.id);if(fa>1e-9){const c=avCell(D.ex,r.id,e.id,AV.day);avPutCell(p,r,e.id,AV.day,avR4(c+fa),c);n++}})));
+  toast(n?`Completado: ${n} fila${n===1?'':'s'}`:'No faltaba nada aquí');requestRender()}
+
+/** quitar filas con «Editar filas» encendido: una fila (✕) o todas las de un ambiente, sector o piso (✕ en su cabecera).
+    Siempre pide confirmación; archiva (no borra) y es una sola acción para Ctrl+Z. No toca los ambientes de la obra. */
+async function avDelAsk(v){const p=avCur();if(!p||!avaCfg()||!avReady(p))return;const D=avData(),one=v[0]==='r',G=one?null:AV.gr&&AV.gr.get(v.slice(2));
+  const rows=(one?[v.slice(2)]:G?G.ids:[]).map(id=>D.rows.find(r=>r.id===id)).filter(Boolean);if(!rows.length)return;
+  const con=rows.filter(r=>avEtOf(r).some(e=>avAcc(D.ex,r.id,e.id)>0)).length,n=rows.length;
+  if(!await uiAsk({title:one?'¿Quitar esta fila?':`¿Quitar las ${n} fila${n===1?'':'s'} de «${G.lab}»?`,text:(one?`${rows[0].desc} (${avLoc(rows[0])}).`:`Se quitan de la partida «${p.nom}»${AV.nf?' (solo las que muestra la búsqueda o el filtro)':''}. Los ambientes de la obra no se tocan.`)+(con?` ${one?'Tiene':con+' de ellas tienen'} avance registrado: se conserva en la base, pero deja de contar.`:'')+' Se puede deshacer con Ctrl+Z.',
+    list:one?null:rows.slice(0,8).map(r=>r.desc).concat(n>8?[`… y ${n-8} más`]:[]),ok:one?'Quitar la fila':`Quitar ${n} fila${n===1?'':'s'}`,tone:con?'danger':'warn'}))return;
+  const w=avWho();avUGroup(()=>rows.forEach(r=>avRowPatch(p,r,{arch:w})));toast(`${n===1?'Fila quitada':n+' filas quitadas'} · Ctrl+Z para deshacer`);requestRender()}
+
+/* ---------- partida: solo nombre y fechas ---------- */
+function avPartDlg(p){if(!avaCfg())return;const t=todayIso(),f={nom:p?p.nom:'',d0:(p&&p.d0)||avMon(t),d1:(p&&p.d1)||addD(t,90)};
+  lqModal(`<div class="avh"><b>${p?'Editar partida':'Nueva partida'}</b><button class="ib" data-lqx="1" aria-label="Cerrar">✕</button></div>
+  <label class="avf">Nombre<input class="tin" id="avfnom" maxlength="60" value="${esc(f.nom)}" placeholder="p. ej. Mobiliario, Pintura, Enchape…"></label>
+  <div class="avf2"><label class="avf">Inicio del registro<input class="tin" type="date" id="avfd0" value="${esc(f.d0)}"></label><label class="avf">Fin<input class="tin" type="date" id="avfd1" value="${esc(f.d1)}"></label></div>
+  <p class="avnote">Si ya hay avance de antes, empieza el registro un día antes y pon ahí el acumulado hasta esa fecha.</p>
+  <p class="avnote">Eso es todo. Las filas, sus unidades y sus etapas se agregan después en la misma planilla.</p>
+  <div class="avact">${p?'<button type="button" class="ib" data-avfk="arch">Archivar partida</button>':''}<span class="avsp"></span><button type="button" class="ib" data-lqx="1">Cancelar</button><button type="button" class="ib pri" data-avfk="ok">${p?'Guardar':'Crear partida'}</button></div>`,
+  async e=>{const b=e.target.closest('[data-avfk]');if(!b)return;
+    if(b.dataset.avfk==='arch'){if(!await uiAsk({title:'¿Archivar esta partida?',text:'Deja de verse en el módulo; sus filas y su avance se conservan.',ok:'Archivar',tone:'warn'}))return;bgWrite(fcol('avp').doc(p.id).update({arch:avWho()}));lqClose();toast('Partida archivada');requestRender();return}
+    const nom=$('#avfnom').value.trim(),d0=$('#avfd0').value,d1=$('#avfd1').value;if(!nom){toast('Ponle un nombre a la partida.');return}if(!d0||!d1||d1<d0){toast('Revisa las fechas: el fin no puede ser anterior al inicio.');return}
+    const doc={v:2,nom:nom.slice(0,60),d0,d1,...avWho()};
+    if(p)bgWrite(fcol('avp').doc(p.id).update(doc));else{const id=uid('av');doc.ord=avParts().length;doc.arch=null;bgWrite(fcol('avp').doc(id).set(doc));U.avP=id;saveUI()}
+    lqClose();toast(p?'Partida guardada':'Partida creada');requestRender()})}
+
+/* ---------- «⋯» de una fila: descripción, etapas, quitar ---------- */
+function avRowMenu(id){const p=avCur(),r=avRowOf(id);if(!p||!r||!avaCfg())return;const he=avHasEt(r),ex=avData().ex,tgs=()=>avData().rows.filter(x=>x.id!==r.id&&!avHasEt(x)&&x.und===r.und&&(!U.piso||x.piso===U.piso)),others=tgs().length;
+  lqModal(`<div class="avh"><b>${esc(r.desc)}</b><button class="ib" data-lqx="1" aria-label="Cerrar">✕</button></div><p class="avnote">${esc(avLoc(r))} · ${avF(r.q)} ${esc(r.und)}</p>
+  <label class="avf">Descripción<span class="avfe"><input class="tin" id="avmd" maxlength="160" value="${esc(r.desc)}"><button type="button" class="ib" data-avmk="desc">Guardar</button></span></label>
+  <label class="avf">Nueva etapa de esta fila<span class="avfe"><input class="tin" id="avme" maxlength="40" placeholder="p. ej. Empaste, 1.ª mano, Fragua…"><button type="button" class="ib pri" data-avmk="eta">＋ Etapa</button></span></label>
+  <p class="avnote">${he?'Etapas: '+r.et.map(e=>esc(e.n)).join(', ')+'. Nacen con el mismo peso; se cambia en la columna «Peso».':'Sin etapas, la fila se llena directo. Al agregar la primera etapa, lo ya registrado en la fila pasa a esa etapa.'}</p>
+  <div class="avmbt">${he&&others?`<button type="button" class="ib" data-avmk="copy">Aplicar estas etapas a las otras ${others} fila${others===1?'':'s'} en ${esc(r.und)} que no tienen etapas${U.piso?' (solo el piso elegido)':' (todos los pisos)'}</button>`:''}${he?'<button type="button" class="ib" data-avmk="noet">Quitar las etapas de esta fila</button>':''}<button type="button" class="ib" data-avmk="up">↑ Subir la fila en su ambiente</button><button type="button" class="ib" data-avmk="dn">↓ Bajar la fila</button><button type="button" class="ib" data-avmk="del">Quitar la fila</button></div>`,
+  async e=>{const b=e.target.closest('[data-avmk]');if(!b)return;const k=b.dataset.avmk,row=avRowOf(id);if(!row||!avReady(p)){lqClose();return}
+    if(k==='desc'){const d=$('#avmd').value.trim();if(!d){toast('La descripción no puede quedar vacía.');return}avRowPatch(p,row,{desc:d.slice(0,160)});lqClose();toast('Descripción guardada');requestRender();return}
+    if(k==='eta'){const n=$('#avme').value.trim();if(!n){$('#avme').focus();return}const cur=avHasEt(row)?row.et:[];if(cur.some(x=>mnk(x.n)===mnk(n))){toast('Esa etapa ya está en la fila.');return}
+      /* la primera etapa toma el id de la fila sin etapas ('_'): lo ya registrado pasa a ella; las demás, un id que no se repite nunca */
+      const w=cur.length?cur.reduce((s,x)=>s+(+x.w||0),0)/cur.length:1;avRowPatch(p,row,{et:[...cur,{id:cur.length?avNid('e'):AV_E0,n:n.slice(0,40),w:Math.round(w*100)/100}]});avRowMenu(id);requestRender();return}
+    if(k==='copy'){const tg=tgs(),con=tg.filter(x=>avAcc(ex,x.id,AV_E0)>0),w=avWho(),by=new Map();if(!tg.length)return;
+      /* en una fila que ya tiene avance, lo registrado pasa a la primera etapa y su % baja: se avisa antes */
+      if(con.length&&!await uiAsk({title:'Hay filas con avance registrado',text:`${con.length} de las ${tg.length} filas ya tienen avance. En ellas lo registrado pasará a la etapa «${row.et[0].n}», así que su porcentaje bajará hasta que se llenen las demás etapas.`,ok:'Aplicar etapas',tone:'warn'}))return;
+      tg.forEach(x=>{const R=by.get(x.piso)||{};R[x.id]={et:row.et.map((s,i)=>({id:i?avNid('e')+i:AV_E0,n:s.n,w:s.w}))};by.set(x.piso,R)});
+      avUGroup(()=>by.forEach((R,pi)=>{for(const id in R)avURec({k:'r',row:{id,piso:pi},a:{et:null},b:R[id]})}));
+      const bt=db.batch();by.forEach((R,pi)=>bt.set(avMRef(p,pi),{p:p.id,piso:pi,r:R,by:w.by,t:w.t},{merge:true}));bgWrite(bt.commit());lqClose();toast(`Etapas aplicadas a ${tg.length} fila${tg.length===1?'':'s'}`);requestRender();return}
+    if(k==='noet'){const lost=row.et.filter(s=>s.id!==AV_E0&&avAcc(ex,row.id,s.id)>0);
+      if(!await uiAsk({title:'¿Quitar las etapas de esta fila?',text:lost.length?`La fila conserva lo registrado en «${row.et[0].n}». Lo de ${lost.map(s=>'«'+s.n+'»').join(', ')} queda en la base, pero deja de verse y de contar.`:'La fila vuelve a llenarse directo y conserva lo registrado en su primera etapa.',ok:'Quitar etapas',tone:lost.length?'danger':'warn'}))return;
+      avRowPatch(p,row,{et:null});lqClose();requestRender();return}
+    if(k==='up'||k==='dn'){const G=avData().rows.filter(x=>x.piso===row.piso&&x.amb===row.amb&&x.sec===row.sec),i=G.findIndex(x=>x.id===row.id),o=G[i+(k==='up'?-1:1)];
+      if(!o){toast(k==='up'?'Ya es la primera de su ambiente.':'Ya es la última de su ambiente.');return}
+      /* se intercambian sus números de orden (si coincidían, se separan) */
+      /* se intercambian sus números de orden; si en el grupo hay números repetidos, se renumera el grupo entero para que no salte de más */
+      const j=i+(k==='up'?-1:1),N=G.slice();N[i]=o;N[j]=row;const dup=new Set(G.map(x=>x.o)).size<G.length,base=Math.min(...G.map(x=>x.o));
+      avUGroup(()=>{if(dup)N.forEach((x,n)=>{if(x.o!==base+n)avRowPatch(p,x,{o:base+n})});else{avRowPatch(p,row,{o:o.o});avRowPatch(p,o,{o:row.o})}});requestRender();avRowMenu(id);return}
+    if(k==='del'){const has=avEtOf(row).some(s=>avAcc(ex,row.id,s.id)>0);
+      if(!await uiAsk({title:'¿Quitar esta fila?',text:`${row.desc} (${avLoc(row)}).${has?' Tiene avance registrado: se conserva en la base, pero deja de contar.':''}`,ok:'Quitar fila',tone:has?'danger':'warn'}))return;
+      avRowPatch(p,row,{arch:avWho()});lqClose();toast('Fila quitada');requestRender()}})}
+
+/* ---------- «Traer ambientes…»: la misma fila en muchos ambientes del Lookahead (25-11-2026, pedido del dueño) ----------
+   Para partidas que se repiten en casi todos los ambientes (pintura, enchape, zócalos): se escribe la descripción y la unidad una
+   vez, se desmarcan los ambientes que no aplican y se crea una fila en cada uno con el metrado en blanco («por metrar»: no cuenta
+   en el avance ni se puede registrar hasta ponerle metrado). No crea ambientes: usa los de la obra. */
+function avAmbDlg(st){const p=avCur();if(!p||!avaCfg())return;if(!avReady(p)){toast('Espera a que cargue la planilla.');return}
+  st=st||{desc:'',und:'m²',off:new Set()};const ps=pisos().filter(x=>!U.piso||x.id===U.piso);
+  const L=ps.map(pi=>({pi,secs:[...S.sec.values()].filter(s=>s.pisoId===pi.id).sort(byOrder).map(s=>({s,ambs:[...S.amb.values()].filter(a=>a.sectorId===s.id).sort(byOrder)})).filter(x=>x.ambs.length)})).filter(x=>x.secs.length);
+  if(!L.length){toast('No hay ambientes en '+(U.piso?'este piso':'la obra')+'. Se crean en el Lookahead.');return}
+  const all=L.flatMap(x=>x.secs.flatMap(y=>y.ambs)),cnt=()=>all.filter(a=>!st.off.has(a.id)).length,lab=n=>`Crear ${n} fila${n===1?'':'s'}`;
+  const rd=()=>{const d=$('#avad'),u=$('#avau');if(d)st.desc=d.value;if(u)st.und=u.value};
+  lqModal(`<div class="avh"><b>Traer ambientes · ${esc(p.nom)}</b><button class="ib" data-lqx="1" aria-label="Cerrar">✕</button></div>
+  <p class="avnote">Crea <b>la misma fila</b> en cada ambiente marcado, con el metrado en blanco para que lo llenes después en la planilla. ${U.piso?'Solo el piso elegido arriba.':'Todos los pisos (elige un piso arriba para traer solo ese).'}</p>
+  <div class="avf2"><label class="avf">Descripción de la fila<input class="tin" id="avad" maxlength="160" value="${esc(st.desc)}" placeholder="p. ej. Pintura látex en muros"></label>
+    <label class="avf">Unidad<input class="tin" id="avau" maxlength="10" list="avaul" value="${esc(st.und)}"><datalist id="avaul">${['m²','und','ml','m','m³','kg','pto','glb'].map(u=>`<option value="${u}">`).join('')}</datalist></label></div>
+  <div class="avibox">${L.map(x=>{const ids=x.secs.flatMap(y=>y.ambs),on=ids.filter(a=>!st.off.has(a.id)).length;return`<div class="avaph"><span>${esc(x.pi.name)} · ${on} de ${ids.length}</span><button type="button" class="lnkb" data-avap="${esc(x.pi.id)}">${on?'Desmarcar todos':'Marcar todos'}</button></div>${x.secs.map(y=>`${x.secs.length>1?`<div class="avasn">${esc(y.s.name||y.s.code||'Sector')}</div>`:''}<div class="avagr">${y.ambs.map(a=>`<label class="avck"><input type="checkbox" data-avac="${esc(a.id)}" id="avac_${esc(a.id)}"${st.off.has(a.id)?'':' checked'}> ${esc(a.name||a.code||a.id)}</label>`).join('')}</div>`).join('')}`}).join('')}</div>
+  <div class="avact"><span class="avsp"></span><button type="button" class="ib" data-lqx="1">Cancelar</button><button type="button" class="ib pri" id="avago" data-avak="go">${lab(cnt())}</button></div>`,
+  e=>{const b=e.target.closest('[data-avap],[data-avak]');if(!b)return;rd();
+    if(b.dataset.avap){const ids=L.find(x=>x.pi.id===b.dataset.avap).secs.flatMap(y=>y.ambs).map(a=>a.id),on=ids.some(i=>!st.off.has(i));ids.forEach(i=>on?st.off.add(i):st.off.delete(i));avAmbDlg(st);return}
+    const desc=st.desc.trim(),und=(st.und.trim()||'und').slice(0,10);if(!desc){toast('Escribe la descripción de la fila.');$('#avad').focus();return}
+    const have=new Set(avData().rows.filter(r=>r.amb).map(r=>r.amb+'|'+mnk(r.desc)+'|'+mnk(r.und))),w=avWho(),t0=NOW(),by=new Map();let n=0,dup=0;
+    all.forEach((a,i)=>{if(st.off.has(a.id))return;if(have.has(a.id+'|'+mnk(desc)+'|'+mnk(und))){dup++;return}const pi=pisoOfAmb(a.id),R=by.get(pi)||{};
+      R['r'+t0.toString(36)+i.toString(36)]={amb:a.id,sec:'',desc:desc.slice(0,160),und,q:0,et:null,o:t0+i,an:a.name||''};by.set(pi,R);n++});
+    if(!n){toast(dup?'Esos ambientes ya tienen esa fila.':'Marca al menos un ambiente.');return}
+    avUGroup(()=>by.forEach((R,pi)=>{for(const id in R)avURec({k:'new',row:{id,piso:pi}})}));
+    const bt=db.batch();by.forEach((R,pi)=>bt.set(avMRef(p,pi),{p:p.id,piso:pi,r:R,by:w.by,t:w.t},{merge:true}));bgWrite(bt.commit());lqClose();
+    toast(`${n} fila${n===1?'':'s'} creada${n===1?'':'s'}${dup?` · ${dup} ya existía${dup===1?'':'n'}`:''}. Ahora escribe su metrado: Enter baja a la siguiente.`);requestRender()},
+  e=>{const c=e.target;if(c.dataset&&c.dataset.avac){c.checked?st.off.delete(c.dataset.avac):st.off.add(c.dataset.avac);const g=$('#avago');if(g)g.textContent=lab(cnt())}})}

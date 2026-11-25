@@ -82,14 +82,14 @@ function fsDiff(prev,next,col,inTx){const args=[];const FV=firebase.firestore.Fi
 /* todo lo de la obra: también el plan del día cerrado (dplan, contra el que se mide el PPC diario), lo no programado, el historial
    del lookahead y la versión cliente; un respaldo sin dplan restaurado medía el PPC diario contra el lookahead vigente */
 const BK_DATA=['meta','pisos','contractors','sectors','ambientes','acts','weeks','wsnap','restr','lib','libm','planos','daily','live','lhprop','lhphist','lhidx','lhver','pdz','pzon','laminas','doneidx','members','inv',
-  'dplan','nprog','lhlog','cli','clia','clidx','cliver','tper','tperp','tperbk','tpc','tpcbk','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog','mobs','pcrit','pav','pull','hitos','frev','lkcom'];
+  'dplan','nprog','lhlog','cli','clia','clidx','cliver','tper','tperp','tperbk','tpc','tpcbk','tcfg','tareo','mcat','mtipo','mamb','mver','mcatp','mlog','mobs','pcrit','pav','pull','hitos','frev','lkcom','avp','avm','ava'];
 /* imágenes: láminas, fotos de LPS y fotos del formato firmado del tareo (tfot: se restauran con el mismo id, así siguen ligadas a tareo.foto) */
 const BK_IMG=['lamimg','fotos','tfot'];
 const BK_ALL=[...BK_DATA,...BK_IMG];
 async function backupJson(withImg){const btn=$(withImg?'#bbackup2':'#bbackup');const bt=btn?btn.textContent:'';if(btn)btn.disabled=true;
   const out={formato:'lps911-v2',fecha:new Date(NOW()).toISOString(),proyecto:P().name||P().code||'',conImagenes:!!withImg,colecciones:{}};const fail=[];let n=0;
   /* la versión cliente solo la lee quien tiene acceso: los demás no los piden (no es un error) */
-  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>!/^cli/.test(c)||isAdmin||(typeof canCli==='function'&&canCli()));/* la versión cliente está retirada, pero su historial sigue en el respaldo del administrador */
+  const cols=(withImg?BK_ALL:BK_DATA).filter(c=>!/^cli/.test(c)||isAdmin||(typeof canCli==='function'&&canCli())).filter(c=>!/^av[pma]$/.test(c)||modRole('ava'));/* Avance: solo quien tiene el módulo (las reglas no dejan leerlo a los demás) *//* la versión cliente está retirada, pero su historial sigue en el respaldo del administrador */
   try{for(let i=0;i<cols.length;i++){const col=cols[i];if(btn)btn.textContent=`Leyendo ${col}… (${i+1}/${cols.length})`;
       try{const sn=await fcol(col).get();const d={};sn.docs.forEach(x=>{d[x.id]=x.data();n++});out.colecciones[col]=d}catch(e){fail.push(col)}}
     out.total=n;const name=`LPS911_respaldo${withImg?'_con_imagenes':''}_${todayIso()}.json`;
