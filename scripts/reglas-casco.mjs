@@ -3,7 +3,8 @@
 // Este script copia las reglas de Last Planner (todo lo que está antes del marcador CASCO) y en la copia:
 //  - renombra cada función con el sufijo _cs (para que no choque con la original),
 //  - cambia las rutas /colección/ por /cs_colección/ (también las de get()/exists()),
-//  - deja fuera las colecciones compartidas entre módulos (equipo, tareo, planos, avisos).
+//  - deja fuera las colecciones compartidas entre módulos (equipo, tareo, planos, avisos),
+//  - y a cada permiso de LECTURA le antepone modOn('cas'): solo leen Casco los roles que el administrador marcó en Equipo › Módulos.
 // Uso: node scripts/reglas-casco.mjs          → reescribe la sección generada
 //      node scripts/reglas-casco.mjs --check  → falla si la sección no está al día (lo usa scripts/check.mjs)
 import fs from 'node:fs';
@@ -40,6 +41,20 @@ function items(src) {
   return out;
 }
 
+/* Módulos por rol: toda LECTURA de Casco exige además modOn('cas') (la función de Last Planner, que mira meta/mods; no lleva _cs).
+   Se envuelve cada «allow …read…: if COND;» como «if modOn('cas') && (COND);». Las escrituras quedan igual (ver firestore.rules). */
+function soloConCasco(t) {
+  let out = '', i = 0; const re = /allow\s+([a-z, ]*\bread\b[a-z, ]*):\s*if\s+/g; let m;
+  while ((m = re.exec(t))) {
+    const s = m.index + m[0].length; let j = s, d = 0;
+    for (; j < t.length; j++) { const c = t[j];
+      if (c === "'" || c === '"') { j++; while (j < t.length && t[j] !== c) { if (t[j] === '\\') j++; j++; } continue; }
+      if (c === '(' || c === '[') d++; else if (c === ')' || c === ']') d--; else if (c === ';' && d === 0) break; }
+    out += t.slice(i, s) + "modOn('cas') && (" + t.slice(s, j) + ')'; i = j; re.lastIndex = j;
+  }
+  return out + t.slice(i);
+}
+
 export function generate(full) {
   const open = full.indexOf('match /databases/{database}/documents {');
   if (open < 0) throw new Error('No se encontró match /databases/{database}/documents');
@@ -72,6 +87,7 @@ export function generate(full) {
     }
     if (it.kind === 'function' && /^function\s+dataCol\b/.test(t)) t = lits(t);
     t = paths(t).replace(fre, '$1_cs');
+    if (it.kind === 'match') t = soloConCasco(t);
     lines.push('    ' + t);
   }
   const gen = `${BEGIN}\n${lines.join('\n')}\n${END}\n`;

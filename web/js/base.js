@@ -85,7 +85,8 @@ const PLA_TABS=['pbib','pcar','p3d'];
    pasar módulos nuevos a la obra apagados): meta/mods de Last Planner = {ava:[roles], cas:[roles], pla:[roles]}.
    - El administrador siempre ve todo. Avance y Casco NACEN APAGADOS (sin dato = nadie más); Planos, sin dato, sigue como siempre.
    - Se suma a lo que ya limita cada módulo (p. ej. el capataz nunca ve Avance ni Casco); no lo reemplaza.
-   - Es visibilidad de la interfaz, no seguridad: las reglas siguen dejando leer esos datos a los miembros de la obra.
+   - Las reglas también lo exigen (modOn en firestore.rules): Avance, para leer y escribir; Casco, para leer todo cs_. Planos es solo
+     visibilidad del menú (sus láminas se usan dentro de Last Planner).
    - Se lee con modSub() también dentro de Casco (allí S.meta es cs_meta) y se guarda una copia en el equipo (lps.mods) para que
      al recargar no se rebote a Last Planner antes de que llegue el dato. */
 const MOD_ROLES=['editor','campo','sc','capataz','area','veedor','lector'],MOD_DEF={ava:[],cas:[],pla:null};
