@@ -89,13 +89,16 @@ const PLA_TABS=['pbib','pcar','p3d'];
    - Se lee con modSub() también dentro de Casco (allí S.meta es cs_meta) y se guarda una copia en el equipo (lps.mods) para que
      al recargar no se rebote a Last Planner antes de que llegue el dato. */
 const MOD_ROLES=['editor','campo','sc','capataz','area','veedor','lector'],MOD_DEF={ava:[],cas:[],pla:null};
-let MODCFG=null,MODCFG_OK=false;try{MODCFG=JSON.parse(localStorage.getItem('lps.mods')||'null')}catch(e){MODCFG=null}
+let MODCFG=null;try{MODCFG=JSON.parse(localStorage.getItem('lps.mods')||'null')}catch(e){MODCFG=null}
 /** roles que ven el módulo; null = todos los que ya podían */
 const modList=m=>{const c=MODCFG&&MODCFG[m];return Array.isArray(c)?c:(m in MOD_DEF?MOD_DEF[m]:null)};
 const modRole=m=>{if(!me)return false;if(me.role==='admin')return true;const l=modList(m);return l===null||l.includes(me.role)};
-function modSub(){let un=null;const open=()=>{un=fcolLp('meta').doc('mods').onSnapshot(d=>{const v=d&&d.exists?(d.data()||{}):{};MODCFG={ava:v.ava,cas:v.cas,pla:v.pla};MODCFG_OK=true;try{localStorage.setItem('lps.mods',JSON.stringify(MODCFG))}catch(e){}
+function modSub(){let un=null;const open=()=>{un=fcolLp('meta').doc('mods').onSnapshot(d=>{/* sin conexión y sin copia local del documento: no es «apagado», todavía no se sabe (se conserva lo último conocido) */
+      if(d&&!d.exists&&d.metadata&&d.metadata.fromCache)return;
+      const v=d&&d.exists?(d.data()||{}):{};MODCFG={ava:v.ava,cas:v.cas,pla:v.pla};try{localStorage.setItem('lps.mods',JSON.stringify(MODCFG))}catch(e){}
       /* dentro de Casco nada más lo revisa: si a este rol se le quitó Casco, vuelve a Last Planner */
-      if(CS()&&me&&!modOk('cas')){try{localStorage.setItem('lps.ns','')}catch(e){}location.reload();return}
+      if(CS()&&me&&!modOk('cas')){let ok=false;try{localStorage.removeItem('lps.ns');ok=localStorage.getItem('lps.ns')!=='cs'}catch(e){}
+        if(ok)setTimeout(()=>location.reload(),1500);/* un momento, para que termine de guardarse lo que estuviera en curso; si no se pudo cambiar de espacio no se recarga (sería un bucle) */return}
       modselApply();if(ready)requestRender()},()=>{un=null})};open();unsubs.push(()=>{if(un)un();un=null})}
 const canPla=()=>canLps();
 /* Oficina Técnica (área de apoyo «OT» u «Oficina Técnica») también carga: maneja las revisiones (decidido con el dueño, oct 2026) */
