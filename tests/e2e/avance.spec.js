@@ -200,6 +200,17 @@ test('Avance: «Traer ambientes» crea la misma fila en los ambientes del Lookah
   const f1 = page.locator('tr.avrw', { hasText: 'Pintura de puertas' }).first();
   await expect(f1).toContainText('por metrar'); await expect(f1.locator('.aved[data-k^="c|"]')).toHaveCount(0);
   await expect(page.locator('tr.avpi').first()).toContainText('14');           // metrado del piso: 10 + 4, sin la fila nueva
+  // pegar un bloque no corre las líneas ni las columnas: la fila sin metrado y la semana plegada quedan «sin pegar»
+  const pegar = txt => page.evaluate(x => { const dt = new DataTransfer(); dt.setData('text', x); document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }, txt);
+  await celda(page, `c|r1|_|${HOY}`).click(); await pegar('1\n2\n3');
+  await expect.poll(() => page.evaluate(k => ((__dbGet('ava', k) || {}).c || {})['2026-10-01'], SEM)).toEqual({ r1: { _: 1 }, r2: { _: 3 } });   // el 2 era de la fila por metrar
+  await expect(page.locator('#toast')).toContainText('1 sin pegar');
+  await celda(page, 'c|r2|_|2026-10-04').click(); await pegar('1\t9');                // el domingo es el último día de la semana abierta
+  await expect.poll(() => page.evaluate(k => (__dbGet('ava', k).c['2026-10-04'] || {}).r2, SEM)).toEqual({ _: 1 });
+  expect(await page.evaluate(() => __dbGet('ava', 'pm_p1_2026-10-05'))).toBeUndefined();
+  // Enter en la última fila de la tabla también guarda
+  await celda(page, `c|r3|_|${HOY}`).click(); await page.keyboard.type('2'); await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => ((__dbGet('ava', 'pm_p2_2026-09-28') || {}).c || {})['2026-10-01'])).toEqual({ r3: { _: 2 } });
   // se llena el metrado bajando con Enter por la columna
   await celda(page, `q|${N[0].id}`).click(); await page.keyboard.type('6'); await page.keyboard.press('Enter');
   await expect(celda(page, 'q|r2')).toBeFocused();

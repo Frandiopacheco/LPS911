@@ -136,7 +136,7 @@ function avCelGroups(pid,rows){const T=avTree(pid,rows.filter(r=>r.q>0)/* sin me
   T.secs.forEach(s=>{if(s.direct.length)G.push({k:'S'+s.id,nom:s.nom+' (todo el sector)',rows:s.direct});s.ambs.forEach(a=>G.push({k:'A'+a.id,nom:a.nom,sub:T.showSec?s.nom:'',rows:a.rows}))});return G}
 function avCelHtml(p,D,rows){const ex=D.ex,reg=avaReg(),t=todayIso(),pct=!!U.avPct;if(AV.day!==addD(t,-1))AV.day=t;const d=AV.day;
   const all=[...pisos(),...ARCH.pis.values()].filter(x=>rows.some(r=>r.piso===x.id)),cp=all.find(x=>x.id===U.piso)||all[0];
-  if(!cp)return'<div class="empty"><b>Esta partida aún no tiene filas.</b><br>Se agregan en la vista Planilla.</div>';const G=avCelGroups(cp.id,rows);let h=`<div class="avcel">`;
+  if(!cp)return'<div class="empty"><b>Esta partida aún no tiene filas.</b><br>Se agregan desde la computadora o la tablet.</div>';const G=avCelGroups(cp.id,rows);let h=`<div class="avcel">`;
   const dsel=`<span class="seg" role="group" aria-label="Día"><button type="button" data-avd="${t}" class="${d===t?'on':''}">Hoy ${fmtD(t)}</button><button type="button" data-avd="${addD(t,-1)}" class="${d!==t?'on':''}">Ayer</button></span>`;
   const g=G.find(x=>x.k===AV.grp);
   if(!g){h+=`<div class="avch"><b>${esc(cp.name)}</b>${U.piso?'':'<span>Elige otro piso arriba</span>'}</div>${dsel}`;
@@ -202,8 +202,8 @@ async function avEtDel(row,etId){const p=avCur(),e=row.et.find(x=>x.id===etId);i
 /** columna de una celda editable, para moverse con las flechas: los días por su fecha; descripción y nombre de etapa comparten columna */
 const avColOf=el=>{const k=el.dataset.k.split('|');return k[0]==='c'?'c|'+k[3]:k[0]==='n'?'d':k[0]};
 function avMove(t,dir){const tr=t.closest('tr');
-  if(dir==='left'||dir==='right'){const L=[...tr.querySelectorAll('.aved')],c=L[L.indexOf(t)+(dir==='left'?-1:1)];if(c)c.focus();return}
-  const col=avColOf(t);let r=tr;for(;;){r=dir==='up'?r.previousElementSibling:r.nextElementSibling;if(!r)return;const c=[...r.querySelectorAll('.aved')].find(x=>avColOf(x)===col);if(c){c.focus();return}}}
+  if(dir==='left'||dir==='right'){const L=[...tr.querySelectorAll('.aved')],c=L[L.indexOf(t)+(dir==='left'?-1:1)];if(c)c.focus();return!!c}
+  const col=avColOf(t);let r=tr;for(;;){r=dir==='up'?r.previousElementSibling:r.nextElementSibling;if(!r)return false;const c=[...r.querySelectorAll('.aved')].find(x=>avColOf(x)===col);if(c){c.focus();return true}}}
 function avKey(e){const t=e.target;if(U.tab!=='areg'||!t.classList)return;
   if(t.classList.contains('avgh')){if(e.key==='Enter'){e.preventDefault();const tr=t.parentElement;if(t.classList.contains('gq')){if(!avGhoTry(tr,true))tr.querySelector('.gd').focus()}else tr.querySelector('.gq').focus()}
     else if(e.key==='Escape'){t.parentElement.querySelectorAll('.gd,.gq').forEach(c=>c.textContent='');t.blur()}return}
@@ -211,23 +211,29 @@ function avKey(e){const t=e.target;if(U.tab!=='areg'||!t.classList)return;
   /* como en Excel: la celda entra «seleccionada» (escribir reemplaza y las flechas cambian de celda); F2 o doble clic = corregir dentro */
   if(e.key==='Escape'){t.textContent=t.dataset.o||'';AV.edit=false;t.blur();return}
   if(e.key==='F2'){e.preventDefault();AV.edit=true;const s=getSelection();s.selectAllChildren(t);s.collapseToEnd();return}
-  if(e.key==='Enter'){e.preventDefault();avMove(t,e.shiftKey?'up':'down');return}
+  if(e.key==='Enter'){e.preventDefault();if(!avMove(t,e.shiftKey?'up':'down'))t.blur();/* en la última fila no hay a dónde bajar: se guarda igual */return}
   const A={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'}[e.key];
-  if(A&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&(!AV.edit||A==='up'||A==='down')){e.preventDefault();avMove(t,A)}}
-/** pegar: texto plano siempre; un bloque copiado de Excel (varias celdas) se reparte desde la celda con foco hacia la derecha y abajo */
-function avPaste(e){const t=e.target&&e.target.closest?e.target.closest('.aved'):null;if(U.tab!=='areg'||!t)return;const raw=(e.clipboardData||window.clipboardData).getData('text');e.preventDefault();
-  const M=String(raw||'').replace(/\r\n?/g,'\n').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));
-  if(M.length===1&&M[0].length===1){document.execCommand('insertText',false,M[0][0].trim());return}
-  const p=avCur(),D=avData();if(!p||!avReady(p))return;const col0=avColOf(t),cells=[],rowsPatch=new Map();let tr=t.closest('tr'),bad=0,n=0;
-  for(const line of M){if(!tr)break;const L=[...tr.querySelectorAll('.aved')],i0=L.findIndex(x=>avColOf(x)===col0);if(i0<0){/* fila sin esa columna (madre, grupo): no consume línea */}
-    line.forEach((txt,j)=>{const c=L[i0+j];if(i0<0||!c)return;txt=txt.trim();const k=c.dataset.k.split('|'),row=avRowOf(k[1]);if(!row)return;const P=rowsPatch.get(row.id)||{row,patch:{}};
+  if(A&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&(!AV.edit||A==='up'||A==='down')){e.preventDefault();if(!avMove(t,A)&&(A==='up'||A==='down'))t.blur()}}
+/** pegar: texto plano siempre; un bloque copiado de Excel (varias celdas) se reparte desde la celda con foco hacia la derecha y abajo.
+    Cada línea va a la fila de datos siguiente y, en los días, cada columna a SU fecha: lo que caería en una celda que no está
+    (semana plegada, fuera del rango, fila «por metrar») no se corre a otra, se cuenta como «sin pegar». */
+function avPaste(e){const t=e.target&&e.target.closest?e.target.closest('.aved,.avgh'):null;if(U.tab!=='areg'||!t)return;const raw=(e.clipboardData||window.clipboardData).getData('text');e.preventDefault();
+  const M=String(raw||'').replace(/\r\n?/g,'\n').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));const k0=t.classList.contains('aved')?t.dataset.k.split('|'):null;
+  if(!k0||(M.length===1&&M[0].length===1)||k0[0]==='n'||k0[0]==='w'){document.execCommand('insertText',false,String(M[0][0]||'').trim());return}
+  const p=avCur(),D=avData();if(!p||!avReady(p))return;const day=k0[0]==='c',sel=day?'tr.avrw:not(.avmad),tr.avet':'tr.avrw',col0=avColOf(t),cells=[],rowsPatch=new Map();let tr=t.closest('tr'),bad=0,n=0,skip=0;
+  for(const line of M){if(!tr)break;const L=[...tr.querySelectorAll('.aved')],i0=L.findIndex(x=>avColOf(x)===col0);
+    line.forEach((txt,j)=>{txt=txt.trim();let c=null;
+      if(day){const d=k0[3]===AV_INI?(j?'':AV_INI):addD(k0[3],j);c=d?L.find(x=>{const k=x.dataset.k.split('|');return k[0]==='c'&&k[3]===d}):null}
+      else{c=i0<0?null:L[i0+j];if(c&&!['d','u','q'].includes(c.dataset.k.split('|')[0]))c=null}
+      if(!c){if(txt)skip++;return}const k=c.dataset.k.split('|'),row=avRowOf(k[1]);if(!row){if(txt)skip++;return}const P=rowsPatch.get(row.id)||{row,patch:{}};
       if(k[0]==='d'||k[0]==='u'){if(txt&&avaCfg()){P.patch[k[0]==='d'?'desc':'und']=txt.slice(0,k[0]==='d'?160:10);rowsPatch.set(row.id,P);n++}return}
-      if(k[0]==='n'||k[0]==='w')return;const v=txt===''?0:avNum(txt);if(txt!==''&&(!/^[\d\s.,%]+$/.test(txt)||!(v>=0))){bad++;return}
+      const v=txt===''?0:avNum(txt);if(txt!==''&&(!/^[\d\s.,%]+$/.test(txt)||!(v>=0))){bad++;return}
       if(k[0]==='q'){if(v>0&&avaCfg()){P.patch.q=avR4(v);rowsPatch.set(row.id,P);n++}return}
-      if(row.q>0&&avaReg()){const pc=U.avPct||txt.includes('%');cells.push({row,et:k[2],d:k[3],q:avR4(pc?v/100*row.q:v),old:avCell(D.ex,row.id,k[2],k[3])});n++}});
-    do{tr=tr.nextElementSibling}while(tr&&![...tr.querySelectorAll('.aved')].some(x=>avColOf(x)===col0))}
+      if(row.q>0&&avaReg()){const pc=U.avPct||txt.includes('%');cells.push({row,et:k[2],d:k[3],q:avR4(pc?v/100*row.q:v),old:avCell(D.ex,row.id,k[2],k[3])});n++}else if(txt)skip++});
+    do{tr=tr.nextElementSibling}while(tr&&!tr.matches(sel))}
   rowsPatch.forEach(x=>avRowPatch(p,x.row,x.patch));avPutCells(p,cells.filter(c=>Math.abs(c.q-c.old)>1e-9));
-  t.blur();AV.pend=false;toast(n?`Pegado: ${n} celda${n===1?'':'s'}${bad?` · ${bad} sin pegar (no eran números)`:''}`:'No había celdas donde pegar eso.');requestRender()}
+  t.textContent=t.dataset.o||'';/* lo que estuviera a medio escribir no debe pisar lo pegado */t.blur();AV.pend=false;
+  toast((n?`Pegado: ${n} celda${n===1?'':'s'}`:'No había celdas donde pegar eso')+(skip?` · ${skip} sin pegar (semana plegada, fuera de las fechas o fila sin metrado)`:'')+(bad?` · ${bad} no eran números`:''));requestRender()}
 /** historial de una celda: quién registró y cuándo */
 function avCtx(e){const t=e.target.closest&&e.target.closest('.aved[data-k^="c|"]');if(U.tab!=='areg'||!t)return;e.preventDefault();const p=avCur(),k=t.dataset.k.split('|'),row=avRowOf(k[1]);if(!p||!row)return;
   const d=k[3],doc=AVD.get(`${p.id}_${row.piso}_${d===AV_INI?AV_INI:avMon(d)}`),L=((doc&&doc.log)||[]).filter(x=>x.d===d&&x.r===row.id&&x.e===k[2]).sort((a,b)=>b.t-a.t);
