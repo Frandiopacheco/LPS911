@@ -21,7 +21,8 @@ Un **módulo aparte** en el selector de la barra (`U.mod==='ava'`, junto a Last 
 - **Interruptor Cantidad | %:** cambia cómo se ve y se tipea. Se guarda **siempre la cantidad** (3 de 7 muebles = 43 %; 50 % de 86 m² = 43 m²).
 - **Domingo incluido** (la obra a veces lo trabaja).
 - Configuran (partidas, filas, unidad, metrado, etapas, importar) **administrador y editores**; registran además **campo**. SC, áreas, veedor y lector solo leen. El capataz no ve el módulo.
-- **Avisa, no bloquea:** superar el metrado pide confirmar; una fracción en una fila «und» (3.5 muebles) se marca.
+- **Superar el metrado** (25-11-2026, pedido del dueño; antes era «Guardar igual»): la ventana `avOverAsk` da dos salidas. Por defecto, **ajustar el día** para que el acumulado cuadre con el metrado. O **aumentar el metrado** hasta lo ingresado, que pide una segunda confirmación (`uiAsk` rojo) y solo lo ve quien configura (administrador y editores); el metrado y la celda se guardan como una sola acción para Ctrl+Z. Al **pegar** un bloque no se pregunta: lo que superaría se ajusta y el aviso dice cuántas. Una fila puede seguir «superada» si después se baja su metrado (punto ámbar).
+- **Fracción de unidad:** una fracción en una fila «und» (3.5 muebles) se marca, no se bloquea.
 - **Días:** sin cierre; todo cambio queda en el historial de la celda. Se llena cualquier día del rango de la partida, **también los futuros** (lo pidió el 25-11-2026); fuera del rango no.
 - **Sin corte inicial** (25-11-2026): «más fácil es poner el acumulado hasta ahora un día antes de donde voy a controlar». La columna «Corte inicial» solo aparece si la partida ya tiene datos de corte guardados (`'ini'`), que siguen contando; la partida ya no pide esa fecha.
 - **La grilla se edita como Excel** (25-11-2026) y **no hay botón Celular**: la vista de celular sale sola en pantallas angostas (`isMob()`).

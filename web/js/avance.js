@@ -211,9 +211,24 @@ function avPutCells(p,cells){const by=new Map(),w=avWho();cells.forEach(c=>avCel
   by.forEach((o,id)=>bgWrite(fcol('ava').doc(id).set({p:p.id,piso:o.piso,w:o.wk,c:o.c,log:firebase.firestore.FieldValue.arrayUnion(...o.log),by:w.by,t:w.t},{merge:true})))}
 /** guarda la cantidad de un día; si el acumulado supera el metrado pide confirmar (avisa, no bloquea) */
 async function avSetCell(row,etId,d,q){const p=avCur();if(!p||!row||!avaReg()||!avReady(p))return false;const ex=avData().ex,old=avCell(ex,row.id,etId,d);q=avR4(q);if(Math.abs(q-old)<1e-9)return true;
-  const tot=avAcc(ex,row.id,etId)-old+q;if(q>old&&tot>row.q+1e-9){const e=avEtOf(row).find(x=>x.id===etId);
-    if(!await uiAsk({title:'Supera el metrado',text:`${row.desc}${e&&e.n?' · '+e.n:''} (${avLoc(row)}): el acumulado sería ${avF(tot)} y el metrado es ${avF(row.q)} ${row.und}.`,ok:'Guardar igual',tone:'warn'}))return false}
+  const acc=avAcc(ex,row.id,etId),tot=acc-old+q;if(q>old&&tot>row.q+1e-9){const e=avEtOf(row).find(x=>x.id===etId),fit=avR4(Math.max(old,row.q-(acc-old)));
+    /* supera el metrado (decidido con el dueño, 25-11-2026): o se ajusta el día para cuadrar con el metrado (por defecto), o se sube
+       el metrado para cuadrar con lo ingresado, que pide una segunda confirmación y solo lo hace quien configura */
+    const r=await avOverAsk(row,e,d,q,tot,fit);if(!r)return false;
+    if(r==='fit'){if(Math.abs(fit-old)>1e-9)avPutCell(p,row,etId,d,fit,old);return true}
+    if(!avaCfg()||!await uiAsk({title:'¿Aumentar el metrado?',text:`El metrado de «${row.desc}» (${avLoc(row)}) pasará de ${avF(row.q)} a ${avF(tot)} ${row.und}. Cambia el porcentaje de la fila${avHasEt(row)?' y de todas sus etapas':''}, y el de su ambiente, piso y partida.`,ok:'Sí, aumentar el metrado',tone:'danger'}))return false;
+    avUGroup(()=>{avRowPatch(p,row,{q:avR4(tot)});avPutCell(p,row,etId,d,q,old)});return true}
   avPutCell(p,row,etId,d,q,old);return true}
+/** ventana de «supera el metrado» con las dos salidas → 'fit' | 'grow' | null (cancelar o cerrar) */
+function avOverAsk(row,e,d,q,tot,fit){return new Promise(res=>{let done=false;const end=v=>{if(done)return;done=true;clearInterval(iv);if($('#lqm'))lqClose();res(v)},cfg=avaCfg(),lleno=fit<=avCell(avData().ex,row.id,e?e.id:AV_E0,d)+1e-9;
+  lqModal(`<div class="avh"><b>Supera el metrado</b><button class="ib" data-avo="x" aria-label="Cerrar">✕</button></div>
+    <p><b>${esc(row.desc)}</b>${e&&e.n?' · '+esc(e.n):''} <span class="avmu">(${esc(avLoc(row))})</span></p>
+    <p class="avnote">Con ${avF(q)} ${esc(row.und)} el ${d===AV_INI?'corte inicial':fmtD(d)}, el acumulado sería <b>${avF(tot)}</b> y el metrado es <b>${avF(row.q)}</b> ${esc(row.und)}.</p>
+    <div class="avmbt"><button type="button" class="ib pri" data-avo="fit" id="avofit">${lleno?`Dejar el día como estaba: la fila ya está completa`:`Ajustar el día a <b>${avF(fit)}</b> ${esc(row.und)} para cuadrar con el metrado`}</button>
+      ${cfg?`<button type="button" class="ib" data-avo="grow">Aumentar el metrado a <b>${avF(tot)}</b> ${esc(row.und)} para cuadrar con lo ingresado…</button>`:'<p class="avnote">Si el metrado está mal, lo corrige el administrador o un ingeniero de producción.</p>'}
+      <button type="button" class="ib" data-avo="x">Cancelar</button></div>`,ev=>{const b=ev.target.closest('[data-avo]');if(b)end(b.dataset.avo==='x'?null:b.dataset.avo)});
+  /* si la ventana se cierra por fuera (clic en el fondo, Esc), cuenta como cancelar */
+  const iv=setInterval(()=>{if(!$('#lqm'))end(null)},200);setTimeout(()=>{const b=$('#avofit');if(b)b.focus()},60)})}
 /** fila nueva desde la línea en blanco de la planilla */
 function avAddRow(g,desc,und,q){const p=avCur();if(!p||!avaCfg()||!avReady(p))return false;const[piso,sec,amb]=g.split('|');const a=amb?S.amb.get(amb):null;
   const row={id:avNid('r'),piso};avRowPatch(p,row,{amb:amb||'',sec:amb?'':sec||'',desc:desc.slice(0,160),und:(und||'und').slice(0,10),q:avR4(q),et:null,o:NOW(),an:a?a.name||'':''});
@@ -295,6 +310,7 @@ function avKey(e){const t=e.target;if(U.tab!=='areg'||!t.classList)return;
 function avPaste(e){const t=e.target&&e.target.closest?e.target.closest('.aved,.avgh'):null;if(U.tab!=='areg'||!t)return;const raw=(e.clipboardData||window.clipboardData).getData('text');e.preventDefault();
   const M=String(raw||'').replace(/\r\n?/g,'\n').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));const k0=t.classList.contains('aved')?t.dataset.k.split('|'):null;
   if(!k0||(M.length===1&&M[0].length===1)||k0[0]==='n'||k0[0]==='w'){document.execCommand('insertText',false,String(M[0][0]||'').trim());return}
+  const accM=new Map();let adj=0;
   const p=avCur(),D=avData();if(!p||!avReady(p))return;const day=k0[0]==='c',sel=day?'tr.avrw:not(.avmad),tr.avet':'tr.avrw',col0=avColOf(t),cells=[],rowsPatch=new Map();let tr=t.closest('tr'),bad=0,n=0,skip=0;
   for(const line of M){if(!tr)break;const L=[...tr.querySelectorAll('.aved')],i0=L.findIndex(x=>avColOf(x)===col0);
     line.forEach((txt,j)=>{txt=txt.trim();let c=null;
@@ -304,11 +320,13 @@ function avPaste(e){const t=e.target&&e.target.closest?e.target.closest('.aved,.
       if(k[0]==='d'||k[0]==='u'){if(txt&&avaCfg()){P.patch[k[0]==='d'?'desc':'und']=txt.slice(0,k[0]==='d'?160:10);rowsPatch.set(row.id,P);n++}return}
       const v=txt===''?0:avNum(txt);if(txt!==''&&(!/^[\d\s.,%]+$/.test(txt)||!(v>=0))){bad++;return}
       if(k[0]==='q'){if(v>0&&avaCfg()){P.patch.q=avR4(v);rowsPatch.set(row.id,P);n++}return}
-      if(row.q>0&&avaReg()){const pc=U.avPct||txt.includes('%');cells.push({row,et:k[2],d:k[3],q:avR4(pc?v/100*row.q:v),old:avCell(D.ex,row.id,k[2],k[3])});n++}else if(txt)skip++});
+      if(row.q>0&&avaReg()){const pc=U.avPct||txt.includes('%'),old=avCell(D.ex,row.id,k[2],k[3]),ak=row.id+'|'+k[2],base=accM.has(ak)?accM.get(ak):avAcc(D.ex,row.id,k[2]);let q=avR4(pc?v/100*row.q:v);
+        /* al pegar no se pregunta celda por celda: lo que superaría el metrado se ajusta para cuadrar y se avisa cuántas */
+        if(q>old&&base-old+q>row.q+1e-9){q=avR4(Math.max(old,row.q-(base-old)));adj++}accM.set(ak,base-old+q);cells.push({row,et:k[2],d:k[3],q,old});n++}else if(txt)skip++});
     do{tr=tr.nextElementSibling}while(tr&&!tr.matches(sel))}
   avUGroup(()=>{rowsPatch.forEach(x=>avRowPatch(p,x.row,x.patch));avPutCells(p,cells.filter(c=>Math.abs(c.q-c.old)>1e-9))});
   t.textContent=t.dataset.o||'';/* lo que estuviera a medio escribir no debe pisar lo pegado */t.blur();AV.pend=false;
-  toast((n?`Pegado: ${n} celda${n===1?'':'s'}`:'No había celdas donde pegar eso')+(skip?` · ${skip} sin pegar (semana plegada, fuera de las fechas o fila sin metrado)`:'')+(bad?` · ${bad} no eran números`:''));requestRender()}
+  toast((n?`Pegado: ${n} celda${n===1?'':'s'}`:'No había celdas donde pegar eso')+(skip?` · ${skip} sin pegar (semana plegada, fuera de las fechas o fila sin metrado)`:'')+(adj?` · ${adj} ajustada${adj===1?'':'s'} para no superar el metrado`:'')+(bad?` · ${bad} no eran números`:''));requestRender()}
 /** historial de una celda: quién registró y cuándo */
 function avCtx(e){const t=e.target.closest&&e.target.closest('.aved[data-k^="c|"]');if(U.tab!=='areg'||!t)return;e.preventDefault();const p=avCur(),k=t.dataset.k.split('|'),row=avRowOf(k[1]);if(!p||!row)return;
   const d=k[3],doc=AVD.get(`${p.id}_${row.piso}_${d===AV_INI?AV_INI:avMon(d)}`),L=((doc&&doc.log)||[]).filter(x=>x.d===d&&x.r===row.id&&x.e===k[2]).sort((a,b)=>b.t-a.t);
