@@ -689,12 +689,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     // Módulo Avance (docs/ia/avance.md): avance físico de partidas de acabados por ambiente. Lo lee todo LPS.
-    // avp (partidas) y el metrado de avm: administrador y editores. «Llegó» (avm.ll) y el avance diario (ava): también campo.
+    // avp (partidas) y las filas de avm (descripción, unidad, metrado, etapas): administrador y editores. El avance diario (ava): también campo.
+    // (avm.ll es del primer formato, que ya no se usa: la regla se conserva para no cambiar lo instalado.)
     // Nada se borra (se archiva); el historial por celda (ava.log) nunca se acorta.
     match /avp/{id} {
       allow read: if lpsMember();
-      allow create, update: if canEdit() && request.resource.data.nom is string && request.resource.data.nom != ''
-        && request.resource.data.et is list && request.resource.data.et.size() > 0;
+      allow create, update: if canEdit() && request.resource.data.nom is string && request.resource.data.nom != '';
       allow delete: if false;
     }
     function avmOk(id, d) { return d.p is string && d.piso is string && d.p != '' && d.piso != '' && id == d.p + '_' + d.piso && d.get('r', {}) is map && d.get('ll', {}) is map; }

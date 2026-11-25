@@ -1,122 +1,153 @@
-// Módulo Avance (avance*.js, docs/ia/avance.md): partidas configurables, metrado por ambiente, registro diario por etapa y «Llegó».
+// Módulo Avance (avance*.js, docs/ia/avance.md): planilla única por partida. Filas por piso › sector › ambiente con unidad y metrado,
+// etapas definidas en la misma fila, registro diario en cantidad o en % y filas nuevas desde la tabla.
 import { test, expect } from '@playwright/test';
 import { openApp, noErrors, HOY } from './helpers.js';
 
-const P1 = { nom: 'Mobiliario', und: 'und', sum: true, ubi: [], et: [{ id: 'e1', nom: 'Instalación', peso: 100 }], items: { i1: { cod: 'EO-1', des: 'Escritorio en L', ord: 0 }, i2: { cod: 'SO-3', des: 'Silla giratoria', ord: 1 } }, peso: 30, glob: true, d0: '2026-09-21', d1: '2026-10-31', corte: '2026-09-20', ord: 0, arch: null };
-const P2 = { nom: 'Pintura', und: 'm²', sum: false, ubi: ['Muro'], et: [{ id: 'e1', nom: 'Empaste', peso: 40 }, { id: 'e2', nom: '1.ª mano', peso: 30 }, { id: 'e3', nom: '2.ª mano', peso: 30 }], items: { i1: { cod: 'PL', des: 'Látex', ord: 0 } }, peso: 70, glob: true, d0: '2026-09-21', d1: '2026-10-31', corte: '2026-09-20', ord: 1, arch: null };
+const PM = { v: 2, nom: 'Mobiliario', d0: '2026-09-21', d1: '2026-10-31', corte: '2026-09-20', ord: 0, arch: null };
+const PP = { v: 2, nom: 'Pintura', d0: '2026-09-21', d1: '2026-10-31', corte: '2026-09-20', ord: 1, arch: null };
+const ET = [{ id: '_', n: 'Empaste', w: 40 }, { id: 'e2', n: '1.ª mano', w: 30 }, { id: 'e3', n: '2.ª mano', w: 30 }];
 const extra = [
-  ['avp', 'pm', P1], ['avp', 'pp', P2],
-  ['avm', 'pm_p1', { p: 'pm', piso: 'p1', r: { r1: { it: 'i1', amb: 'a1', ub: '', q: 10, an: 'Dpto 101' }, r2: { it: 'i2', amb: 'a2', ub: '', q: 4, an: 'Dpto 102' } }, ll: { r1: 6 } }],
-  ['avm', 'pm_p2', { p: 'pm', piso: 'p2', r: { r3: { it: 'i1', amb: 'a3', ub: '', q: 6, an: 'Dpto 103' } } }],
-  ['ava', 'pm_p1_ini', { p: 'pm', piso: 'p1', w: 'ini', c: { ini: { r1: { e1: 2 } } }, log: [] }],
-  ['avm', 'pp_p1', { p: 'pp', piso: 'p1', r: { q1: { it: 'i1', amb: 'a1', ub: 'Muro', q: 100, an: 'Dpto 101' } } }],
-  ['ava', 'pp_p1_2026-09-28', { p: 'pp', piso: 'p1', w: '2026-09-28', c: { '2026-09-29': { q1: { e1: 100, e2: 50 } } }, log: [] }],
+  ['avp', 'pm', PM], ['avp', 'pp', PP], ['avp', 'viejo', { nom: 'Formato anterior', et: [{ id: 'e1', nom: 'x', peso: 100 }], arch: null }],
+  ['avm', 'pm_p1', { p: 'pm', piso: 'p1', r: { r1: { amb: 'a1', sec: '', desc: 'EO-1 · Escritorio', und: 'und', q: 10, et: null, o: 1, an: 'Dpto 101' }, r2: { amb: 'a2', sec: '', desc: 'SO-3 · Silla', und: 'und', q: 4, et: null, o: 2, an: 'Dpto 102' } } }],
+  ['avm', 'pm_p2', { p: 'pm', piso: 'p2', r: { r3: { amb: 'a3', sec: '', desc: 'EO-1 · Escritorio', und: 'und', q: 6, et: null, o: 3, an: 'Dpto 103' } } }],
+  ['ava', 'pm_p1_ini', { p: 'pm', piso: 'p1', w: 'ini', c: { ini: { r1: { _: 2 } } }, log: [] }],
+  ['avm', 'pp_p1', { p: 'pp', piso: 'p1', r: { q1: { amb: 'a1', sec: '', desc: 'Látex en muros', und: 'm²', q: 100, et: ET, o: 1 }, q2: { amb: 'a1', sec: '', desc: 'Contrazócalo', und: 'ml', q: 20, et: null, o: 2 }, q3: { amb: '', sec: 's1', desc: 'Fachada del sector', und: 'm²', q: 50, et: null, o: 3 } } }],
+  ['ava', 'pp_p1_2026-09-28', { p: 'pp', piso: 'p1', w: '2026-09-28', c: { '2026-09-29': { q1: { _: 100, e2: 50 } } }, log: [] }],
 ];
-const abrir = async (page, o = {}) => { const errors = await openApp(page, { extra, ...o }); await page.evaluate(() => { U.piso = ''; goMod('ava'); }); await expect(page.locator('#main')).toHaveAttribute('data-view', 'areg'); return errors; };
+const abrir = async (page, o = {}) => { const errors = await openApp(page, { extra, ...o }); await page.evaluate(() => { U.piso = ''; U.avPct = false; goMod('ava'); }); await expect(page.locator('#main')).toHaveAttribute('data-view', 'areg'); return errors; };
 const celda = (page, k) => page.locator(`.aved[data-k="${k}"]`);
 const escribir = async (page, k, v) => { await celda(page, k).click(); await page.keyboard.press('Control+A'); await page.keyboard.type(String(v)); await page.keyboard.press('Tab'); };
+const SEM = 'pm_p1_2026-09-28';
 
-test('Avance: cálculo del avance ponderado, por grupo y global', async ({ page }) => {
+test('Avance: cálculo por fila, etapas con peso, grupos con una o varias unidades', async ({ page }) => {
   const errors = await openApp(page);
   const r = await page.evaluate(() => {
-    const et = [{ id: 'a', peso: 40 }, { id: 'b', peso: 30 }, { id: 'c', peso: 30 }];
-    const ex = { r1: { a: { ini: 60, '2026-10-01': 40 }, b: { '2026-10-02': 50 } }, r2: { a: { ini: 999 } } };
-    const rows = [{ id: 'r1', q: 100, ll: 30 }, { id: 'r2', q: 60, ll: 90 }];
-    return { fila: avRowPct(et, ex, rows[0]), hasta: avRowPct(et, ex, rows[0], '2026-10-01'), tope: avRowPct(et, ex, rows[1]), grupo: avGrpPct(et, ex, rows), etapa: avEtPct(ex, rows, 'a'), ll: avLlPct(rows),
-      pesos: [avPesosOk(et), avPesosOk([{ peso: 50 }, { peso: 40 }])], glob: avGlobal([{ peso: 30, pct: .2, has: true }, { peso: 40, pct: .55, has: true }, { peso: 30, pct: 1, has: false }]),
-      num: [avNum('6,5'), avNum('1,473.5'), avNum(' 12 '), avNum('x')], csv: avCsv('a;b\r\n"x;1";"di ""jo"""\n\n3;4') };
+    const et = [{ id: '_', n: 'a', w: 40 }, { id: 'b', n: 'b', w: 30 }, { id: 'c', n: 'c', w: 30 }];
+    const ex = { r1: { _: { ini: 60, '2026-10-01': 40 }, b: { '2026-10-02': 50 } }, r2: { _: { ini: 999 } }, r3: { _: { '2026-10-01': 3 } } };
+    const r1 = { id: 'r1', und: 'm²', q: 100, et }, r2 = { id: 'r2', und: 'm²', q: 60, et: null }, r3 = { id: 'r3', und: 'und', q: 7, et: null };
+    return { fila: avRowPct(ex, r1), hasta: avRowPct(ex, r1, '2026-10-01'), tope: avRowPct(ex, r2), und: avRowPct(ex, r3), dia: avRowDay(ex, r1, '2026-10-01'),
+      igual: avGrpPct(ex, [r1, r2]), mezcla: avGrpPct(ex, [r1, r3]), same: [avSame([r1, r2]), avSame([r1, r3])],
+      w: avSetW(et, 'b', 50).map(e => e.w), w2: avSetW([{ id: '_', w: 1 }, { id: 'x', w: 1 }, { id: 'y', w: 1 }], 'x', 40).map(e => e.w),
+      num: [avNum('6,5'), avNum('1,473.5'), avNum('50 %'), avNum('x')], csv: avCsv('a;b\r\n"x;1";"di ""jo"""\n\n3;4') };
   });
-  expect(r.fila).toBeCloseTo(0.55, 6);       // ejemplo del dueño: empaste 100 %, 1.ª mano 50 %, 2.ª mano 0 → 55 %
-  expect(r.hasta).toBeCloseTo(0.40, 6);      // la curva: hasta una fecha (el corte inicial siempre cuenta)
-  expect(r.tope).toBeCloseTo(0.40, 6);       // una etapa nunca pasa de 100 % aunque supere el metrado
-  expect(r.grupo).toBeCloseTo((100 * 0.55 + 60 * 0.4) / 160, 6);
-  expect(r.etapa).toBeCloseTo(1, 6);
-  expect(r.ll).toBeCloseTo((30 + 60) / 160, 6);
-  expect(r.pesos).toEqual([true, false]);
-  expect(r.glob).toBeCloseTo((0.2 * 30 + 0.55 * 40) / 70, 6);   // la partida sin metrado no entra y su peso se reparte
-  expect(r.num).toEqual([6.5, 1473.5, 12, 0]);
+  expect(r.fila).toBeCloseTo(0.55, 6);          // ejemplo del dueño: empaste 100 %, 1.ª mano 50 %, 2.ª mano 0 → 55 %
+  expect(r.hasta).toBeCloseTo(0.40, 6);
+  expect(r.tope).toBe(1);                       // superar el metrado no pasa de 100 %
+  expect(r.und).toBeCloseTo(3 / 7, 6);          // 3 de 7 muebles
+  expect(r.dia).toBeCloseTo(0.16, 6);           // 40 m² de empaste (peso 40 %) sobre 100 m²
+  expect(r.igual).toBeCloseTo((100 * 0.55 + 60 * 1) / 160, 6);   // misma unidad: ponderado por metrado
+  expect(r.mezcla).toBeCloseTo((0.55 + 3 / 7) / 2, 6);           // unidades distintas: promedio simple, no se suman
+  expect(r.same).toEqual([true, false]);
+  expect(r.w[1]).toBe(50); expect(r.w[0] + r.w[2]).toBeCloseTo(50, 2); expect(r.w[0] / r.w[2]).toBeCloseTo(40 / 30, 2);
+  expect(r.w2).toEqual([30, 40, 30]);
+  expect(r.num).toEqual([6.5, 1473.5, 50, 0]);
   expect(r.csv).toEqual([['a', 'b'], ['x;1', 'di "jo"'], ['3', '4']]);
   noErrors(errors, 'calculo');
 });
 
-test('Avance: el ingeniero registra el día, la celda guarda su historial y superar el metrado pide confirmar', async ({ page }) => {
+test('Avance: el ingeniero registra el día; historial por celda, aviso al superar el metrado y fracción de unidad', async ({ page }) => {
   const errors = await abrir(page, { as: 'campo' });
-  await expect(page.locator('#modsel [data-mod="ava"]')).toHaveCount(1);
+  await expect(page.locator('#avp option')).toHaveCount(2);           // la partida del formato anterior no se muestra
   await expect(page.locator('tr.avrw')).toHaveCount(3);
-  await expect(page.locator('tr.avpi').first()).toContainText('Primer piso');
-  // campo no cambia el metrado, sí «Llegó» y los días
-  await expect(celda(page, 'q|r1')).toHaveCount(0);
-  await escribir(page, `c|r1|${HOY}`, 3);
-  await expect.poll(() => page.evaluate(() => (__dbGet('ava', 'pm_p1_2026-09-28') || {}).c)).toEqual({ [HOY]: { r1: { e1: 3 } } });
-  const log = await page.evaluate(() => __dbGet('ava', 'pm_p1_2026-09-28').log);
-  expect(log).toHaveLength(1); expect(log[0]).toMatchObject({ d: HOY, r: 'r1', e: 'e1', q: 3, a: 0, by: 'campo@obra.pe' });
-  // acumulado 2 (corte) + 3 = 5 de 10; llegó 6 → sin alerta
+  await expect(page.locator('tr.avse')).toHaveCount(0);               // un solo sector por piso: sin nivel «sector»
+  // campo registra, pero no agrega filas ni cambia unidad o metrado
+  await expect(page.locator('.aved[data-k^="q|"], .aved[data-k^="u|"], tr.avgho, .avmb')).toHaveCount(0);
+  await escribir(page, `c|r1|_|${HOY}`, 3);
+  await expect.poll(() => page.evaluate(k => (__dbGet('ava', k) || {}).c, SEM)).toEqual({ [HOY]: { r1: { _: 3 } } });
+  const log = await page.evaluate(k => __dbGet('ava', k).log, SEM);
+  expect(log).toHaveLength(1); expect(log[0]).toMatchObject({ d: HOY, r: 'r1', e: '_', q: 3, a: 0, by: 'campo@obra.pe' });
   const fila = page.locator('tr.avrw', { hasText: 'EO-1' }).first();
-  await expect(fila).toContainText('50 %'); await expect(fila.locator('.avtg')).toHaveCount(0);
+  await expect(fila).toContainText('50 %'); await expect(fila.locator('.avtg')).toHaveCount(0);   // 2 del corte + 3 = 5 de 10
   // supera el metrado: cancelar no guarda; aceptar guarda y avisa
   let acepta = false; page.on('dialog', d => acepta ? d.accept() : d.dismiss());
-  await escribir(page, `c|r1|${HOY}`, 20);
-  await expect(celda(page, `c|r1|${HOY}`)).toHaveText('3');
-  expect(await page.evaluate(() => __dbGet('ava', 'pm_p1_2026-09-28').c['2026-10-01'].r1.e1)).toBe(3);
-  acepta = true; await escribir(page, `c|r1|${HOY}`, 20);
-  await expect.poll(() => page.evaluate(() => __dbGet('ava', 'pm_p1_2026-09-28').c['2026-10-01'].r1.e1)).toBe(20);
+  await escribir(page, `c|r1|_|${HOY}`, 20);
+  await expect(celda(page, `c|r1|_|${HOY}`)).toHaveText('3');
+  expect(await page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(3);
+  acepta = true; await escribir(page, `c|r1|_|${HOY}`, 20);
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(20);
   await expect(fila.locator('.avtg.w')).toContainText('supera el metrado');
-  await expect(fila.locator('.avtg.b')).toContainText('más de lo llegado');
-  // «Llegó» por fila
-  await escribir(page, 'l|r1', 22);
-  await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pm_p1').ll.r1)).toBe(22);
-  await expect(fila.locator('.avtg.b')).toHaveCount(0);
-  // historial de la celda
-  await celda(page, `c|r1|${HOY}`).click({ button: 'right' });
+  // 2,5 sillas: se guarda y se avisa, no se bloquea
+  await escribir(page, `c|r2|_|${HOY}`, '2,5');
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r2._, SEM)).toBe(2.5);
+  await expect(page.locator('tr.avrw', { hasText: 'SO-3' }).locator('.avtg')).toContainText('fracción de unidad');
+  // historial y días futuros
+  await celda(page, `c|r1|_|${HOY}`).click({ button: 'right' });
   await expect(page.locator('#pop .avhist')).toContainText('3 → 20');
-  // un día futuro no se puede llenar
-  await expect(celda(page, 'c|r1|2026-10-02')).toHaveCount(0);
+  await expect(celda(page, 'c|r1|_|2026-10-02')).toHaveCount(0);
   noErrors(errors, 'registro');
 });
 
-test('Avance: etapas con peso, resumen ponderado y permisos por rol', async ({ page }) => {
+test('Avance: interruptor Cantidad | %, etapas con peso y unidades mezcladas', async ({ page }) => {
   const errors = await abrir(page);
   await page.selectOption('#avp', 'pp');
-  await expect(page.locator('[data-ave]')).toHaveCount(4);            // 3 etapas + Resumen
-  await expect(page.locator('.avtot')).toContainText('55 %');
-  await page.click('[data-ave="e2"]');
-  await expect(page.locator('tr.avrw').first()).toContainText('50 %');
-  await page.click('[data-ave="*"]');
-  await expect(page.locator('tr.avrw').first()).toContainText('55 %');
-  await expect(page.locator('.aved')).toHaveCount(0);
-  // el administrador corrige el metrado en la misma tabla
-  await page.click('[data-ave="e1"]'); await escribir(page, 'q|q1', 200);
-  await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q1.q)).toBe(200);
-  expect(await page.evaluate(() => __dbGet('avm', 'pp_p1').r.q1.amb)).toBe('a1');   // el resto de la fila no se toca
-  noErrors(errors, 'etapas');
-  for (const as of ['lector', 'sc']) { const e2 = await abrir(page, { as }); await page.selectOption('#avp', 'pm'); await expect(page.locator('tr.avrw')).toHaveCount(3); await expect(page.locator('.aved')).toHaveCount(0); await expect(page.locator('[data-av="new"]')).toHaveCount(0); noErrors(e2, as); }
+  await expect(page.locator('tr.avse')).toContainText('Sector 1');     // hay una fila a nivel de sector: aparece el nivel
+  const madre = page.locator('tr.avmad');
+  await expect(madre).toContainText('55 %'); await expect(page.locator('tr.avet')).toHaveCount(3);
+  await expect(madre.locator('.aved[data-k^="c|"]')).toHaveCount(0);    // la fila con etapas se llena por sus etapas
+  await expect(page.locator('tr.avam')).toContainText('varias');        // m² y ml en el mismo ambiente: no se suma el metrado
+  // en %: 50 sobre 20 ml son 10 ml; se guarda la cantidad
+  await page.click('[data-avpct="1"]');
+  await escribir(page, `c|q2|_|${HOY}`, 50);
+  await expect.poll(() => page.evaluate(() => ((__dbGet('ava', 'pp_p1_2026-09-28').c || {})['2026-10-01'] || {}).q2)).toEqual({ _: 10 });
+  await expect(celda(page, `c|q2|_|${HOY}`)).toHaveText('50');
+  await page.click('[data-avpct="0"]');
+  await expect(celda(page, `c|q2|_|${HOY}`)).toHaveText('10');
+  // peso de una etapa: las demás se reparten el resto en su proporción
+  await escribir(page, 'w|q1|e2', 50);
+  await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q1.et.map(e => e.w))).toEqual([28.57, 50, 21.43]);
+  await expect(madre).toContainText('54 %');                            // 28,57 × 100 % + 50 × 50 % = 53,6 %
+  // unidad y metrado se corrigen en la misma tabla
+  await escribir(page, 'q|q2', 40); await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q2.q)).toBe(40);
+  await celda(page, 'u|q2').click(); await page.keyboard.press('Control+A'); await page.keyboard.type('m'); await page.keyboard.press('Tab');
+  await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q2)).toMatchObject({ und: 'm', q: 40, amb: 'a1', desc: 'Contrazócalo' });
+  noErrors(errors, 'porcentaje');
+  // lector y subcontratista solo leen
+  for (const as of ['lector', 'sc']) { const e2 = await abrir(page, { as }); await page.selectOption('#avp', 'pm'); await expect(page.locator('tr.avrw')).toHaveCount(3); await expect(page.locator('.aved, tr.avgho, .avmb, [data-av="new"]')).toHaveCount(0); noErrors(e2, as); }
 });
 
-test('Avance: crear una partida desde plantilla y agregarle una fila', async ({ page }) => {
+test('Avance: partida nueva, filas desde la tabla y etapas agregadas en la fila', async ({ page }) => {
   const errors = await openApp(page, { as: 'editor' });
-  await page.evaluate(() => { U.piso = ''; goMod('ava'); });
+  await page.evaluate(() => { U.piso = ''; U.avPct = false; goMod('ava'); });
   await expect(page.locator('#main')).toContainText('Todavía no hay partidas');
-  await page.click('[data-av="new"]'); await page.click('#pop [data-do="t1"]');
-  await expect(page.locator('#avfnom')).toHaveValue('Pintura');
-  await expect(page.locator('#avfsum')).toContainText('100');
-  // pesos que no suman 100 no se guardan
-  await page.fill('#avfep0', '50'); await expect(page.locator('#avfsum')).toContainText('110');
-  await page.click('[data-avfk="ok"]'); expect(await page.evaluate(() => Object.keys(__dbAll('avp')).length)).toBe(0);
-  await page.fill('#avfep0', '40'); await page.fill('#avfit', 'PL-M\tLátex muros\nPL-C;Látex cielo raso'); await page.click('[data-avfk="ok"]');
+  await page.click('[data-av="new"]'); await page.fill('#avfnom', 'Enchape'); await page.click('[data-avfk="ok"]');
   await expect(page.locator('#lqm')).toHaveCount(0);
-  const p = await page.evaluate(() => Object.values(__dbAll('avp'))[0]);
-  expect(p.et.map(e => [e.nom, e.peso])).toEqual([['Empaste', 40], ['1.ª mano', 30], ['2.ª mano', 30]]);
-  expect(Object.values(p.items).map(i => i.cod + '|' + i.des).sort()).toEqual(['PL-C|Látex cielo raso', 'PL-M|Látex muros']);
-  expect(p.ubi).toEqual(['Muro', 'Cielo raso']);
-  await page.click('[data-av="row"]'); await page.selectOption('#avrpiso', 'p1'); await page.selectOption('#avramb', 'a2'); await page.fill('#avrq', '85.5'); await page.click('[data-avrk="ok"]');
-  await page.click('#lqm [data-lqx]');
-  await expect(page.locator('tr.avrw')).toHaveCount(1); await expect(page.locator('tr.avam')).toContainText('Dpto 102');
-  const m = await page.evaluate(() => Object.values(__dbAll('avm'))[0]);
-  expect(Object.values(m.r)[0]).toMatchObject({ amb: 'a2', ub: 'Muro', q: 85.5, an: 'Dpto 102' });
-  noErrors(errors, 'partida');
+  const pid = await page.evaluate(() => { const p = Object.entries(__dbAll('avp'))[0]; return p[1].v === 2 && p[1].nom === 'Enchape' ? p[0] : ''; });
+  expect(pid).not.toBe('');
+  // se elige el ambiente y se escribe en su línea en blanco: Enter crea la fila y deja lista la siguiente
+  await page.selectOption('[data-avadd="p1"]', 'A:a2');
+  await expect(page.locator('tr.avgho[data-g="p1||a2"] .gd')).toBeFocused();
+  await page.keyboard.type('Porcelanato 60x60'); await page.keyboard.press('Tab'); await page.keyboard.press('Control+A'); await page.keyboard.type('m²'); await page.keyboard.press('Tab'); await page.keyboard.type('85.5'); await page.keyboard.press('Enter');
+  await expect(page.locator('tr.avrw')).toHaveCount(1);
+  await expect(page.locator('tr.avgho[data-g="p1||a2"] .gd')).toBeFocused();
+  await page.keyboard.type('Zócalo'); await page.keyboard.press('Enter'); await page.keyboard.type('30'); await page.keyboard.press('Enter');
+  await expect(page.locator('tr.avrw')).toHaveCount(2);
+  const filas = await page.evaluate(id => Object.values(__dbGet('avm', id + '_p1').r).sort((a, b) => a.o - b.o), pid);
+  expect(filas).toMatchObject([{ amb: 'a2', desc: 'Porcelanato 60x60', und: 'm²', q: 85.5, an: 'Dpto 102' }, { amb: 'a2', desc: 'Zócalo', und: 'm²', q: 30 }]);   // la unidad sugerida es la de la fila anterior
+  // una fila sin ambiente: de todo el piso
+  await page.selectOption('[data-avadd="p2"]', 'P:');
+  await expect(page.locator('tr.avgho[data-g="p2||"] .gd')).toBeFocused();
+  await page.keyboard.type('Limpieza final'); await page.keyboard.press('Enter'); await page.keyboard.type('1'); await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(id => Object.values((__dbGet('avm', id + '_p2') || { r: {} }).r).map(r => r.amb + '|' + r.sec + '|' + r.desc), pid)).toEqual(['||Limpieza final']);
+  // se registra avance en la fila y luego se le agregan etapas: lo registrado pasa a la primera
+  const rid = await page.evaluate(id => Object.entries(__dbGet('avm', id + '_p1').r).find(x => x[1].desc === 'Zócalo')[0], pid);
+  await escribir(page, `c|${rid}|_|${HOY}`, 12);
+  await page.locator('tr.avrw', { hasText: 'Zócalo' }).locator('.avmb').click();
+  await page.fill('#avme', 'Colocación'); await page.click('[data-avmk="eta"]');
+  await expect(page.locator('#lqm')).toContainText('Etapas: Colocación');
+  await page.fill('#avme', 'Fragua'); await page.click('[data-avmk="eta"]');
+  await expect(page.locator('#lqm')).toContainText('Colocación, Fragua');
+  await page.click('[data-avmk="copy"]');                               // a la otra fila en m² que no tiene etapas
+  await expect(page.locator('#lqm')).toHaveCount(0);
+  const R = await page.evaluate(id => __dbGet('avm', id + '_p1').r, pid);
+  expect(R[rid].et.map(e => [e.id === '_', e.n, e.w])).toEqual([[true, 'Colocación', 1], [false, 'Fragua', 1]]);
+  const otra = Object.values(R).find(r => r.desc === 'Porcelanato 60x60');
+  expect(otra.et.map(e => e.n)).toEqual(['Colocación', 'Fragua']); expect(otra.et[0].id).toBe('_'); expect(otra.et[1].id).not.toBe(R[rid].et[1].id);
+  await expect(page.locator('tr.avet')).toHaveCount(4);
+  await expect(page.locator('tr.avmad', { hasText: 'Zócalo' })).toContainText('20 %');   // 12 de 30 en Colocación (peso 50 %)
+  noErrors(errors, 'filas');
 });
 
-test('Avance: importar el metrado con el cuadro de equivalencias, sin crear ambientes ni duplicar', async ({ page }) => {
+test('Avance: importar filas con el cuadro de equivalencias, sin crear ambientes ni duplicar', async ({ page }) => {
   const errors = await abrir(page);
   const csv = ['partida,codigo,descripcion,unidad,plano,nivel,ambiente,cantidad', 'Mobiliario,EO-1,ESCRITORIO,und,AB-02,PRIMER PISO,DPTO 101,12', 'Mobiliario,M-1,MESA CUADRADA,und,AB-02,PRIMER PISO,Depto. 102,5',
     'Mobiliario,M-1,MESA CUADRADA,und,AB-03,Piso 2,Dpto 103,2', 'Mobiliario,M-1,MESA,und,AB-03,Piso 2,Sala que no existe,7', 'Mobiliario,SO-3,SILLA,und,AB-02,Primer piso,Dpto 102,x'].join('\n');
@@ -133,27 +164,28 @@ test('Avance: importar el metrado con el cuadro de equivalencias, sin crear ambi
   await go.click(); await expect(page.locator('#lqm')).toHaveCount(0);
   expect(await page.evaluate(() => Object.keys(__dbAll('ambientes')).length)).toBe(ambs);
   const d = await page.evaluate(() => ({ p: __dbGet('avp', 'pm'), m1: __dbGet('avm', 'pm_p1'), m2: __dbGet('avm', 'pm_p2') }));
-  const m1 = Object.entries(d.p.items).find(x => x[1].cod === 'M-1')[0];
-  expect(d.m1.r.r1.q).toBe(12);                                     // la fila que ya existía cambia de metrado y conserva su id
-  expect(Object.values(d.m1.r).filter(r => r.it === m1)).toMatchObject([{ amb: 'a2', q: 5 }]);
-  expect(Object.values(d.m2.r).filter(r => r.it === m1)).toMatchObject([{ amb: 'a3', q: 2 }]);
-  expect(Object.keys(d.m1.r)).toHaveLength(3); expect(d.m1.ll).toEqual({ r1: 6 });
-  expect(d.p.eq.niv['piso 2']).toBe('p2');
+  expect(d.m1.r.r1).toMatchObject({ q: 12, desc: 'EO-1 · Escritorio' });      // la fila que ya existía cambia de metrado y conserva su id y su nombre
+  expect(Object.values(d.m1.r).filter(r => r.desc === 'M-1 · MESA CUADRADA')).toMatchObject([{ amb: 'a2', und: 'und', q: 5, et: null }]);
+  expect(Object.values(d.m2.r).filter(r => r.desc === 'M-1 · MESA CUADRADA')).toMatchObject([{ amb: 'a3', q: 2 }]);
+  expect(Object.keys(d.m1.r)).toHaveLength(3);
+  expect(d.p.eq.niv['piso 2']).toBe('p2'); expect(d.p.nom).toBe('Mobiliario');
   // segunda carga del mismo archivo: las equivalencias quedaron guardadas y no hay nada nuevo
   await page.click('[data-av="imp"]'); await page.fill('#avitxt', csv); await page.click('[data-avi="read"]');
   await expect(page.locator('.avisum')).toContainText('0 filas nuevas'); await expect(page.locator('.avisum')).toContainText('3 iguales'); await expect(go).toBeDisabled();
   noErrors(errors, 'importar');
 });
 
-test('Avance en el celular: piso → ambiente → ítems con la cantidad de hoy', async ({ page }) => {
+test('Avance en el celular: piso → ambiente → filas con lo ejecutado hoy, en cantidad o en %', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = await abrir(page, { as: 'campo' });
   await expect(page.locator('.avcel')).toHaveCount(1);
-  await page.click('.avcard[data-avamb="a1"]');
+  await page.click('.avcard[data-avgrp="Aa1"]');
   await page.click('[data-avst="1"]'); await page.click('[data-avst="1"]');
-  await expect.poll(() => page.evaluate(() => ((__dbGet('ava', 'pm_p1_2026-09-28') || {}).c || {})['2026-10-01'])).toEqual({ r1: { e1: 2 } });
+  await expect.poll(() => page.evaluate(k => ((__dbGet('ava', k) || {}).c || {})['2026-10-01'], SEM)).toEqual({ r1: { _: 2 } });
+  await page.click('[data-avpct="1"]'); await page.click('[data-avst="1"]');     // en %: cada toque suma 10 % del metrado (1 de 10)
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(3);
   await page.click('[data-av="todo"]');
-  await expect.poll(() => page.evaluate(() => __dbGet('ava', 'pm_p1_2026-09-28').c['2026-10-01'].r1.e1)).toBe(8);   // 10 − 2 del corte inicial
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(8);   // 10 − 2 del corte inicial
   await expect(page.locator('.avcrow')).toContainText('10 de 10');
   noErrors(errors, 'celular');
 });

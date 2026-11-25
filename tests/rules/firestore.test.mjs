@@ -1875,7 +1875,8 @@ test('avance: partidas y metrado los escriben admin y editores; campo solo «Lle
   const ed = user('editor@obra.pe'), ca = user('campo@obra.pe'), sc = user('sc@obra.pe'), le = user('lector@obra.pe');
   await assertSucceeds(setDoc(doc(ed, 'avp/a1'), P));
   await assertFails(setDoc(doc(ca, 'avp/a2'), P));
-  await assertFails(setDoc(doc(ed, 'avp/a3'), { nom: 'Sin etapas', et: [] }));
+  await assertFails(setDoc(doc(ed, 'avp/a3'), { v: 2, nom: '' }));
+  await assertSucceeds(setDoc(doc(ed, 'avp/a4'), { v: 2, nom: 'Enchape', d0: '2099-10-01', d1: '2099-12-01' }));
   await assertFails(deleteDoc(doc(ed, 'avp/a1')));
   await assertSucceeds(getDoc(doc(le, 'avp/a1')));
   await assertSucceeds(getDocs(query(collection(sc, 'avm'), where('p', '==', 'a1'))));
