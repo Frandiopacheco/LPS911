@@ -59,20 +59,25 @@ test('Avance: el ingeniero registra el día; historial por celda, aviso al super
   const fila = page.locator('tr.avrw', { hasText: 'EO-1' }).first();
   await expect(fila).toContainText('50 %'); await expect(fila.locator('.avdt')).toHaveCount(0);   // 2 del corte + 3 = 5 de 10
   // supera el metrado: cancelar no guarda; aceptar guarda y avisa
-  let acepta = false; page.on('dialog', d => acepta ? d.accept() : d.dismiss());
   await escribir(page, `c|r1|_|${HOY}`, 20);
+  await expect(page.locator('#lqm')).toContainText('el acumulado sería 22 y el metrado es 10');
+  await expect(page.locator('#lqm [data-avo="grow"]')).toHaveCount(0);   // campo no cambia el metrado: solo puede ajustar el día
+  await page.click('#lqm [data-avo="x"]');
   await expect(celda(page, `c|r1|_|${HOY}`)).toHaveText('3');
   expect(await page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(3);
-  acepta = true; await escribir(page, `c|r1|_|${HOY}`, 20);
-  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(20);
-  await expect(fila.locator('.avdt.w[title*="upera el metrado"]')).toHaveCount(1);          // el aviso es un punto junto al %
+  // por defecto: el día se ajusta para cuadrar con el metrado (10 − 2 del corte = 8)
+  await escribir(page, `c|r1|_|${HOY}`, 20);
+  await expect(page.locator('#avofit')).toBeFocused(); await page.click('#avofit');
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(8);
+  await expect(celda(page, `c|r1|_|${HOY}`)).toHaveText('8'); await expect(fila).toContainText('100 %');
+  await expect(fila.locator('.avdt')).toHaveCount(0);
   // 2,5 sillas: se guarda y se avisa, no se bloquea
   await escribir(page, `c|r2|_|${HOY}`, '2,5');
   await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r2._, SEM)).toBe(2.5);
   await expect(page.locator('tr.avrw', { hasText: 'SO-3' }).locator('.avdt[title*="racción de unidad"]')).toHaveCount(1);
   // historial y días futuros
   await celda(page, `c|r1|_|${HOY}`).click({ button: 'right' });
-  await expect(page.locator('#pop .avhist')).toContainText('3 → 20');
+  await expect(page.locator('#pop .avhist')).toContainText('3 → 8');
   // los días que vienen también se llenan (dentro del rango de la partida) y la columna de corte solo sale si hay datos de corte
   await escribir(page, 'c|r2|_|2026-10-02', 1);
   await expect.poll(() => page.evaluate(k => (__dbGet('ava', k).c['2026-10-02'] || {}).r2, SEM)).toEqual({ _: 1 });
@@ -138,8 +143,9 @@ test('Avance: interruptor Cantidad | %, etapas con peso y unidades mezcladas', a
   await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q1.et.map(e => e.n))).toEqual(['Base', 'Primera mano']);
   await celda(page, 'c|q1|_|2026-09-22').click();
   await page.evaluate(() => { const dt = new DataTransfer(); dt.setData('text', '1\t2\r\n3\t4\r\n'); document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
-  await expect.poll(() => page.evaluate(() => { const c = (__dbGet('ava', 'pp_p1_2026-09-21') || {}).c || {}; return [c['2026-09-22'], c['2026-09-23']].map(x => x && x.q1); })).toEqual([{ _: 1, [e2]: 3 }, { _: 2, [e2]: 4 }]);
-  expect(await page.evaluate(() => __dbGet('ava', 'pp_p1_2026-09-21').log.length)).toBe(4);     // cada celda pegada deja su historial
+  await expect.poll(() => page.evaluate(() => { const c = (__dbGet('ava', 'pp_p1_2026-09-21') || {}).c || {}; return [c['2026-09-22'], c['2026-09-23']].map(x => x && x.q1); })).toEqual([{ [e2]: 3 }, { [e2]: 4 }]);   // «Base» ya está al 100 %: sus dos celdas se ajustan y no se escriben
+  await expect(page.locator('#toast')).toContainText('2 ajustadas para no superar el metrado');
+  expect(await page.evaluate(() => __dbGet('ava', 'pp_p1_2026-09-21').log.length)).toBe(2);     // cada celda pegada deja su historial
   // dejar vacío el nombre de una etapa la quita (pide confirmar); la primera no se quita sola
   ok = true; await celda(page, `n|q1|${e2}`).click(); await page.keyboard.press('Delete'); await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => __dbGet('avm', 'pp_p1').r.q1.et.map(e => e.id))).toEqual(['_']);
@@ -271,6 +277,22 @@ test('Avance: fila de total, buscar, reordenar filas y rango seleccionado (copia
   await expect.poll(() => page.evaluate(() => { const c = __dbGet('ava', 'pp_p1_2026-09-28').c; return [c['2026-10-01'].q2._, c['2026-10-02'].q2._]; })).toEqual([0, 0]);
   await page.locator('.avtot').click(); await page.keyboard.press('Control+z');
   await expect.poll(() => page.evaluate(() => { const c = __dbGet('ava', 'pp_p1_2026-09-28').c; return [c['2026-10-01'].q2._, c['2026-10-02'].q2._]; })).toEqual([5, 6]);
+  // superar el metrado como administrador: se puede aumentar el metrado, con segunda confirmación; es una sola acción para Ctrl+Z
+  let sube = false; page.on('dialog', d => sube ? d.accept() : d.dismiss());
+  await escribir(page, 'c|q2|_|2026-10-03', 12);                          // 5 + 6 + 12 = 23 sobre 20 ml
+  await page.click('#lqm [data-avo="grow"]');                            // la segunda confirmación se rechaza: no cambia nada
+  await expect(page.locator('#lqm')).toHaveCount(0);
+  expect(await page.evaluate(() => [__dbGet('avm', 'pp_p1').r.q2.q, (__dbGet('ava', 'pp_p1_2026-09-28').c['2026-10-03'] || {}).q2])).toEqual([20, undefined]);
+  sube = true; await escribir(page, 'c|q2|_|2026-10-03', 12); await page.click('#lqm [data-avo="grow"]');
+  await expect.poll(() => page.evaluate(() => [__dbGet('avm', 'pp_p1').r.q2.q, __dbGet('ava', 'pp_p1_2026-09-28').c['2026-10-03'].q2._])).toEqual([23, 12]);
+  await page.locator('.avtot').click(); await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => [__dbGet('avm', 'pp_p1').r.q2.q, __dbGet('ava', 'pp_p1_2026-09-28').c['2026-10-03'].q2._])).toEqual([20, 0]);
+  // pegar un bloque que superaría el metrado: se ajusta sin preguntar y se avisa
+  await celda(page, 'c|q2|_|2026-10-03').click();
+  await page.evaluate(() => { const dt = new DataTransfer(); dt.setData('text', '30\t4'); document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
+  await expect(page.locator('#toast')).toContainText('2 ajustadas para no superar el metrado');
+  await expect.poll(() => page.evaluate(() => { const c = __dbGet('ava', 'pp_p1_2026-09-28').c; return [c['2026-10-03'].q2._, (c['2026-10-04'] || {}).q2]; })).toEqual([9, undefined]);   // 20 − 5 − 6 = 9 y ya no cabe nada el día siguiente
+  await page.locator('.avtot').click(); await page.keyboard.press('Control+z');
   // deshacer no pisa lo que cambió otra persona después: esa celda no se toca y se avisa
   await escribir(page, `c|q2|_|${HOY}`, 7);
   await expect.poll(() => page.evaluate(() => __dbGet('ava', 'pp_p1_2026-09-28').c['2026-10-01'].q2._)).toBe(7);
@@ -355,13 +377,17 @@ test('Avance en el celular: piso → ambiente → filas con lo ejecutado hoy, en
   await expect.poll(() => page.evaluate(k => ((__dbGet('ava', k) || {}).c || {})['2026-10-01'], SEM)).toEqual({ r1: { _: 2 } });
   await page.click('[data-avpct="1"]'); await page.click('[data-avst="1"]');     // en %: cada toque suma 10 % del metrado (1 de 10)
   await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(3);
-  await page.click('[data-av="todo"]');
-  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(8);   // 10 − 2 del corte inicial
-  await expect(page.locator('.avcrow')).toContainText('10 de 10');
   // otro día del rango, con el selector de fecha
-  page.on('dialog', d => d.accept());                                   // la fila ya está completa: confirmar «supera el metrado»
   await page.fill('[data-avday]', '2026-09-25'); await page.locator('[data-avday]').blur(); await page.click('[data-avpct="0"]');
   await page.fill('[data-avin="r1|_"]', '1'); await page.locator('[data-avin="r1|_"]').blur();
   await expect.poll(() => page.evaluate(() => ((__dbGet('ava', 'pm_p1_2026-09-21') || {}).c || {})['2026-09-25'])).toEqual({ r1: { _: 1 } });
+  // de vuelta en hoy: «Todo lo que falta» completa justo hasta el metrado (10 − 2 del corte − 1 del 25 = 7 hoy)
+  await page.click(`[data-avd="${HOY}"]`); await page.click('[data-av="todo"]');
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(7);
+  await expect(page.locator('.avcrow')).toContainText('10 de 10');
+  // un toque más supera el metrado: la ventana ofrece dejar el día como estaba
+  await page.click('[data-avst="1"]'); await expect(page.locator('#avofit')).toContainText('ya está completa'); await page.click('#avofit');
+  await expect(page.locator('#lqm')).toHaveCount(0);
+  expect(await page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(7);
   noErrors(errors, 'celular');
 });
