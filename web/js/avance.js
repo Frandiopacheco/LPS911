@@ -79,13 +79,13 @@ function renderAReg(main){ensureAv();const p=avCur();avSubData(p?p.id:'');
   let h=`<div class="scroll"><div class="avpage">`;
   if(!avOk)h+=`<div class="empty">Cargando partidas…</div>`;
   else if(!p)h+=`<div class="empty"><b>Todavía no hay partidas.</b><br>${cfg?'Crea la primera: solo necesita un nombre y sus fechas.<br><br><button class="ib pri" data-av="new">＋ Partida</button>':'El administrador o un ingeniero de producción las crea.'}</div>`;
-  else{const D=avData();if(AV.key!==p.id){AV.key=p.id;AV.C=new Set();AV.cinit=false;AV.wkO=null;AV.grp=null;AV.xa=[]}
+  else{const D=avData();if(AV.key!==p.id){AV.key=p.id;AVU.u=[];AVU.r=[];AV.C=new Set();AV.cinit=false;AV.wkO=null;AV.grp=null;AV.xa=[]}
     const ps=pisos(),rows=D.rows.filter(r=>S.pis.has(r.piso)||ARCH.pis.has(r.piso));
     h+=`<div class="avbar"><select class="tin" id="avp" aria-label="Partida">${parts.map(x=>`<option value="${esc(x.id)}"${x.id===p.id?' selected':''}>${esc(x.nom)}</option>`).join('')}</select>
       <select class="tin" id="avpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisoOptsZG(ps,U.piso)}</select>
       <span class="seg" role="group" aria-label="Cómo se ven y se tipean las celdas"><button type="button" data-avpct="0" class="${pct?'':'on'}">Cantidad</button><button type="button" data-avpct="1" class="${pct?'on':''}">%</button></span>
       <span class="avtot">${rows.length?`Avance: <b>${avPc(avGrpPct(D.ex,rows))}</b>`:''}</span><span class="avsp"></span>
-      ${cfg?`<button class="ib pri" data-av="new">＋ Partida</button><button class="ib" data-av="edit" title="Nombre y fechas de la partida">✎</button>${avReady(p)?'<button class="ib" data-av="amb" title="Crea la misma fila en muchos ambientes del Lookahead a la vez">Traer ambientes…</button><button class="ib" data-av="imp">Importar…</button>':''}`:''}</div>`;
+      ${avaReg()&&!AV.cel?`<button class="ib" data-av="undo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"${AVU.u.length?'':' disabled'}>↶</button><button class="ib" data-av="redo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"${AVU.r.length?'':' disabled'}>↷</button>`:''}${cfg?`<button class="ib pri" data-av="new">＋ Partida</button><button class="ib" data-av="edit" title="Nombre y fechas de la partida">✎</button>${avReady(p)?'<button class="ib" data-av="amb" title="Crea la misma fila en muchos ambientes del Lookahead a la vez">Traer ambientes…</button><button class="ib" data-av="imp">Importar…</button>':''}`:''}</div>`;
     if(!avReady(p))h+=`<div class="empty">Cargando la planilla…</div>`;
     else h+=AV.cel?avCelHtml(p,D,rows):avGridHtml(p,D,rows)}
   main.innerHTML=h+'</div></div>';
@@ -130,7 +130,7 @@ function avGridHtml(p,D,rows){const ex=D.ex,C=avWeeks(p),reg=avaReg(),cfg=avaCfg
       s.ambs.forEach(a=>{const ka=pi.id+'|'+s.id+'|'+a.id;h+=grp('avam',a.nom,a.rows,ka,dep);if(AV.C.has(ka))return;a.rows.forEach(r=>h+=row(r,dep+1));h+=gho(pi.id+'||'+a.id,dep+1,last(a.rows))})});
     if(cfg&&S.pis.has(pi.id)){const used=new Set(T.rows.map(r=>r.amb).concat(AV.xa.map(x=>x.amb)).filter(Boolean)),ss=[...S.sec.values()].filter(s=>s.pisoId===pi.id).sort(byOrder);
       h+=`<tr class="avgho"><td class="avs0" style="padding-left:21px"><select class="avadd" data-avadd="${esc(pi.id)}" aria-label="Agregar un ambiente a ${esc(pi.name)}"><option value="">＋ agregar ambiente a ${esc(pi.name)}…</option>${ss.map(s=>{const L=[...S.amb.values()].filter(a=>a.sectorId===s.id&&!used.has(a.id)).sort(byOrder);return`<optgroup label="${esc(s.name||s.code||'Sector')}">${L.map(a=>`<option value="A:${esc(a.id)}">${esc(a.name||a.code||a.id)}</option>`).join('')}<option value="S:${esc(s.id)}">(todo el sector: fila sin ambiente)</option></optgroup>`}).join('')}<option value="P:">(todo el piso: fila sin ambiente)</option></select></td><td colspan="${ncol-1}"></td></tr>`}});
-  return h+`</tbody></table></div><p class="avnote">${reg?`Como en Excel: flechas y Enter para moverte, escribe encima para reemplazar, F2 o doble clic para corregir dentro, Supr para borrar y Ctrl+V para pegar un bloque copiado de Excel. Clic derecho en una celda: su historial. `:''}${cfg?'Fila nueva: línea «＋ nueva fila» de su ambiente. «⋯»: agregar etapas. Una etapa se renombra escribiendo sobre su nombre y se quita dejándolo vacío. ':''}Clic en una semana o en un grupo para plegarlo.</p>`}
+  return h+`</tbody></table></div><p class="avnote">${reg?`Como en Excel: flechas y Enter para moverte, escribe encima para reemplazar, F2 o doble clic para corregir dentro, Supr para borrar, Ctrl+V para pegar un bloque copiado de Excel y Ctrl+Z para deshacer. Clic derecho en una celda: su historial. `:''}${cfg?'Fila nueva: línea «＋ nueva fila» de su ambiente. «⋯»: agregar etapas. Una etapa se renombra escribiendo sobre su nombre y se quita dejándolo vacío. ':''}Clic en una semana o en un grupo para plegarlo.</p>`}
 /** celular: piso → lugar → filas (o etapas) con lo ejecutado del día */
 function avCelGroups(pid,rows){const T=avTree(pid,rows.filter(r=>r.q>0)/* sin metrado no se registra */,[]),G=[];if(T.direct.length)G.push({k:'P',nom:'Todo el piso',rows:T.direct});
   T.secs.forEach(s=>{if(s.direct.length)G.push({k:'S'+s.id,nom:s.nom+' (todo el sector)',rows:s.direct});s.ambs.forEach(a=>G.push({k:'A'+a.id,nom:a.nom,sub:T.showSec?s.nom:'',rows:a.rows}))});return G}
@@ -149,14 +149,36 @@ function avCelHtml(p,D,rows){const ex=D.ex,reg=avaReg(),t=todayIso(),pct=!!U.avP
 
 /* ---------- escritura ---------- */
 const avMRef=(p,piso)=>fcol('avm').doc(p.id+'_'+piso);
+/* ---------- deshacer / rehacer (Ctrl+Z, Ctrl+Y) ----------
+   Pila propia del módulo, de esta sesión y de la partida abierta (se vacía al cambiar de partida). Cada acción es una lista de
+   operaciones: 'c' celda de avance {row,et,d,a,b}, 'r' campos de una fila {row,a,b} y 'new' fila creada (deshacer = archivarla).
+   Deshacer ESCRIBE de nuevo en la base (queda en el historial de la celda): no borra nada. Importar no entra en la pila. */
+const AVU={u:[],r:[],g:null,lock:false};
+function avUPush(g){if(!g.length)return;AVU.u.push(g);AVU.r=[];if(AVU.u.length>100)AVU.u.shift()}
+function avURec(op){if(AVU.lock)return;if(AVU.g)AVU.g.push(op);else avUPush([op])}
+/** todo lo que se escriba dentro de fn cuenta como UNA acción (pegar un bloque, «todo lo que falta»…) */
+function avUGroup(fn){if(AVU.g||AVU.lock)return fn();AVU.g=[];try{return fn()}finally{const g=AVU.g;AVU.g=null;avUPush(g)}}
+function avUndo(redo){const p=avCur(),from=redo?AVU.r:AVU.u,to=redo?AVU.u:AVU.r;if(!p||!avReady(p))return;const g=from.pop();if(!g){toast(redo?'No hay nada que rehacer.':'No hay nada que deshacer.');return}
+  const ex=avData().ex,cells=[];AVU.lock=true;
+  try{(redo?g:[...g].reverse()).forEach(o=>{if(o.k==='c')cells.push({row:o.row,et:o.et,d:o.d,q:redo?o.b:o.a,old:avCell(ex,o.row.id,o.et,o.d)});
+      else if(o.k==='r')avRowPatch(p,o.row,redo?o.b:o.a);else avRowPatch(p,o.row,{arch:redo?null:avWho()})});
+    avPutCells(p,cells.filter(c=>Math.abs(c.q-c.old)>1e-9))}finally{AVU.lock=false}
+  to.push(g);const n=g.length;toast(`${redo?'Rehecho':'Deshecho'}: ${n===1?'1 cambio':n+' cambios'}`);AV.pend=false;requestRender()}
+/* Ctrl+Z / Ctrl+Y (o Ctrl+Mayús+Z). Si se está tecleando en una celda o en un campo, deshace lo tecleado (lo hace el navegador) */
+document.addEventListener('keydown',e=>{if(U.mod!=='ava'||U.tab!=='areg'||!(e.ctrlKey||e.metaKey)||e.altKey)return;const k=e.key.toLowerCase();if(k!=='z'&&k!=='y')return;
+  const ae=document.activeElement;if(ae&&ae.closest&&ae.closest('#lqm,input,textarea'))return;
+  if(ae&&ae.classList&&((ae.classList.contains('aved')&&ae.textContent.trim()!==(ae.dataset.o||''))||(ae.classList.contains('avgh')&&ae.textContent.trim())))return;
+  e.preventDefault();if(ae&&ae.classList&&ae.classList.contains('aved'))ae.blur();avUndo(k==='y'||e.shiftKey)});
 function avRowPatch(p,row,patch){const w=avWho();
+  if(!AVU.lock){const cur=((AVM.get(p.id+'_'+row.piso)||{}).r||{})[row.id],rw={id:row.id,piso:row.piso};
+    if(!cur)avURec({k:'new',row:rw});else{const a={};for(const key in patch)a[key]=cur[key]===undefined?null:cur[key];avURec({k:'r',row:rw,a,b:patch})}}
   /* se refleja al instante en memoria (la foto de la base llega después con lo mismo): «⋯» puede redibujarse sin esperar */
   if(avSubP===p.id){const did=p.id+'_'+row.piso,m=AVM.get(did)||{id:did,p:p.id,piso:row.piso,r:{}};AVM.set(did,{...m,r:{...(m.r||{}),[row.id]:{...((m.r||{})[row.id]||{}),...patch}}});AV.v++}
   return bgWrite(avMRef(p,row.piso).set({p:p.id,piso:row.piso,r:{[row.id]:patch},by:w.by,t:w.t},{merge:true}))}
-function avPutCell(p,row,etId,d,q,old){const wk=d===AV_INI?AV_INI:avMon(d),id=`${p.id}_${row.piso}_${wk}`,w=avWho();
+function avPutCell(p,row,etId,d,q,old){avURec({k:'c',row:{id:row.id,piso:row.piso},et:etId,d,a:old,b:q});const wk=d===AV_INI?AV_INI:avMon(d),id=`${p.id}_${row.piso}_${wk}`,w=avWho();
   return bgWrite(fcol('ava').doc(id).set({p:p.id,piso:row.piso,w:wk,c:{[d]:{[row.id]:{[etId]:q}}},log:firebase.firestore.FieldValue.arrayUnion({d,r:row.id,e:etId,q,a:old,...w}),by:w.by,t:w.t},{merge:true}))}
 /** varias celdas de una vez (pegar): una escritura por documento de semana, cada celda con su entrada de historial */
-function avPutCells(p,cells){const by=new Map(),w=avWho();cells.forEach(c=>{const wk=c.d===AV_INI?AV_INI:avMon(c.d),id=`${p.id}_${c.row.piso}_${wk}`,o=by.get(id)||{piso:c.row.piso,wk,c:{},log:[]};
+function avPutCells(p,cells){const by=new Map(),w=avWho();avUGroup(()=>cells.forEach(c=>avURec({k:'c',row:{id:c.row.id,piso:c.row.piso},et:c.et,d:c.d,a:c.old,b:c.q})));cells.forEach(c=>{const wk=c.d===AV_INI?AV_INI:avMon(c.d),id=`${p.id}_${c.row.piso}_${wk}`,o=by.get(id)||{piso:c.row.piso,wk,c:{},log:[]};
     ((o.c[c.d]=o.c[c.d]||{})[c.row.id]=o.c[c.d][c.row.id]||{})[c.et]=c.q;o.log.push({d:c.d,r:c.row.id,e:c.et,q:c.q,a:c.old,...w});by.set(id,o)});
   by.forEach((o,id)=>bgWrite(fcol('ava').doc(id).set({p:p.id,piso:o.piso,w:o.wk,c:o.c,log:firebase.firestore.FieldValue.arrayUnion(...o.log),by:w.by,t:w.t},{merge:true})))}
 /** guarda la cantidad de un día; si el acumulado supera el metrado pide confirmar (avisa, no bloquea) */
@@ -231,7 +253,7 @@ function avPaste(e){const t=e.target&&e.target.closest?e.target.closest('.aved,.
       if(k[0]==='q'){if(v>0&&avaCfg()){P.patch.q=avR4(v);rowsPatch.set(row.id,P);n++}return}
       if(row.q>0&&avaReg()){const pc=U.avPct||txt.includes('%');cells.push({row,et:k[2],d:k[3],q:avR4(pc?v/100*row.q:v),old:avCell(D.ex,row.id,k[2],k[3])});n++}else if(txt)skip++});
     do{tr=tr.nextElementSibling}while(tr&&!tr.matches(sel))}
-  rowsPatch.forEach(x=>avRowPatch(p,x.row,x.patch));avPutCells(p,cells.filter(c=>Math.abs(c.q-c.old)>1e-9));
+  avUGroup(()=>{rowsPatch.forEach(x=>avRowPatch(p,x.row,x.patch));avPutCells(p,cells.filter(c=>Math.abs(c.q-c.old)>1e-9))});
   t.textContent=t.dataset.o||'';/* lo que estuviera a medio escribir no debe pisar lo pegado */t.blur();AV.pend=false;
   toast((n?`Pegado: ${n} celda${n===1?'':'s'}`:'No había celdas donde pegar eso')+(skip?` · ${skip} sin pegar (semana plegada, fuera de las fechas o fila sin metrado)`:'')+(bad?` · ${bad} no eran números`:''));requestRender()}
 /** historial de una celda: quién registró y cuándo */
@@ -254,12 +276,12 @@ function avClick(e){if(U.tab!=='areg')return;const g=a=>{const el=e.target.close
   else if((v=g('data-avd'))){AV.day=v}
   else if((v=g('data-avgrp'))!=null){AV.grp=v||null}
   else if((v=g('data-avst'))){const b=e.target.closest('[data-avst]'),k=b.dataset.r.split('|'),row=avRowOf(k[0]);if(!row)return;const c=avCell(avData().ex,row.id,k[1],AV.day),step=U.avPct?row.q/10:1;avSetCell(row,k[1],AV.day,Math.max(0,c+ +v*step)).then(()=>requestRender());return}
-  else if((v=g('data-av'))){if(v==='new')avPartDlg(null);else if(v==='edit')avPartDlg(avCur());else if(v==='imp')avImpOpen();else if(v==='amb')avAmbDlg();else if(v==='todo')avTodo();return}
+  else if((v=g('data-av'))){if(v==='new')avPartDlg(null);else if(v==='edit')avPartDlg(avCur());else if(v==='imp')avImpOpen();else if(v==='amb')avAmbDlg();else if(v==='undo')avUndo(false);else if(v==='redo')avUndo(true);else if(v==='todo')avTodo();return}
   else return;requestRender()}
 /** celular: completa de un toque lo que falta en el lugar abierto */
 function avTodo(){const p=avCur(),D=avData();if(!p||!avaReg()||!avReady(p))return;const all=[...pisos(),...ARCH.pis.values()].filter(x=>D.rows.some(r=>r.piso===x.id)),cp=all.find(x=>x.id===U.piso)||all[0];if(!cp)return;
   const g=avCelGroups(cp.id,D.rows).find(x=>x.k===AV.grp);if(!g)return;let n=0;
-  g.rows.forEach(r=>avEtOf(r).forEach(e=>{const fa=r.q-avAcc(D.ex,r.id,e.id);if(fa>1e-9){const c=avCell(D.ex,r.id,e.id,AV.day);avPutCell(p,r,e.id,AV.day,avR4(c+fa),c);n++}}));
+  avUGroup(()=>g.rows.forEach(r=>avEtOf(r).forEach(e=>{const fa=r.q-avAcc(D.ex,r.id,e.id);if(fa>1e-9){const c=avCell(D.ex,r.id,e.id,AV.day);avPutCell(p,r,e.id,AV.day,avR4(c+fa),c);n++}})));
   toast(n?`Completado: ${n} fila${n===1?'':'s'}`:'No faltaba nada aquí');requestRender()}
 
 /* ---------- partida: solo nombre y fechas ---------- */
@@ -293,6 +315,7 @@ function avRowMenu(id){const p=avCur(),r=avRowOf(id);if(!p||!r||!avaCfg())return
       /* en una fila que ya tiene avance, lo registrado pasa a la primera etapa y su % baja: se avisa antes */
       if(con.length&&!await uiAsk({title:'Hay filas con avance registrado',text:`${con.length} de las ${tg.length} filas ya tienen avance. En ellas lo registrado pasará a la etapa «${row.et[0].n}», así que su porcentaje bajará hasta que se llenen las demás etapas.`,ok:'Aplicar etapas',tone:'warn'}))return;
       tg.forEach(x=>{const R=by.get(x.piso)||{};R[x.id]={et:row.et.map((s,i)=>({id:i?avNid('e')+i:AV_E0,n:s.n,w:s.w}))};by.set(x.piso,R)});
+      avUGroup(()=>by.forEach((R,pi)=>{for(const id in R)avURec({k:'r',row:{id,piso:pi},a:{et:null},b:R[id]})}));
       const bt=db.batch();by.forEach((R,pi)=>bt.set(avMRef(p,pi),{p:p.id,piso:pi,r:R,by:w.by,t:w.t},{merge:true}));bgWrite(bt.commit());lqClose();toast(`Etapas aplicadas a ${tg.length} fila${tg.length===1?'':'s'}`);requestRender();return}
     if(k==='noet'){const lost=row.et.filter(s=>s.id!==AV_E0&&avAcc(ex,row.id,s.id)>0);
       if(!await uiAsk({title:'¿Quitar las etapas de esta fila?',text:lost.length?`La fila conserva lo registrado en «${row.et[0].n}». Lo de ${lost.map(s=>'«'+s.n+'»').join(', ')} queda en la base, pero deja de verse y de contar.`:'La fila vuelve a llenarse directo y conserva lo registrado en su primera etapa.',ok:'Quitar etapas',tone:lost.length?'danger':'warn'}))return;
@@ -324,6 +347,7 @@ function avAmbDlg(st){const p=avCur();if(!p||!avaCfg())return;if(!avReady(p)){to
     all.forEach((a,i)=>{if(st.off.has(a.id))return;if(have.has(a.id+'|'+mnk(desc)+'|'+mnk(und))){dup++;return}const pi=pisoOfAmb(a.id),R=by.get(pi)||{};
       R['r'+t0.toString(36)+i.toString(36)]={amb:a.id,sec:'',desc:desc.slice(0,160),und,q:0,et:null,o:t0+i,an:a.name||''};by.set(pi,R);n++});
     if(!n){toast(dup?'Esos ambientes ya tienen esa fila.':'Marca al menos un ambiente.');return}
+    avUGroup(()=>by.forEach((R,pi)=>{for(const id in R)avURec({k:'new',row:{id,piso:pi}})}));
     const bt=db.batch();by.forEach((R,pi)=>bt.set(avMRef(p,pi),{p:p.id,piso:pi,r:R,by:w.by,t:w.t},{merge:true}));bgWrite(bt.commit());lqClose();
     toast(`${n} fila${n===1?'':'s'} creada${n===1?'':'s'}${dup?` · ${dup} ya existía${dup===1?'':'n'}`:''}. Ahora escribe su metrado: Enter baja a la siguiente.`);requestRender()},
   e=>{const c=e.target;if(c.dataset&&c.dataset.avac){c.checked?st.off.delete(c.dataset.avac):st.off.add(c.dataset.avac);const g=$('#avago');if(g)g.textContent=lab(cnt())}})}

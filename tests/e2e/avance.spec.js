@@ -208,6 +208,22 @@ test('Avance: «Traer ambientes» crea la misma fila en los ambientes del Lookah
   await celda(page, 'c|r2|_|2026-10-04').click(); await pegar('1\t9');                // el domingo es el último día de la semana abierta
   await expect.poll(() => page.evaluate(k => (__dbGet('ava', k).c['2026-10-04'] || {}).r2, SEM)).toEqual({ _: 1 });
   expect(await page.evaluate(() => __dbGet('ava', 'pm_p1_2026-10-05'))).toBeUndefined();
+  // Ctrl+Z deshace el pegado entero (una acción) y luego el anterior; Ctrl+Y lo rehace; deshacer escribe, no borra
+  await page.locator('.avnote').click(); await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-04'].r2._, SEM)).toBe(0);
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'], SEM)).toEqual({ r1: { _: 0 }, r2: { _: 0 } });
+  await page.keyboard.press('Control+y');
+  await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'], SEM)).toEqual({ r1: { _: 1 }, r2: { _: 3 } });
+  expect(await page.evaluate(k => __dbGet('ava', k).log.filter(x => x.r === 'r1').map(x => x.q), SEM)).toEqual([1, 0, 1]);
+  // deshacer «Traer ambientes» archiva las filas creadas (no las borra) y rehacer las repone
+  await page.keyboard.press('Control+y');                                // rehace el pegado del domingo
+  for (let i = 0; i < 3; i++) await page.click('[data-av="undo"]');      // los dos pegados y la creación de las 2 filas
+  await expect(page.locator('tr.avrw', { hasText: 'Pintura de puertas' })).toHaveCount(0);
+  expect((await nuevas()).every(r => r.arch && r.arch.by)).toBe(true);
+  await expect(page.locator('[data-av="undo"]')).toBeDisabled();
+  for (let i = 0; i < 3; i++) await page.click('[data-av="redo"]');
+  await expect(page.locator('tr.avrw', { hasText: 'Pintura de puertas' })).toHaveCount(2);
   // Enter en la última fila de la tabla también guarda
   await celda(page, `c|r3|_|${HOY}`).click(); await page.keyboard.type('2'); await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => ((__dbGet('ava', 'pm_p2_2026-09-28') || {}).c || {})['2026-10-01'])).toEqual({ r3: { _: 2 } });
