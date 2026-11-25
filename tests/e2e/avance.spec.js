@@ -433,6 +433,7 @@ test('Avance: ida y vuelta con Excel (exportar, editar e importar con resumen; c
   const col = d => aoa[1].indexOf(d), fila = id => aoa.find(r => r[0] === id);
   expect(fila('r1').slice(3, 8)).toEqual(['Dpto 101', 'EO-1 · Escritorio', '', 'und', 10]);
   expect(fila('r1')[col('29/09/2026')]).toBe(3);
+  expect(await page.evaluate(() => avXlAmbs())).toEqual(expect.arrayContaining([['Piso', 'Sector', 'Ambiente'], ['Primer piso', expect.any(String), 'Dpto 101'], ['Segundo piso', expect.any(String), 'Dpto 103']]));   // hoja de consulta con los ambientes de la obra
   // sin tocar nada no hay cambios
   expect(await page.evaluate(a => { const P = avXlPlan(a, false); return [P.rowsP.length, P.news.length, P.cells.length, P.errs.length, P.faltan]; }, aoa)).toEqual([0, 0, 0, 0, 0]);
   // el usuario edita en Excel: nombre y metrado, un día (como texto con coma), uno que superaría el metrado, una fila nueva, una fila que borra y basura

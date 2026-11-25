@@ -8,6 +8,7 @@
    - Decidido con el dueño: (1) las filas que falten en el archivo NO se quitan; (2) las celdas que cambiaron en la app después de la
      descarga se marcan aparte y solo se pisan si se marca la casilla (se sabe por la hoja oculta «_lps», copia de lo descargado: lo
      que el usuario no tocó no pisa nada; si el archivo ya no la trae, por la hora del historial de cada celda); (3) las etapas no se crean ni renombran desde el Excel.
+   - La hoja «Ambientes» lista todos los pisos, sectores y ambientes de la obra: es solo de consulta (al importar no se lee).
    - Filas nuevas: ID vacío, con piso y ambiente escritos tal como se llaman en la obra (o con una equivalencia ya guardada).
    - Lo que superaría el metrado se ajusta, como al pegar. Todo se aplica como UNA acción (Ctrl+Z) y cada celda deja su historial. */
 const AVX_MARK='LPS911-AVANCE',AVX_ORIG='_lps',AVX_HD=['ID','Piso','Sector','Ambiente','Descripción','Etapa','Und','Metrado'];
@@ -24,11 +25,16 @@ function avXlAoa(p,rows,ex,now){const C=avWeeks(p),days=C.W.flatMap(w=>w.days).f
     const put=(r,sec,amb)=>avEtOf(r).forEach(e=>out.push([avHasEt(r)?r.id+'#'+e.id:r.id,nm(pi.id),sec,amb,r.desc,avHasEt(r)?e.n:'',r.und,r.q||''].concat(days.map(d=>avCell(ex,r.id,e.id,d)||''))));
     T.direct.forEach(r=>put(r,'',''));T.secs.forEach(s=>{s.direct.forEach(r=>put(r,s.id?s.nom:'',''));s.ambs.forEach(a=>a.rows.forEach(r=>put(r,s.id?s.nom:'',a.nom)))})});
   return out}
+/** todos los ambientes de la obra (piso, sector, ambiente): hoja de consulta del Excel, para escribir filas nuevas con el nombre exacto
+    sin tener que crearlas antes en la planilla (pedido del dueño, 25-11-2026) */
+function avXlAmbs(){const out=[['Piso','Sector','Ambiente']];pisos().forEach(pi=>{const ss=[...S.sec.values()].filter(s=>pisoOfSecObj(s)===pi.id).sort(byOrder);
+    ss.forEach(s=>{const aa=[...S.amb.values()].filter(a=>a.sectorId===s.id).sort(byOrder);if(!aa.length)out.push([pi.name||'',s.name||s.code||'','']);aa.forEach(a=>out.push([pi.name||'',s.name||s.code||'',a.name||a.code||'']))})});return out}
 async function avXlExport(){const p=avCur();if(!p||!avReady(p))return;try{toast('Generando el Excel…');await loadXlsx();const X=window.XLSX,D=avData(),aoa=avXlAoa(p,D.rows,D.ex,NOW()),ws=X.utils.aoa_to_sheet(aoa),bold={font:{bold:true},fill:{fgColor:{rgb:'E4E7E2'}}};
     aoa[1].forEach((v,c)=>{const k=X.utils.encode_cell({r:1,c});if(ws[k])ws[k].s=bold});ws['!cols']=[{wch:14},{wch:14},{wch:14},{wch:24},{wch:42},{wch:14},{wch:6},{wch:10}].concat(aoa[1].slice(8).map(()=>({wch:11})));ws['!rows']=[{hidden:true}];
     const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,String(p.nom).replace(/[\\/?*[\]:]/g,' ').slice(0,28)||'Partida');
     /* copia oculta de lo descargado: al importar dice qué cambió el usuario y qué cambió entretanto en la app */
-    X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(aoa),AVX_ORIG);wb.Workbook={Sheets:[{Hidden:0},{Hidden:1}]};
+    const wa=X.utils.aoa_to_sheet(avXlAmbs());wa['!cols']=[{wch:18},{wch:18},{wch:40}];X.utils.book_append_sheet(wb,wa,'Ambientes');
+    X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(aoa),AVX_ORIG);wb.Workbook={Sheets:[{Hidden:0},{Hidden:0},{Hidden:1}]};
     saveBlob(`${P().code||'LPS'}_Avance_${String(p.nom).replace(/[^\wáéíóúñÁÉÍÓÚÑ -]/g,'').trim().replace(/\s+/g,'_')}_${todayIso()}.xlsx`,new Blob([X.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
     toast('Excel descargado. Edítalo y vuelve a cargarlo con «Importar…».')}catch(e){toast('No se pudo generar el Excel: '+(e.message||e))}}
 /** lee el .xlsx elegido en «Importar…»: si es una planilla exportada, abre el resumen de cambios; si no, lo pasa al importador de filas */
