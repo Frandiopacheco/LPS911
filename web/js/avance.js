@@ -80,20 +80,25 @@ function renderAReg(main){ensureAv();const p=avCur();avSubData(p?p.id:'');
   if(!avOk)h+=`<div class="empty">Cargando partidas…</div>`;
   else if(!p)h+=`<div class="empty"><b>Todavía no hay partidas.</b><br>${cfg?'Crea la primera: solo necesita un nombre y sus fechas.<br><br><button class="ib pri" data-av="new">＋ Partida</button>':'El administrador o un ingeniero de producción las crea.'}</div>`;
   else{const D=avData();if(AV.key!==p.id){AV.key=p.id;AV.wkAll=false;AVU.u=[];AVU.r=[];AV.C=new Set();AV.cinit=false;AV.wkO=null;AV.grp=null;AV.xa=[]}
-    const ps=pisos(),rows=D.rows.filter(r=>S.pis.has(r.piso)||ARCH.pis.has(r.piso));
+    const ps=pisos(),rows0=D.rows.filter(r=>S.pis.has(r.piso)||ARCH.pis.has(r.piso)),qw=mnk(AV.q||'').split(' ').filter(Boolean);
+    /* buscar: todas las palabras, en la descripción o en el nombre del ambiente o del sector */
+    const rows=qw.length?rows0.filter(r=>{const a=r.amb?avAmb(r.amb):null,s=r.sec?avSec(r.sec):null,tx=mnk(r.desc+' '+(a?a.name||'':r.an||'')+' '+(s?s.name||'':''));return qw.every(w=>tx.includes(w))}):rows0;AV.nf=rows0.length-rows.length;
     h+=`<div class="avbar"><select class="tin" id="avp" aria-label="Partida">${parts.map(x=>`<option value="${esc(x.id)}"${x.id===p.id?' selected':''}>${esc(x.nom)}</option>`).join('')}</select>
       <select class="tin" id="avpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisoOptsZG(ps,U.piso)}</select>
       <span class="seg" role="group" aria-label="Cómo se ven y se tipean las celdas"><button type="button" data-avpct="0" class="${pct?'':'on'}">Cantidad</button><button type="button" data-avpct="1" class="${pct?'on':''}">%</button></span>
-      <span class="avtot">${rows.length?`Avance: <b>${avPc(avGrpPct(D.ex,rows))}</b>`:''}</span><span class="avsp"></span>
+      ${rows0.length?`<input class="tin avq" id="avq" data-fk="avq" type="search" placeholder="Buscar fila o ambiente" value="${esc(AV.q||'')}" aria-label="Buscar">`:''}
+      <span class="avtot">${rows.length?`Avance${qw.length?' de lo buscado':''}: <b>${avPc(avGrpPct(D.ex,rows))}</b>`:''}</span><span class="avsp"></span>
       ${AV.cel?'':`<button class="ib" data-av="hoy" title="Lleva la planilla al día de hoy">Hoy</button><button class="ib" data-av="wks" title="Despliega todas las semanas, o deja solo la actual y la anterior">${AV.wkAll?'Plegar semanas':'Todas las semanas'}</button>`}
       ${avaReg()&&!AV.cel?`<button class="ib" data-av="undo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"${AVU.u.length?'':' disabled'}>↶</button><button class="ib" data-av="redo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer"${AVU.r.length?'':' disabled'}>↷</button>`:''}${cfg?`${avReady(p)&&!AV.cel?`<button class="ib${AV.edf?' avon':''}" data-av="edf" aria-pressed="${!!AV.edf}" title="Muestra una línea en blanco en cada ambiente para agregar filas">Editar filas</button>`:''}${avReady(p)?'<button class="ib" data-av="amb" title="Crea la misma fila en muchos ambientes del Lookahead a la vez">Traer ambientes…</button><button class="ib" data-av="imp">Importar…</button>':''}<button class="ib" data-av="pmenu" aria-haspopup="menu">Partida ▾</button>`:''}</div>`;
     if(!avReady(p))h+=`<div class="empty">Cargando la planilla…</div>`;
+    else if(qw.length&&!rows.length)h+=`<div class="empty"><b>Ninguna fila coincide con «${esc(AV.q)}».</b><br><button class="ib" data-av="qclr">Quitar la búsqueda</button></div>`;
     else if(!rows.length&&!AV.cel&&!(cfg&&AV.edf))h+=`<div class="empty avemp"><b>Esta partida aún no tiene filas.</b>${cfg?`<span>Empieza por una de estas:</span><div class="avact"><button class="ib pri" data-av="amb">Traer ambientes…</button><button class="ib" data-av="imp">Importar desde Excel…</button><button class="ib" data-av="edf">Agregar filas a mano</button></div><small>«Traer ambientes» crea la misma fila en los ambientes del Lookahead que elijas.</small>`:'<span>El administrador o un ingeniero de producción las carga.</span>'}</div>`;
     else h+=AV.cel?avCelHtml(p,D,rows):avGridHtml(p,D,rows)}
-  main.innerHTML=h+'</div></div>';
-  main.onclick=avClick;main.onchange=avChange;main.onkeydown=avKey;main.oncontextmenu=avCtx;
+  AV.sa=AV.sb=null;main.innerHTML=h+'</div></div>';
+  main.onclick=avClick;main.onchange=avChange;main.oninput=e=>{if(U.tab==='areg'&&e.target.id==='avq'){AV.q=e.target.value;requestRender()}};main.onkeydown=avKey;main.oncontextmenu=avCtx;
   /* focusin/focusout no tienen propiedad on…: se escuchan una sola vez por <main> (los manejadores revisan U.tab) */
-  if(!main.__avf){main.__avf=true;main.addEventListener('focusout',avBlur);main.addEventListener('focusin',avFocus);main.addEventListener('paste',avPaste);main.addEventListener('dblclick',e=>{if(U.tab==='areg'&&e.target.closest&&e.target.closest('.aved'))AV.edit=true})}
+  if(!main.__avf){main.__avf=true;main.addEventListener('focusout',avBlur);main.addEventListener('focusin',avFocus);main.addEventListener('paste',avPaste);main.addEventListener('mousedown',e=>{const c=U.tab==='areg'&&e.target.closest?e.target.closest('.aved'):null,ae=document.activeElement;
+    if(c&&e.shiftKey&&ae&&ae.classList&&ae.classList.contains('aved')&&ae!==c){e.preventDefault();AV.sa=ae.dataset.k;AV.sb=c.dataset.k;avSelPaint()}else if(AV.sa)avSelClear()});main.addEventListener('dblclick',e=>{if(U.tab==='areg'&&e.target.closest&&e.target.closest('.aved'))AV.edit=true})}
   const b2=main.querySelector('.avbox');if(b2&&st){b2.scrollTop=st[0];b2.scrollLeft=st[1]}
   if(b2&&(!st||AV.goHoy)){AV.goHoy=false;const th=b2.querySelector('th.hoy'),fx=b2.querySelector('th.avskl');/* al entrar (y con «Hoy»): hoy queda a la vista, con tres días antes */
     if(th)b2.scrollLeft=Math.max(0,th.offsetLeft-(fx?fx.offsetLeft+fx.offsetWidth:0)-th.offsetWidth*3)}
@@ -112,7 +117,7 @@ function avGridHtml(p,D,rows){const ex=D.ex,C=avWeeks(p),reg=avaReg(),cfg=avaCfg
   const ncol=5+(ini?1:0)+C.W.reduce((s,w)=>s+(wo(w)?8:1),0),ind=n=>`<i class="avi" style="width:${n*12}px"></i>`;
   /* Und, Metrado, Acum. y % quedan fijas a la izquierda junto a la descripción (en pantallas angostas solo la descripción).
      Anchos justos para que quepan más días: el peso de la etapa va junto a su nombre y la alerta es un punto junto al % */
-  const wide=innerWidth>=900,SW=[46,80,80,104];let sx=wide?260:170;const SK=SW.map((w,i)=>{const o=wide?{c:' avsk'+(i===3?' avskl':''),a:` style="left:${sx}px;min-width:${w}px;max-width:${w}px"`}:{c:'',a:''};sx+=w;return o}),kU=SK[0],kQ=SK[1],kA=SK[2],kP=SK[3];
+  const wide=innerWidth>=700,SW=[46,80,80,104];let sx=innerWidth>=1000?260:innerWidth>760?200:170;const SK=SW.map((w,i)=>{const o=wide?{c:' avsk'+(i===3?' avskl':''),a:` style="left:${sx}px;min-width:${w}px;max-width:${w}px"`}:{c:'',a:''};sx+=w;return o}),kU=SK[0],kQ=SK[1],kA=SK[2],kP=SK[3];
   let h=`<div class="avbox"><table class="avgr"><thead><tr><th rowspan="2" class="avs0${wide?'':' avskl'}">Piso › sector › ambiente › descripción</th><th rowspan="2" class="${kU.c}"${kU.a}>Und</th><th rowspan="2" class="num${kQ.c}"${kQ.a}>Metrado</th><th rowspan="2" class="num${kA.c}"${kA.a}>Acum.</th><th rowspan="2" class="${kP.c}"${kP.a}>% avance</th>${ini?`<th rowspan="2" class="num" title="Lo ejecutado antes de empezar el registro diario (formato anterior)">Corte inicial${p.corte?'<br>'+fmtD(p.corte):''}</th>`:''}`;
   C.W.forEach(w=>h+=`<th class="avwk" data-avwk="${w.m}" colspan="${wo(w)?8:1}" title="Clic para plegar o desplegar la semana">${wo(w)?'▾':'▸'} Semana ${w.n} · ${fmtD(w.days[0])} – ${fmtD(w.days[6])}</th>`);h+='</tr><tr>';
   C.W.forEach(w=>{if(wo(w))w.days.forEach((d,i)=>h+=`<th class="num${dcls(d)}" title="${esc(nwReason(d)||'')}">${'LMXJVSD'[i]} ${d.slice(8)}</th>`);h+='<th class="num">total</th>'});h+='</tr></thead><tbody>';
@@ -132,27 +137,31 @@ function avGridHtml(p,D,rows){const ex=D.ex,C=avWeeks(p),reg=avaReg(),cfg=avaCfg
   /* líneas en blanco para agregar filas y selector de ambientes: solo con «Editar filas» encendido (si no, son decenas de líneas vacías) */
   const gho=(g,dep,und)=>edf?`<tr class="avgho" data-g="${esc(g)}"><td class="avs0 avgh gd" contenteditable="true" data-ph="＋ nueva fila: escribe la descripción" style="padding-left:${7+dep*12}px"></td><td class="avgh gu${kU.c}"${kU.a} contenteditable="true">${esc(und)}</td><td class="num avgh gq${kQ.c}"${kQ.a} contenteditable="true" inputmode="decimal" data-ph="metrado"></td><td colspan="${ncol-3}" class="avmu">Enter para agregarla y seguir con otra</td></tr>`:'';
   const last=rs=>rs.length?rs[rs.length-1].und:'und';
-  vp.forEach(pi=>{const T=avTree(pi.id,rows,AV.xa);if(!T.rows.length&&!edf)return;h+=grp('avpi',pi.name,T.rows,pi.id,0);if(AV.C.has(pi.id))return;
+  /* total de la partida (o de lo buscado): la primera fila, como el total de una hoja de Excel */
+  if(rows.length){const vr=rows.filter(r=>vp.some(x=>x.id===r.piso));h+=grp('avtt',AV.nf?'Total de lo buscado':'Total de la partida',vr,'',0).replace('▾ ','')}
+  vp.forEach(pi=>{const T=avTree(pi.id,rows,AV.xa);if(!T.rows.length&&!(edf&&!AV.nf))return;h+=grp('avpi',pi.name,T.rows,pi.id,0);if(AV.C.has(pi.id))return;
     T.direct.forEach(r=>h+=row(r,1));if(T.direct.length||T.gho)h+=gho(pi.id+'||',1,last(T.direct));
     T.secs.forEach(s=>{let dep=1;if(T.showSec){const ks=pi.id+'|'+s.id;h+=grp('avse',s.nom,s.rows,ks,1);if(AV.C.has(ks))return;dep=2;s.direct.forEach(r=>h+=row(r,2));if(s.direct.length||s.gho)h+=gho(pi.id+'|'+s.id+'|',2,last(s.direct))}
       s.ambs.forEach(a=>{const ka=pi.id+'|'+s.id+'|'+a.id;h+=grp('avam',a.nom,a.rows,ka,dep);if(AV.C.has(ka))return;a.rows.forEach(r=>h+=row(r,dep+1));h+=gho(pi.id+'||'+a.id,dep+1,last(a.rows))})});
     if(edf&&S.pis.has(pi.id)){const used=new Set(T.rows.map(r=>r.amb).concat(AV.xa.map(x=>x.amb)).filter(Boolean)),ss=[...S.sec.values()].filter(s=>s.pisoId===pi.id).sort(byOrder);
       h+=`<tr class="avgho"><td class="avs0" style="padding-left:19px"><select class="avadd" data-avadd="${esc(pi.id)}" aria-label="Agregar un ambiente a ${esc(pi.name)}"><option value="">＋ agregar ambiente a ${esc(pi.name)}…</option>${ss.map(s=>{const L=[...S.amb.values()].filter(a=>a.sectorId===s.id&&!used.has(a.id)).sort(byOrder);return`<optgroup label="${esc(s.name||s.code||'Sector')}">${L.map(a=>`<option value="A:${esc(a.id)}">${esc(a.name||a.code||a.id)}</option>`).join('')}<option value="S:${esc(s.id)}">(todo el sector: fila sin ambiente)</option></optgroup>`}).join('')}<option value="P:">(todo el piso: fila sin ambiente)</option></select></td><td colspan="${ncol-1}"></td></tr>`}});
-  return h+`</tbody></table></div><details class="avhlp"><summary>Atajos y ayuda</summary><p class="avnote">${reg?`Como en Excel: flechas y Enter para moverte, escribe encima para reemplazar, F2 o doble clic para corregir dentro, Supr para borrar, Ctrl+V para pegar un bloque copiado de Excel y Ctrl+Z para deshacer. Clic derecho en una celda: su historial. `:''}${cfg?'Para agregar filas enciende «Editar filas»: aparece una línea en blanco en cada ambiente. «⋯» en una fila: agregar etapas. Una etapa se renombra escribiendo sobre su nombre y se quita dejándolo vacío; su peso se cambia en el número junto al nombre. ':''}El punto junto al % avisa: ámbar = supera el metrado, gris = fracción de unidad. Clic en una semana o en un grupo para plegarlo.</p></details>`}
+  return h+`</tbody></table></div><details class="avhlp"><summary>Atajos y ayuda</summary><p class="avnote">${reg?`Como en Excel: flechas y Enter para moverte, escribe encima para reemplazar, F2 o doble clic para corregir dentro, Supr para borrar, Ctrl+V para pegar un bloque copiado de Excel y Ctrl+Z para deshacer. Mayús+flechas o Mayús+clic seleccionan un rango: Ctrl+C lo copia y Supr lo vacía. Clic derecho en una celda: su historial. `:''}${cfg?'Para agregar filas enciende «Editar filas»: aparece una línea en blanco en cada ambiente. «⋯» en una fila: agregar etapas. Una etapa se renombra escribiendo sobre su nombre y se quita dejándolo vacío; su peso se cambia en el número junto al nombre. ':''}El punto junto al % avisa: ámbar = supera el metrado, gris = fracción de unidad. Clic en una semana o en un grupo para plegarlo.</p></details>`}
 /** celular: piso → lugar → filas (o etapas) con lo ejecutado del día */
 function avCelGroups(pid,rows){const T=avTree(pid,rows.filter(r=>r.q>0)/* sin metrado no se registra */,[]),G=[];if(T.direct.length)G.push({k:'P',nom:'Todo el piso',rows:T.direct});
   T.secs.forEach(s=>{if(s.direct.length)G.push({k:'S'+s.id,nom:s.nom+' (todo el sector)',rows:s.direct});s.ambs.forEach(a=>G.push({k:'A'+a.id,nom:a.nom,sub:T.showSec?s.nom:'',rows:a.rows}))});return G}
-function avCelHtml(p,D,rows){const ex=D.ex,reg=avaReg(),t=todayIso(),pct=!!U.avPct;if(AV.day!==addD(t,-1))AV.day=t;const d=AV.day;
-  const all=[...pisos(),...ARCH.pis.values()].filter(x=>rows.some(r=>r.piso===x.id)),cp=all.find(x=>x.id===U.piso)||all[0];
-  if(!cp)return'<div class="empty"><b>Esta partida aún no tiene filas.</b><br>Se agregan desde la computadora o la tablet.</div>';const G=avCelGroups(cp.id,rows);let h=`<div class="avcel">`;
-  const dsel=`<span class="seg" role="group" aria-label="Día"><button type="button" data-avd="${t}" class="${d===t?'on':''}">Hoy ${fmtD(t)}</button><button type="button" data-avd="${addD(t,-1)}" class="${d!==t?'on':''}">Ayer</button></span>`;
-  const g=G.find(x=>x.k===AV.grp);
-  if(!g){h+=`<div class="avch"><b>${esc(cp.name)}</b>${U.piso?'':'<span>Elige otro piso arriba</span>'}</div>${dsel}`;
-    G.forEach(x=>{const v=avGrpPct(ex,x.rows);h+=`<button type="button" class="avcard" data-avgrp="${esc(x.k)}"><span><b>${esc(x.nom)}</b><small>${x.sub?esc(x.sub)+' · ':''}${v>=1?'100 % ✓':avPc(v)} · ${x.rows.length} fila${x.rows.length===1?'':'s'}</small></span><i aria-hidden="true">›</i></button>`})}
-  else{const ok=reg&&d>=(p.d0||d)&&d<=(p.d1||d);h+=`<button type="button" class="ib" data-avgrp="">‹ ${esc(g.nom)}</button><div class="avch"><span>${esc(cp.name)} · en ${pct?'porcentaje':'cantidad'}</span></div>${dsel}`;
+/** lugares de todos los pisos a la vista (el elegido arriba, o todos); la clave lleva el piso */
+function avCelAll(rows){return[...pisos(),...ARCH.pis.values()].filter(x=>(!U.piso||x.id===U.piso)&&rows.some(r=>r.piso===x.id&&r.q>0)).map(pi=>({pi,G:avCelGroups(pi.id,rows).map(g=>({...g,k:pi.id+'~'+g.k}))}))}
+function avCelHtml(p,D,rows){const ex=D.ex,reg=avaReg(),t=todayIso(),pct=!!U.avPct,d0=p.d0||t,d1=p.d1||t;if(!AV.day)AV.day=t;const d=AV.day,A=avCelAll(rows);
+  if(!A.length)return`<div class="empty"><b>${rows.length?'Las filas de aquí aún no tienen metrado.':'Esta partida aún no tiene filas.'}</b><br>Se cargan desde la computadora o la tablet.</div>`;let h=`<div class="avcel">`;
+  /* el día: Hoy y Ayer a un toque, o cualquier otro del rango de la partida */
+  const dsel=`<div class="avcday"><span class="seg" role="group" aria-label="Día"><button type="button" data-avd="${t}" class="${d===t?'on':''}">Hoy</button><button type="button" data-avd="${addD(t,-1)}" class="${d===addD(t,-1)?'on':''}">Ayer</button></span><input class="tin" type="date" data-avday="1" data-fk="avday" value="${esc(d)}" min="${esc(d0)}" max="${esc(d1)}" aria-label="Otro día"></div>`;
+  let g=null,gp=null;A.forEach(x=>x.G.forEach(y=>{if(y.k===AV.grp){g=y;gp=x.pi}}));
+  if(!g){h+=dsel;A.forEach(x=>{h+=`<div class="avch"><b>${esc(x.pi.name)}</b><span>${avPc(avGrpPct(ex,rows.filter(r=>r.piso===x.pi.id)))}</span></div>`;
+      x.G.forEach(y=>{const v=avGrpPct(ex,y.rows);h+=`<button type="button" class="avcard" data-avgrp="${esc(y.k)}"><span><b>${esc(y.nom)}</b><small>${y.sub?esc(y.sub)+' · ':''}${v>=1?'100 % ✓':avPc(v)} · ${y.rows.length} fila${y.rows.length===1?'':'s'}</small></span><i aria-hidden="true">›</i></button>`})})}
+  else{const ok=reg&&d>=d0&&d<=d1;h+=`<div class="avch"><button type="button" class="ib avbk" data-avgrp="">‹ Volver</button><span>${esc(gp.name)}</span></div><b class="avcti">${esc(g.nom)}</b>${dsel}`;
     g.rows.forEach(r=>avEtOf(r).forEach(e=>{const a=avAcc(ex,r.id,e.id),c=avCell(ex,r.id,e.id,d),k=r.id+'|'+e.id,val=pct?avE1(r.q?c/r.q*100:0):avE(c);h+=`<div class="avcrow"><span><b>${esc(r.desc)}</b>${e.id!==AV_E0||avHasEt(r)?' · '+esc(e.n):''}<small>${avF(a)} de ${avF(r.q)} ${esc(r.und)} · ${avPc(r.q?Math.min(a/r.q,1):0)}</small></span>
-      ${ok?`<span class="avstp"><button type="button" data-avst="-1" data-r="${esc(k)}" aria-label="Menos">−</button><input type="number" inputmode="decimal" min="0" step="any" data-avin="${esc(k)}" data-fk="avin-${esc(k)}" value="${val}" aria-label="${pct?'Porcentaje':'Cantidad'} del día"><button type="button" data-avst="1" data-r="${esc(k)}" aria-label="Más">+</button></span>`:`<b class="mono">${val||'0'}${pct?' %':''}</b>`}</div>`}));
-    if(ok)h+=`<button type="button" class="ib pri" data-av="todo">Todo lo que falta</button><p class="avnote">Cada toque en + suma ${pct?'10 %':'1'}.</p>`;else if(reg)h+='<p class="avnote">Ese día está fuera del rango de fechas de la partida.</p>'}
+      ${ok?`<span class="avstp"><button type="button" data-avst="-1" data-r="${esc(k)}" aria-label="Menos">−</button><input type="number" inputmode="decimal" min="0" step="any" placeholder="0" data-avin="${esc(k)}" data-fk="avin-${esc(k)}" value="${val}" aria-label="${pct?'Porcentaje':'Cantidad'} del día"><button type="button" data-avst="1" data-r="${esc(k)}" aria-label="Más">+</button></span>`:`<b class="mono">${val||'0'}${pct?' %':''}</b>`}</div>`}));
+    if(ok)h+=`<button type="button" class="ib pri" data-av="todo">Todo lo que falta</button><p class="avnote">${fmtD(d)} · en ${pct?'porcentaje: cada toque en + suma 10 %':'cantidad: cada toque en + suma 1'}.</p>`;else if(reg)h+='<p class="avnote">Ese día está fuera de las fechas de la partida.</p>'}
   return h+'</div>'}
 
 /* ---------- escritura ---------- */
@@ -235,13 +244,38 @@ async function avEtDel(row,etId){const p=avCur(),e=row.et.find(x=>x.id===etId);i
   avRowPatch(p,row,{et:row.et.filter(x=>x.id!==etId)});toast('Etapa quitada')}
 /** columna de una celda editable, para moverse con las flechas: los días por su fecha; descripción y nombre de etapa comparten columna */
 const avColOf=el=>{const k=el.dataset.k.split('|');return k[0]==='c'?'c|'+k[3]:k[0]==='n'?'d':k[0]};
-function avMove(t,dir){const tr=t.closest('tr');
-  if(dir==='left'||dir==='right'){const L=[...tr.querySelectorAll('.aved')],c=L[L.indexOf(t)+(dir==='left'?-1:1)];if(c)c.focus();return!!c}
-  const col=avColOf(t);let r=tr;for(;;){r=dir==='up'?r.previousElementSibling:r.nextElementSibling;if(!r)return false;const c=[...r.querySelectorAll('.aved')].find(x=>avColOf(x)===col);if(c){c.focus();return true}}}
+/** la celda editable vecina en esa dirección (o null) */
+function avNext(t,dir){const tr=t.closest('tr');
+  if(dir==='left'||dir==='right'){const L=[...tr.querySelectorAll('.aved')];return L[L.indexOf(t)+(dir==='left'?-1:1)]||null}
+  const col=avColOf(t);let r=tr;for(;;){r=dir==='up'?r.previousElementSibling:r.nextElementSibling;if(!r)return null;const c=[...r.querySelectorAll('.aved')].find(x=>avColOf(x)===col);if(c)return c}}
+function avMove(t,dir){const c=avNext(t,dir);if(c)c.focus();return!!c}
+/* Rango seleccionado, como en Excel: Mayús+flechas o Mayús+clic desde la celda con foco. Vive solo en la pantalla (clase .avsel):
+   Ctrl+C lo copia como texto con tabulaciones (se pega tal cual en Excel) y Supr lo vacía (una sola acción para Ctrl+Z). */
+const avColRank=c=>c[0]==='c'?'z'+c.slice(2):({d:'a0',u:'a1',q:'a2',w:'a3'}[c]||'a9');
+const avSelKey=k=>[...document.querySelectorAll('#main .aved')].find(x=>x.dataset.k===k)||null;
+function avSelClear(){if(!AV.sa&&!AV.sb)return;AV.sa=AV.sb=null;document.querySelectorAll('#main .avsel').forEach(x=>x.classList.remove('avsel'))}
+/** celdas del rango, por filas: [[el|null,…],…] */
+function avSelCells(){const a=AV.sa&&avSelKey(AV.sa),b=AV.sb&&avSelKey(AV.sb);if(!a||!b)return[];const ra=avColRank(avColOf(a)),rb=avColRank(avColOf(b)),lo=ra<rb?ra:rb,hi=ra<rb?rb:ra;
+  const T=[...a.closest('tbody').rows],ia=T.indexOf(a.closest('tr')),ib=T.indexOf(b.closest('tr')),out=[];
+  for(let i=Math.min(ia,ib);i<=Math.max(ia,ib);i++){const L=[...T[i].querySelectorAll('.aved')].filter(x=>{const r=avColRank(avColOf(x));return r>=lo&&r<=hi});if(L.length)out.push(L)}return out}
+function avSelPaint(){document.querySelectorAll('#main .avsel').forEach(x=>x.classList.remove('avsel'));avSelCells().forEach(L=>L.forEach(x=>x.classList.add('avsel')))}
+function avSelCopy(){const M=avSelCells();if(!M.length)return false;const cols=[...new Set(M.flat().map(avColOf))].sort((x,y)=>avColRank(x)<avColRank(y)?-1:1);
+  const txt=M.map(L=>cols.map(c=>{const el=L.find(x=>avColOf(x)===c);return el?el.textContent.trim():''}).join('\t')).join('\n'),n=M.flat().length;
+  const ok=()=>toast(`Copiadas ${n} celdas: pégalas en Excel o en otra parte de la planilla.`);
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(ok,()=>toast('El navegador no dejó copiar.'));else toast('El navegador no dejó copiar.');return true}
+function avSelDel(){const p=avCur(),D=avData(),cells=[];if(!p||!avReady(p)||!avaReg())return false;const M=avSelCells();if(!M.length)return false;
+  M.flat().forEach(el=>{const k=el.dataset.k.split('|');if(k[0]!=='c')return;const row=avRowOf(k[1]),old=row?avCell(D.ex,row.id,k[2],k[3]):0;if(row&&old)cells.push({row,et:k[2],d:k[3],q:0,old})});
+  avPutCells(p,cells);avSelClear();toast(cells.length?`Vaciadas ${cells.length} celdas (Ctrl+Z para deshacer).`:'No había avance en esas celdas.');AV.pend=false;requestRender();return true}
 function avKey(e){const t=e.target;if(U.tab!=='areg'||!t.classList)return;
   if(t.classList.contains('avgh')){if(e.key==='Enter'){e.preventDefault();const tr=t.parentElement;if(t.classList.contains('gq')){if(!avGhoTry(tr,true))tr.querySelector('.gd').focus()}else tr.querySelector('.gq').focus()}
     else if(e.key==='Escape'){t.parentElement.querySelectorAll('.gd,.gq').forEach(c=>c.textContent='');t.blur()}return}
   if(!t.classList.contains('aved'))return;
+  const A0={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'}[e.key];
+  if(A0&&e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!AV.edit&&t.textContent.trim()===(t.dataset.o||'')){e.preventDefault();if(!AV.sa)AV.sa=AV.sb=t.dataset.k;const cur=avSelKey(AV.sb)||t,nx=avNext(cur,A0);if(nx){AV.sb=nx.dataset.k;avSelPaint()}return}
+  if(AV.sa&&AV.sa!==AV.sb){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){if(avSelCopy())e.preventDefault();return}
+    if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();avSelDel();return}
+    if(e.key==='Escape'){e.preventDefault();avSelClear();return}}
+  if(AV.sa&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&e.key!=='Shift')avSelClear();
   /* como en Excel: la celda entra «seleccionada» (escribir reemplaza y las flechas cambian de celda); F2 o doble clic = corregir dentro */
   if(e.key==='Escape'){t.textContent=t.dataset.o||'';AV.edit=false;t.blur();return}
   if(e.key==='F2'){e.preventDefault();AV.edit=true;const s=getSelection();s.selectAllChildren(t);s.collapseToEnd();return}
@@ -278,25 +312,26 @@ function avChange(e){const t=e.target;if(U.tab!=='areg')return;
   if(t.id==='avpiso'){U.piso=t.value;AV.grp=null;saveUI();requestRender();return}
   if(t.dataset&&t.dataset.avadd){const v=t.value;if(!v)return;const piso=t.dataset.avadd,x={piso,sec:v[0]==='S'?v.slice(2):'',amb:v[0]==='A'?v.slice(2):''};AV.xa.push(x);AV.gf={g:piso+'|'+x.sec+'|'+x.amb,c:'gd'};
     const a=x.amb&&S.amb.get(x.amb);AV.C.delete(piso);if(a){AV.C.delete(piso+'|'+a.sectorId);AV.C.delete(piso+'|'+a.sectorId+'|'+a.id)}else if(x.sec)AV.C.delete(piso+'|'+x.sec);requestRender();return}
+  if(t.dataset&&t.dataset.avday){const p=avCur();if(t.value&&p&&t.value>=(p.d0||t.value)&&t.value<=(p.d1||t.value))AV.day=t.value;requestRender();return}
   if(t.dataset&&t.dataset.avin){const k=t.dataset.avin.split('|'),row=avRowOf(k[0]),v=t.value===''?0:avNum(t.value);if(!row||!(v>=0)){requestRender();return}avSetCell(row,k[1],AV.day,U.avPct?v/100*row.q:v).then(()=>requestRender())}}
 function avClick(e){if(U.tab!=='areg')return;const g=a=>{const el=e.target.closest('['+a+']');return el?el.getAttribute(a):null};let v;
   if((v=g('data-avm'))){avRowMenu(v);return}
   if(e.target.closest('.aved,.avgh,.avadd'))return;
   if((v=g('data-avpct'))!=null){U.avPct=v==='1';saveUI()}
   else if((v=g('data-avwk'))){AV.wkO.has(v)?AV.wkO.delete(v):AV.wkO.add(v)}
-  else if((v=g('data-avcol'))){AV.C.has(v)?AV.C.delete(v):AV.C.add(v)}
+  else if((v=g('data-avcol'))!=null){if(!v)return;AV.C.has(v)?AV.C.delete(v):AV.C.add(v)}
   else if((v=g('data-avd'))){AV.day=v}
   else if((v=g('data-avgrp'))!=null){AV.grp=v||null}
   else if((v=g('data-avst'))){const b=e.target.closest('[data-avst]'),k=b.dataset.r.split('|'),row=avRowOf(k[0]);if(!row)return;const c=avCell(avData().ex,row.id,k[1],AV.day),step=U.avPct?row.q/10:1;avSetCell(row,k[1],AV.day,Math.max(0,c+ +v*step)).then(()=>requestRender());return}
   else if((v=g('data-av'))){if(v==='new')avPartDlg(null);else if(v==='edit')avPartDlg(avCur());else if(v==='imp')avImpOpen();else if(v==='amb')avAmbDlg();else if(v==='hoy'){const C=avCur()?avWeeks(avCur()):null;if(C&&(C.t<C.d0||C.t>C.d1)){toast('Hoy está fuera de las fechas de la partida (✎ Partida para cambiarlas).');return}AV.wkO&&AV.wkO.add(avMon(todayIso()));AV.goHoy=true;requestRender()}
     else if(v==='wks'){const p=avCur();if(!p)return;AV.wkAll=!AV.wkAll;const C=avWeeks(p);AV.wkO=AV.wkAll?new Set(C.W.map(w=>w.m)):null;AV.goHoy=!AV.wkAll;requestRender()}
     else if(v==='edf'){AV.edf=!AV.edf;requestRender()}
+    else if(v==='qclr'){AV.q='';requestRender()}
     else if(v==='pmenu'){const c=avCur();openPop(e.target.closest('[data-av]'),`<div class="ph">${esc(c?c.nom:'Partida')}</div><button data-do="ed">✎ Nombre y fechas…</button><button data-do="nw">＋ Nueva partida…</button>`,{ed:()=>avPartDlg(avCur()),nw:()=>avPartDlg(null)})}
     else if(v==='undo')avUndo(false);else if(v==='redo')avUndo(true);else if(v==='todo')avTodo();return}
   else return;requestRender()}
 /** celular: completa de un toque lo que falta en el lugar abierto */
-function avTodo(){const p=avCur(),D=avData();if(!p||!avaReg()||!avReady(p))return;const all=[...pisos(),...ARCH.pis.values()].filter(x=>D.rows.some(r=>r.piso===x.id)),cp=all.find(x=>x.id===U.piso)||all[0];if(!cp)return;
-  const g=avCelGroups(cp.id,D.rows).find(x=>x.k===AV.grp);if(!g)return;let n=0;
+function avTodo(){const p=avCur(),D=avData();if(!p||!avaReg()||!avReady(p))return;let g=null;avCelAll(D.rows).forEach(x=>x.G.forEach(y=>{if(y.k===AV.grp)g=y}));if(!g)return;let n=0;
   avUGroup(()=>g.rows.forEach(r=>avEtOf(r).forEach(e=>{const fa=r.q-avAcc(D.ex,r.id,e.id);if(fa>1e-9){const c=avCell(D.ex,r.id,e.id,AV.day);avPutCell(p,r,e.id,AV.day,avR4(c+fa),c);n++}})));
   toast(n?`Completado: ${n} fila${n===1?'':'s'}`:'No faltaba nada aquí');requestRender()}
 
@@ -321,7 +356,7 @@ function avRowMenu(id){const p=avCur(),r=avRowOf(id);if(!p||!r||!avaCfg())return
   <label class="avf">Descripción<span class="avfe"><input class="tin" id="avmd" maxlength="160" value="${esc(r.desc)}"><button type="button" class="ib" data-avmk="desc">Guardar</button></span></label>
   <label class="avf">Nueva etapa de esta fila<span class="avfe"><input class="tin" id="avme" maxlength="40" placeholder="p. ej. Empaste, 1.ª mano, Fragua…"><button type="button" class="ib pri" data-avmk="eta">＋ Etapa</button></span></label>
   <p class="avnote">${he?'Etapas: '+r.et.map(e=>esc(e.n)).join(', ')+'. Nacen con el mismo peso; se cambia en la columna «Peso».':'Sin etapas, la fila se llena directo. Al agregar la primera etapa, lo ya registrado en la fila pasa a esa etapa.'}</p>
-  <div class="avmbt">${he&&others?`<button type="button" class="ib" data-avmk="copy">Aplicar estas etapas a las otras ${others} fila${others===1?'':'s'} en ${esc(r.und)} que no tienen etapas${U.piso?' (solo el piso elegido)':' (todos los pisos)'}</button>`:''}${he?'<button type="button" class="ib" data-avmk="noet">Quitar las etapas de esta fila</button>':''}<button type="button" class="ib" data-avmk="del">Quitar la fila</button></div>`,
+  <div class="avmbt">${he&&others?`<button type="button" class="ib" data-avmk="copy">Aplicar estas etapas a las otras ${others} fila${others===1?'':'s'} en ${esc(r.und)} que no tienen etapas${U.piso?' (solo el piso elegido)':' (todos los pisos)'}</button>`:''}${he?'<button type="button" class="ib" data-avmk="noet">Quitar las etapas de esta fila</button>':''}<button type="button" class="ib" data-avmk="up">↑ Subir la fila en su ambiente</button><button type="button" class="ib" data-avmk="dn">↓ Bajar la fila</button><button type="button" class="ib" data-avmk="del">Quitar la fila</button></div>`,
   async e=>{const b=e.target.closest('[data-avmk]');if(!b)return;const k=b.dataset.avmk,row=avRowOf(id);if(!row||!avReady(p)){lqClose();return}
     if(k==='desc'){const d=$('#avmd').value.trim();if(!d){toast('La descripción no puede quedar vacía.');return}avRowPatch(p,row,{desc:d.slice(0,160)});lqClose();toast('Descripción guardada');requestRender();return}
     if(k==='eta'){const n=$('#avme').value.trim();if(!n){$('#avme').focus();return}const cur=avHasEt(row)?row.et:[];if(cur.some(x=>mnk(x.n)===mnk(n))){toast('Esa etapa ya está en la fila.');return}
@@ -336,6 +371,10 @@ function avRowMenu(id){const p=avCur(),r=avRowOf(id);if(!p||!r||!avaCfg())return
     if(k==='noet'){const lost=row.et.filter(s=>s.id!==AV_E0&&avAcc(ex,row.id,s.id)>0);
       if(!await uiAsk({title:'¿Quitar las etapas de esta fila?',text:lost.length?`La fila conserva lo registrado en «${row.et[0].n}». Lo de ${lost.map(s=>'«'+s.n+'»').join(', ')} queda en la base, pero deja de verse y de contar.`:'La fila vuelve a llenarse directo y conserva lo registrado en su primera etapa.',ok:'Quitar etapas',tone:lost.length?'danger':'warn'}))return;
       avRowPatch(p,row,{et:null});lqClose();requestRender();return}
+    if(k==='up'||k==='dn'){const G=avData().rows.filter(x=>x.piso===row.piso&&x.amb===row.amb&&x.sec===row.sec),i=G.findIndex(x=>x.id===row.id),o=G[i+(k==='up'?-1:1)];
+      if(!o){toast(k==='up'?'Ya es la primera de su ambiente.':'Ya es la última de su ambiente.');return}
+      /* se intercambian sus números de orden (si coincidían, se separan) */
+      const a=row.o,b=o.o===row.o?row.o+(k==='up'?-1:1):o.o;avUGroup(()=>{avRowPatch(p,row,{o:b});avRowPatch(p,o,{o:a})});requestRender();avRowMenu(id);return}
     if(k==='del'){const has=avEtOf(row).some(s=>avAcc(ex,row.id,s.id)>0);
       if(!await uiAsk({title:'¿Quitar esta fila?',text:`${row.desc} (${avLoc(row)}).${has?' Tiene avance registrado: se conserva en la base, pero deja de contar.':''}`,ok:'Quitar fila',tone:has?'danger':'warn'}))return;
       avRowPatch(p,row,{arch:avWho()});lqClose();toast('Fila quitada');requestRender()}})}

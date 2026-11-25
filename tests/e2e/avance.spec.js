@@ -244,6 +244,31 @@ test('Avance: «Traer ambientes» crea la misma fila en los ambientes del Lookah
   noErrors(errors, 'traer ambientes');
 });
 
+test('Avance: fila de total, buscar, reordenar filas y rango seleccionado (copiar, vaciar, deshacer)', async ({ page }) => {
+  const errors = await abrir(page);
+  const total = page.locator('tr.avtt');
+  await expect(total).toContainText('Total de la partida'); await expect(total).toContainText('20');     // 10 + 4 + 6 und
+  await page.fill('#avq', 'silla'); await expect(page.locator('tr.avrw')).toHaveCount(1);
+  await expect(total).toContainText('Total de lo buscado'); await expect(page.locator('#avq')).toBeFocused();
+  await page.fill('#avq', 'dpto 103'); await expect(page.locator('tr.avrw')).toContainText('EO-1');      // también busca por ambiente
+  await page.fill('#avq', ''); await expect(page.locator('tr.avrw')).toHaveCount(3);
+  // reordenar dentro del ambiente
+  await page.selectOption('#avp', 'pp');
+  await page.locator('tr.avrw', { hasText: 'Contrazócalo' }).locator('.avmb').click(); await page.click('[data-avmk="up"]'); await page.click('#lqm [data-lqx]');
+  await expect.poll(() => page.evaluate(() => { const r = __dbGet('avm', 'pp_p1').r; return r.q2.o < r.q1.o; })).toBe(true);
+  await expect(page.locator('tr.avam + tr.avrw')).toContainText('Contrazócalo');
+  // rango: Mayús+flecha selecciona, Supr lo vacía como una sola acción y Ctrl+Z lo repone
+  await escribir(page, `c|q2|_|${HOY}`, 5); await escribir(page, 'c|q2|_|2026-10-02', 6);
+  await expect.poll(() => page.evaluate(() => { const c = __dbGet('ava', 'pp_p1_2026-09-28').c; return [c['2026-10-01'].q2._, c['2026-10-02'].q2._]; })).toEqual([5, 6]);
+  await celda(page, `c|q2|_|${HOY}`).click(); await page.keyboard.press('Shift+ArrowRight');
+  await expect(page.locator('.avsel')).toHaveCount(2);
+  await page.keyboard.press('Delete');
+  await expect.poll(() => page.evaluate(() => { const c = __dbGet('ava', 'pp_p1_2026-09-28').c; return [c['2026-10-01'].q2._, c['2026-10-02'].q2._]; })).toEqual([0, 0]);
+  await page.locator('.avtot').click(); await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => { const c = __dbGet('ava', 'pp_p1_2026-09-28').c; return [c['2026-10-01'].q2._, c['2026-10-02'].q2._]; })).toEqual([5, 6]);
+  noErrors(errors, 'total y rango');
+});
+
 test('Avance: importar filas con el cuadro de equivalencias, sin crear ambientes ni duplicar', async ({ page }) => {
   const errors = await abrir(page);
   const csv = ['partida,codigo,descripcion,unidad,plano,nivel,ambiente,cantidad', 'Mobiliario,EO-1,ESCRITORIO,und,AB-02,PRIMER PISO,DPTO 101,12', 'Mobiliario,M-1,MESA CUADRADA,und,AB-02,PRIMER PISO,Depto. 102,5',
@@ -276,7 +301,8 @@ test('Avance en el celular: piso → ambiente → filas con lo ejecutado hoy, en
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = await abrir(page, { as: 'campo' });
   await expect(page.locator('.avcel')).toHaveCount(1);
-  await page.click('.avcard[data-avgrp="Aa1"]');
+  await expect(page.locator('.avcard')).toHaveCount(3);                 // sin piso elegido se ven los ambientes de todos los pisos
+  await page.click('.avcard[data-avgrp="p1~Aa1"]');
   await page.click('[data-avst="1"]'); await page.click('[data-avst="1"]');
   await expect.poll(() => page.evaluate(k => ((__dbGet('ava', k) || {}).c || {})['2026-10-01'], SEM)).toEqual({ r1: { _: 2 } });
   await page.click('[data-avpct="1"]'); await page.click('[data-avst="1"]');     // en %: cada toque suma 10 % del metrado (1 de 10)
@@ -284,5 +310,10 @@ test('Avance en el celular: piso → ambiente → filas con lo ejecutado hoy, en
   await page.click('[data-av="todo"]');
   await expect.poll(() => page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(8);   // 10 − 2 del corte inicial
   await expect(page.locator('.avcrow')).toContainText('10 de 10');
+  // otro día del rango, con el selector de fecha
+  page.on('dialog', d => d.accept());                                   // la fila ya está completa: confirmar «supera el metrado»
+  await page.fill('[data-avday]', '2026-09-25'); await page.locator('[data-avday]').blur(); await page.click('[data-avpct="0"]');
+  await page.fill('[data-avin="r1|_"]', '1'); await page.locator('[data-avin="r1|_"]').blur();
+  await expect.poll(() => page.evaluate(() => ((__dbGet('ava', 'pm_p1_2026-09-21') || {}).c || {})['2026-09-25'])).toEqual({ r1: { _: 1 } });
   noErrors(errors, 'celular');
 });
