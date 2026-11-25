@@ -1,30 +1,34 @@
 "use strict";
-/* LPS 911 · Módulo Avance: cálculo del avance físico (docs/ia/avance.md). Funciones puras, sin pantalla ni base de datos:
-   - una partida tiene etapas con peso (suman 100) y filas (ítem × ambiente × ubicación) con su metrado `q`;
-   - `ex` es lo ejecutado: {filaId:{etapaId:{fecha|'ini':cantidad}}} ('ini' = corte inicial, lo hecho antes del registro diario);
-   - avance de una fila = Σ etapas (mín(ejecutado ÷ metrado, 1) × peso ÷ 100); un grupo (ambiente, piso, partida) se pondera por metrado. */
-const AV_INI='ini';
-/** número escrito por una persona: «6.5», «6,5» o «1,473.5» (con coma y punto, la coma es de miles) */
-const avNum=v=>{if(typeof v==='number')return Number.isFinite(v)?v:0;let s=String(v??'').replace(/\s/g,'');s=s.includes(',')&&s.includes('.')?s.replace(/,/g,''):s.replace(',','.');const n=parseFloat(s);return Number.isFinite(n)?n:0};
+/* LPS 911 · Módulo Avance: cálculo del avance físico (docs/ia/avance.md). Funciones puras, sin pantalla ni base de datos.
+   Planilla única (25-11-2026, decidido con el dueño): una partida es una lista de filas {id, und, q (metrado), et?}.
+   - `et` = etapas de ESA fila [{id, n, w (peso)}]; sin etapas la fila se llena directo y su única «etapa» es '_'.
+   - `ex` es lo ejecutado, siempre en CANTIDAD: {filaId:{etapaId|'_':{fecha|'ini':cantidad}}} ('ini' = corte inicial).
+   - avance de una fila = Σ etapas (mín(ejecutado ÷ metrado, 1) × peso) ÷ Σ pesos; el % es solo otra forma de ver la cantidad.
+   - un grupo (ambiente, sector, piso, partida) se pondera por metrado si todas sus filas tienen la misma unidad; si las mezcla,
+     es el promedio simple de sus filas (no se suman unidades distintas). */
+const AV_INI='ini',AV_E0='_';
+/** número escrito por una persona: «6.5», «6,5», «50 %» o «1,473.5» (con coma y punto, la coma es de miles) */
+const avNum=v=>{if(typeof v==='number')return Number.isFinite(v)?v:0;let s=String(v??'').replace(/[\s%]/g,'');s=s.includes(',')&&s.includes('.')?s.replace(/,/g,''):s.replace(',','.');const n=parseFloat(s);return Number.isFinite(n)?n:0};
 /** ejecutado de una fila en una etapa; con `hasta` (fecha) solo lo registrado hasta ese día (el corte inicial siempre cuenta) */
 function avAcc(ex,rowId,etId,hasta){const o=ex&&ex[rowId]&&ex[rowId][etId];if(!o)return 0;let s=0;for(const d in o)if(!hasta||d===AV_INI||d<=hasta)s+=+o[d]||0;return s}
 const avCell=(ex,rowId,etId,d)=>{const o=ex&&ex[rowId]&&ex[rowId][etId];return o?+o[d]||0:0};
-/** avance ponderado de una fila (0 a 1) */
-function avRowPct(et,ex,row,hasta){const q=+row.q||0;if(q<=0)return 0;let s=0;for(const e of et)s+=Math.min(avAcc(ex,row.id,e.id,hasta)/q,1)*(+e.peso||0)/100;return Math.min(s,1)}
+/** etapas de una fila: las suyas o la única implícita */
+const avEtOf=row=>Array.isArray(row.et)&&row.et.length?row.et:[{id:AV_E0,n:'',w:1}];
+const avHasEt=row=>Array.isArray(row.et)&&row.et.length>0;
+const avSumW=row=>avEtOf(row).reduce((s,e)=>s+(+e.w>0?+e.w:0),0)||1;
+/** avance de una fila (0 a 1) */
+function avRowPct(ex,row,hasta){const q=+row.q||0;if(q<=0)return 0;let s=0;for(const e of avEtOf(row))s+=(+e.w>0?+e.w:0)*Math.min(avAcc(ex,row.id,e.id,hasta)/q,1);return Math.min(s/avSumW(row),1)}
+/** lo que aportó un día al avance de la fila (fracción del metrado; puede pasar de lo que falta si se supera el metrado) */
+function avRowDay(ex,row,d){const q=+row.q||0;if(q<=0)return 0;let s=0;for(const e of avEtOf(row))s+=(+e.w>0?+e.w:0)*avCell(ex,row.id,e.id,d);return s/avSumW(row)/q}
 const avSumQ=rows=>rows.reduce((s,r)=>s+(+r.q||0),0);
-/** avance ponderado por metrado de un grupo de filas (0 a 1) */
-function avGrpPct(et,ex,rows,hasta){const t=avSumQ(rows);return t?rows.reduce((s,r)=>s+(+r.q||0)*avRowPct(et,ex,r,hasta),0)/t:0}
-/** avance de UNA etapa en un grupo de filas (0 a 1), topado en el metrado de cada fila */
-function avEtPct(ex,rows,etId){const t=avSumQ(rows);return t?rows.reduce((s,r)=>s+Math.min(avAcc(ex,r.id,etId),+r.q||0),0)/t:0}
-/** llegado de un grupo (0 a 1), topado en el metrado de cada fila */
-function avLlPct(rows){const t=avSumQ(rows);return t?rows.reduce((s,r)=>s+Math.min(+r.ll||0,+r.q||0),0)/t:0}
-/** ¿los pesos de las etapas suman 100? (tolerancia por decimales) */
-const avPesosOk=et=>Array.isArray(et)&&et.length>0&&Math.abs(et.reduce((s,e)=>s+(+e.peso||0),0)-100)<0.01;
-/** global que mezcla partidas: Σ (avance × peso) ÷ Σ pesos de las partidas con metrado (no se suman unidades distintas) */
-function avGlobal(list){let w=0,s=0;for(const x of list){if(!(x.peso>0)||!x.has)continue;w+=x.peso;s+=x.pct*x.peso}return w?s/w:0}
-/** plantillas de fábrica (se duplican y se editan) */
-const AV_TPL=[{nom:'Mobiliario',und:'und',sum:true,ubi:[],et:[['Instalación',100]]},{nom:'Pintura',und:'m²',sum:false,ubi:['Muro','Cielo raso'],et:[['Empaste',40],['1.ª mano',30],['2.ª mano',30]]},
-  {nom:'Enchape',und:'m²',sum:false,ubi:['Muro','Piso'],et:[['Colocación',80],['Fragua',20]]},{nom:'Cubículos',und:'und',sum:true,ubi:[],et:[['Estructura',40],['Paneles',40],['Puertas y accesorios',20]]}];
+const avSame=rows=>!rows.length||rows.every(r=>r.und===rows[0].und);
+/** avance de un grupo de filas (0 a 1) */
+function avGrpPct(ex,rows,hasta){if(!rows.length)return 0;if(avSame(rows)){const t=avSumQ(rows);return t?rows.reduce((s,r)=>s+(+r.q||0)*avRowPct(ex,r,hasta),0)/t:0}return rows.reduce((s,r)=>s+avRowPct(ex,r,hasta),0)/rows.length}
+/** lo que aportó un día al avance del grupo (fracción) */
+function avGrpDay(ex,rows,d){if(!rows.length)return 0;if(avSame(rows)){const t=avSumQ(rows);return t?rows.reduce((s,r)=>s+(+r.q||0)*avRowDay(ex,r,d),0)/t:0}return rows.reduce((s,r)=>s+avRowDay(ex,r,d),0)/rows.length}
+/** cambia el peso de una etapa a `pct` (0–100) y reparte el resto entre las demás en la proporción que tenían → etapas nuevas con pesos que suman 100 */
+function avSetW(et,id,pct){const L=et.map(e=>({...e,w:+e.w>0?+e.w:0})),e=L.find(x=>x.id===id);if(!e||L.length<2||!(pct>0)||pct>=100)return L;const ot=L.filter(x=>x!==e),so=ot.reduce((s,x)=>s+x.w,0);
+  ot.forEach(x=>x.w=Math.round((so?x.w/so:1/ot.length)*(100-pct)*100)/100);e.w=Math.round(pct*100)/100;return L}
 /** lee un texto CSV o pegado de Excel (coma, punto y coma o tabulación; comillas dobles) → filas de celdas */
 function avCsv(txt){txt=String(txt||'').replace(/^﻿/,'');const first=txt.split(/\r?\n/)[0]||'';const sep=first.includes('\t')?'\t':(first.split(';').length>first.split(',').length?';':',');
   const out=[];let row=[],cur='',q=false;for(let i=0;i<txt.length;i++){const c=txt[i];
