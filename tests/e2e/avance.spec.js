@@ -558,3 +558,53 @@ test('Avance: material en obra por tipo de fila (llegó, instalado, saldo) y mar
   await page.click('[data-av="mat"]'); await expect(page.locator('#lqm tr[data-avmr]')).toHaveCount(2); await expect(page.locator('#lqm input')).toHaveCount(0);
   noErrors(e2);
 });
+
+test('Avance: el material se reparte por orden de instalación: qué puedo instalar, ambientes que se pueden terminar y cuadro por nivel', async ({ page }) => {
+  const errors = await abrir(page);
+  await expect(page.locator('tr.avrw')).toHaveCount(3); await expect(page.locator('#avmf')).toHaveCount(0);     // sin nada anotado no hay filtro
+  // Escritorio: 10 en Primer piso (2 instalados) + 6 en Segundo piso. Llegan 9: quedan 7 en obra → alcanza para 7 de los 8 del primer piso y nada del segundo
+  await page.click('[data-av="mat"]');
+  const esc = page.locator('#lqm tr[data-avmr]', { hasText: 'Escritorio' }), silla = page.locator('#lqm tr[data-avmr]', { hasText: 'Silla' });
+  await esc.locator('input').fill('9'); await silla.locator('input').fill('4'); await esc.locator('input').focus();
+  await expect(page.locator('#avmsum')).toContainText('Avance posible'); await expect(page.locator('#avmsum')).toContainText('65 %');   // (2 + 7 + 4) / 20
+  await expect(page.locator('#avmsum')).toContainText('11 und');                                                                      // parado: 7 + 4
+  await expect(page.locator('#avmsum')).toContainText('7 und');                                                                       // falta llegar: 16 − 9
+  const niv = page.locator('#avmniv tr[data-avmp]');
+  await expect(niv.nth(0)).toContainText('1. Primer piso'); await expect(niv.nth(1)).toContainText('2. Segundo piso');
+  await expect(niv.nth(0)).toContainText('93 %'); await expect(niv.nth(0)).toContainText('14 %');   // Primer piso: con material 13 de 14 (2 instalados + 7 + 4); instalado 2 de 14
+  await expect(niv.nth(1)).toContainText('0 %');
+  await page.click('#lqm [data-lqx]');
+  await expect(page.locator('tr.avrw', { hasText: 'Escritorio' }).nth(0).locator('.avdt.p')).toHaveCount(1);     // parcial
+  await expect(page.locator('tr.avrw', { hasText: 'Silla' }).locator('.avdt.g')).toHaveCount(1);                 // completo
+  await expect(page.locator('tr.avrw', { hasText: 'Escritorio' }).nth(1).locator('.avdt.b')).toHaveCount(1);     // sin material
+  await expect(page.locator('tr.avam', { hasText: 'Dpto 102' })).toContainText('✓ material');
+  await expect(page.locator('tr.avam', { hasText: 'Dpto 101' }).locator('.avmtg')).toHaveAttribute('title', /Escritorio \(1 und\)/);
+  await expect(page.locator('tr.avam', { hasText: 'Dpto 103' }).locator('.avmtg')).toHaveAttribute('title', /Escritorio \(6 und\)/);
+  // filtro: qué puedo instalar / qué está frenado
+  await page.selectOption('#avmf', 'con'); await expect(page.locator('tr.avrw')).toHaveCount(2);
+  await expect(page.locator('tr.avam', { hasText: 'Dpto 101' })).toContainText('falta material');   // la marca del ambiente cuenta todas sus filas, no solo las visibles
+  await page.selectOption('#avmf', 'sin'); await expect(page.locator('tr.avrw')).toHaveCount(1); await expect(page.locator('tr.avrw')).toContainText('Escritorio');
+  await page.selectOption('#avmf', '');
+  // se decide instalar primero el Segundo piso: ahora sus 6 quedan cubiertos y al primero le alcanza para 1
+  await page.click('[data-av="mat"]'); await niv.nth(1).locator('[data-avmo$="|-1"]').click();
+  await expect(niv.nth(0)).toContainText('1. Segundo piso'); await expect(niv.nth(0)).toContainText('100 %');
+  expect((await page.evaluate(() => __dbGet('avp', 'pm'))).matOrd).toEqual(['p2', 'p1']);
+  await page.click('#lqm [data-lqx]');
+  await expect(page.locator('tr.avam', { hasText: 'Dpto 103' })).toContainText('✓ material');
+  await expect(page.locator('tr.avam', { hasText: 'Dpto 101' }).locator('.avmtg')).toHaveAttribute('title', /Escritorio \(7 und\)/);
+  // al registrar avance, el reparto se recalcula solo
+  await escribir(page, 'c|r3|_|2026-09-29', 6);
+  await expect(page.locator('tr.avrw', { hasText: 'Escritorio' }).nth(1).locator('.avdt')).toHaveCount(0);       // terminada: sin punto
+  // cálculo puro y lista de lo que falta llegar
+  const r = await page.evaluate(() => { const D = avData(), p = avCur(), A = avMatAlloc(avMatRows(D), D.ex, p.mat, p.matOrd), s = avMatSum(A, D.ex);
+    return { st: ['r1', 'r2', 'r3'].map(id => [A.R.get(id).st, A.R.get(id).give]), s: [Math.round(s.pos * 100), s.par, s.fal], fal: avMatFalAoa(p, avMatTypes(avMatRows(D), D.ex, p.mat)).slice(2) }; });
+  expect(r.st).toEqual([['par', 1], ['ok', 4], ['done', 0]]);
+  // etapas de peso no exacto (1/3): con todo el lote en obra, ninguna fila queda «parcial» por redondeo
+  expect(await page.evaluate(() => { const et = [{ id: '_', n: 'a', w: 1 }, { id: 'b', n: 'b', w: 1 }, { id: 'c', n: 'c', w: 1 }], rows = [1, 2, 3].map(i => ({ id: 'x' + i, piso: 'p1', amb: 'a1', sec: '', desc: 'Puerta P-3', und: 'und', q: 1, et, o: i })), ex = {}; rows.forEach(r => { ex[r.id] = { _: { '2026-10-01': 1 } }; });
+    const A = avMatAlloc(rows, ex, { [avMatKey('Puerta P-3', 'und')]: { q: 3 } }, null), G = avMatGrp(A, rows); return [rows.map(r => A.R.get(r.id).st), G.full, G.pa, G.sn]; })).toEqual([['ok', 'ok', 'ok'], true, 0, 0]); expect(r.s).toEqual([65, 5, 7]);
+  expect(r.fal).toEqual([['EO-1 · Escritorio', 'und', 16, 9, 8, 1, 7]]);
+  // Resumen: los mismos números por partida
+  await page.click('#tabs [data-tab="ares"]');
+  const card = page.locator('.avrcard', { hasText: 'Material en obra' }); await expect(card).toContainText('Mobiliario'); await expect(card).toContainText('65 %'); await expect(card).toContainText('7 und');
+  noErrors(errors);
+});
