@@ -34,7 +34,7 @@ function avStop(){if(avUnP)try{avUnP()}catch(e){}avUnP=null;avUnD.forEach(f=>{tr
   AVU.u=[];AVU.r=[];AVU.g=null;AV.key='';AV.q='';if(typeof ARS!=='undefined'){ARS.ok=false;ARS.by=new Map();ARS.err='';ARS.t=0}}
 /** filas y avance de UNA partida (la elegida): se reabre al cambiar de partida */
 function avSubData(pid){if(avSubP===pid)return;avUnD.forEach(f=>{try{f()}catch(e){}});avUnD=[];AVM.clear();AVD.clear();AV.v++;AV.dok=0;avSubP=pid;if(!pid||!db)return;
-  const mk=(col,M,bit)=>{const open=()=>{if(avSubP!==pid)return;const un=fcol(col).where('p','==',pid).onSnapshot(sn=>{if(avSubP!==pid)return;snapOk(col+'_p');M.clear();sn.docs.forEach(d=>M.set(d.id,{...d.data(),id:d.id}));AV.v++;AV.dok|=bit;if(U.mod==='ava')snapRender(sn)},
+  const mk=(col,M,bit)=>{const open=()=>{if(avSubP!==pid||!canAva())return;/* sin el módulo (Equipo › Módulos) no se reintenta: las reglas lo niegan */const un=fcol(col).where('p','==',pid).onSnapshot(sn=>{if(avSubP!==pid)return;snapOk(col+'_p');M.clear();sn.docs.forEach(d=>M.set(d.id,{...d.data(),id:d.id}));AV.v++;AV.dok|=bit;if(U.mod==='ava')snapRender(sn)},
     err=>{snapFail(col+'_p',err,open)});avUnD.push(un)};open()};
   mk('avm',AVM,1);mk('ava',AVD,2)}
 const avReady=p=>!!p&&avSubP===p.id&&AV.dok===3;

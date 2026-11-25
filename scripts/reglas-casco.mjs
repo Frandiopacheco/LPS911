@@ -3,7 +3,8 @@
 // Este script copia las reglas de Last Planner (todo lo que está antes del marcador CASCO) y en la copia:
 //  - renombra cada función con el sufijo _cs (para que no choque con la original),
 //  - cambia las rutas /colección/ por /cs_colección/ (también las de get()/exists()),
-//  - deja fuera las colecciones compartidas entre módulos (equipo, tareo, planos, avisos).
+//  - deja fuera las colecciones compartidas entre módulos (equipo, tareo, planos, avisos),
+//  - y a cada permiso de LECTURA le antepone modOn('cas'): solo leen Casco los roles que el administrador marcó en Equipo › Módulos.
 // Uso: node scripts/reglas-casco.mjs          → reescribe la sección generada
 //      node scripts/reglas-casco.mjs --check  → falla si la sección no está al día (lo usa scripts/check.mjs)
 import fs from 'node:fs';
@@ -40,6 +41,25 @@ function items(src) {
   return out;
 }
 
+/* Módulos por rol: toda LECTURA de Casco exige además modOn('cas') (la función de Last Planner, que mira meta/mods; no lleva _cs).
+   Se envuelve cada «allow …read…: if COND;» como «if modOn('cas') && (COND);». Las escrituras quedan igual (ver firestore.rules). */
+/* cs_pisos (nombres de los niveles) queda fuera: el módulo Planos los lee desde Last Planner para clasificar los planos por nivel,
+   también para quien no tiene Casco; si no, esos usuarios guardarían los planos con otro criterio. */
+const CASCO_LIBRE = ['cs_pisos'];
+const RE_LEE = /allow\s+([a-z, ]*\b(?:read|get|list)\b[a-z, ]*):\s*if\s+/g;
+function soloConCasco(t) {
+  if (CASCO_LIBRE.some(c => new RegExp('^match\\s+/' + c + '/').test(t))) return t;
+  let out = '', i = 0; const re = new RegExp(RE_LEE.source, 'g'); let m;
+  while ((m = re.exec(t))) {
+    const s = m.index + m[0].length; let j = s, d = 0;
+    for (; j < t.length; j++) { const c = t[j];
+      if (c === "'" || c === '"') { j++; while (j < t.length && t[j] !== c) { if (t[j] === '\\') j++; j++; } continue; }
+      if (c === '(' || c === '[') d++; else if (c === ')' || c === ']') d--; else if (c === ';' && d === 0) break; }
+    out += t.slice(i, s) + "modOn('cas') && (" + t.slice(s, j) + ')'; i = j; re.lastIndex = j;
+  }
+  return out + t.slice(i);
+}
+
 export function generate(full) {
   const open = full.indexOf('match /databases/{database}/documents {');
   if (open < 0) throw new Error('No se encontró match /databases/{database}/documents');
@@ -72,6 +92,7 @@ export function generate(full) {
     }
     if (it.kind === 'function' && /^function\s+dataCol\b/.test(t)) t = lits(t);
     t = paths(t).replace(fre, '$1_cs');
+    if (it.kind === 'match') t = soloConCasco(t);
     lines.push('    ' + t);
   }
   const gen = `${BEGIN}\n${lines.join('\n')}\n${END}\n`;
@@ -82,6 +103,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const cur = fs.readFileSync(FILE, 'utf8');
   const next = generate(cur);
   if (process.argv.includes('--check')) {
+    /* ningún permiso de lectura de Casco puede quedar sin modOn('cas') (salvo las colecciones libres) */
+    const sec = next.slice(next.indexOf(BEGIN), next.indexOf(END)); let libre = false, mal = 0;
+    for (const ln of sec.split('\n')) { const mm = /^\s*match\s+\/([^/\s]+)\//.exec(ln); if (mm) libre = CASCO_LIBRE.includes(mm[1]);
+      if (!libre && new RegExp(RE_LEE.source).test(ln) && !ln.includes("modOn('cas') && (")) mal++; }
+    if (mal) { console.error(`firebase/firestore.rules: ${mal} permiso(s) de lectura de Casco sin modOn('cas')`); process.exit(1); }
     if (next !== cur) { console.error('firebase/firestore.rules: la sección CASCO no está al día. Corre: node scripts/reglas-casco.mjs'); process.exit(1); }
     console.log('Reglas de Casco al día');
   } else { fs.writeFileSync(FILE, next); console.log('Reglas de Casco generadas'); }

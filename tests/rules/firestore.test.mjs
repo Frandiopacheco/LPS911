@@ -25,6 +25,8 @@ test.beforeEach(async () => {
     const S = (p, d) => setDoc(doc(db, p), d);
     await S('members/editor@obra.pe', { role: 'editor', name: 'Editor' });
     await S('meta/propwin', { closeAt: Date.now() + 864e5 }); // ventana de propuestas habilitada (sin ella el SC no propone)
+    // módulos por rol: en la obra de prueba Avance y Casco están encendidos para todos (las pruebas del apagado lo cambian)
+    await S('meta/mods', { ava: ['editor', 'campo', 'sc', 'area', 'veedor', 'lector'], cas: ['editor', 'campo', 'sc', 'area', 'veedor', 'lector'] });
     await S('members/campo@obra.pe', { role: 'campo', name: 'Jefe de campo' });
     await S('members/sc@obra.pe', { role: 'sc', name: 'SC Gabel', sc: 'c-gabel', scs: ['c-gabel'] });
     await S('members/lector@obra.pe', { role: 'lector', name: 'Lector' });
@@ -1833,6 +1835,57 @@ test('revisión de flujos: el SC solo la de su partida; ingenieros todas; no se 
   await assertFails(setDoc(doc(user('editor@obra.pe'), 'frev/59_a4_c-otro'), { ...R('c-otro'), f: 'mal' }));
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'frev/59_a1_c-gabel')));
   await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'frev/59_a1_c-gabel')));
+});
+
+/* Módulos por rol (meta/mods, Equipo › Módulos): las reglas exigen el módulo encendido para el rol, no solo la interfaz */
+test('módulos por rol: Avance apagado no se lee ni se escribe; el administrador siempre; se enciende por rol', async () => {
+  const seed = async mods => env.withSecurityRulesDisabled(async c => { const db = c.firestore();
+    if (mods === null) await deleteDoc(doc(db, 'meta/mods')); else await setDoc(doc(db, 'meta/mods'), mods);
+    await setDoc(doc(db, 'avp/p1'), { v: 2, nom: 'Mobiliario' }); await setDoc(doc(db, 'avm/p1_n1'), { p: 'p1', piso: 'n1', r: {} });
+    await setDoc(doc(db, 'ava/p1_n1_2099-01-05'), { p: 'p1', piso: 'n1', w: '2099-01-05', c: {}, log: [] }); });
+  const ed = user('editor@obra.pe'), ca = user('campo@obra.pe'), le = user('lector@obra.pe');
+  const cel = { p: 'p1', piso: 'n1', w: '2099-01-05', c: { '2099-01-05': { r1: { _: 1 } } }, log: [{ d: '2099-01-05', r: 'r1', e: '_', q: 1 }] };
+  // sin el documento (como una obra que aún no decide): apagado para todos menos el administrador
+  for (const mods of [null, {}, { ava: [] }, { cas: ['editor'] }]) {
+    await seed(mods);
+    await assertFails(getDoc(doc(ed, 'avp/p1'))); await assertFails(getDocs(collection(ed, 'avp'))); await assertFails(getDoc(doc(le, 'avm/p1_n1'))); await assertFails(getDoc(doc(ca, 'ava/p1_n1_2099-01-05')));
+    await assertFails(setDoc(doc(ed, 'avp/p2'), { v: 2, nom: 'Pintura' })); await assertFails(setDoc(doc(ed, 'avm/p1_n1'), { p: 'p1', piso: 'n1', r: { r1: { desc: 'x' } } }));
+    await assertFails(setDoc(doc(ca, 'ava/p1_n1_2099-01-05'), cel));
+    await assertSucceeds(getDoc(doc(user(OWNER), 'avp/p1'))); await assertSucceeds(setDoc(doc(user(OWNER), 'avp/p3'), { v: 2, nom: 'Enchape' }));
+  }
+  // encendido para editor y campo: cada uno hace lo de su rol; el lector sigue sin verlo
+  await seed({ ava: ['editor', 'campo'] });
+  await assertSucceeds(getDoc(doc(ed, 'avp/p1'))); await assertSucceeds(getDocs(collection(ed, 'avp'))); await assertSucceeds(setDoc(doc(ed, 'avp/p2'), { v: 2, nom: 'Pintura' }));
+  await assertSucceeds(getDoc(doc(ca, 'avm/p1_n1'))); await assertSucceeds(setDoc(doc(ca, 'ava/p1_n1_2099-01-05'), cel));
+  await assertFails(setDoc(doc(ca, 'avp/p4'), { v: 2, nom: 'x' }));          // campo sigue sin crear partidas
+  await assertFails(getDoc(doc(le, 'avp/p1'))); await assertFails(getDoc(doc(le, 'ava/p1_n1_2099-01-05')));
+  // un lote grande como el de «Importar» (1 partida + una hoja por piso) no choca con el límite de consultas por regla
+  await seed({ ava: ['editor'] });
+  { const b = writeBatch(ed); b.set(doc(ed, 'avp/p9'), { v: 2, nom: 'Lote' }); for (let i = 0; i < 15; i++) b.set(doc(ed, 'avm/p9_n' + i), { p: 'p9', piso: 'n' + i, r: { r1: { desc: 'x', q: 1 } } }, { merge: true }); await assertSucceeds(b.commit()); }
+  // el capataz y un rol sin casilla (área) no entran; planner (retirado) cuenta como lector
+  await assertFails(getDoc(doc(user('ot@obra.pe'), 'avp/p1')));
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'members/pl@obra.pe'), { role: 'planner', name: 'Planner' }); });
+  await assertFails(getDoc(doc(user('pl@obra.pe'), 'avp/p1'))); await seed({ ava: ['lector'] }); await assertSucceeds(getDoc(doc(user('pl@obra.pe'), 'avp/p1'))); await assertSucceeds(getDoc(doc(le, 'avp/p1')));
+  // Last Planner no depende de esto
+  await seed(null); await assertSucceeds(getDoc(doc(le, 'meta/project'))); await assertSucceeds(getDocs(collection(ed, 'pisos')));
+});
+test('módulos por rol: Casco apagado no se puede leer; encendido para un rol, ese rol sí', async () => {
+  const seed = async mods => env.withSecurityRulesDisabled(async c => { const db = c.firestore();
+    if (mods === null) await deleteDoc(doc(db, 'meta/mods')); else await setDoc(doc(db, 'meta/mods'), mods);
+    await setDoc(doc(db, 'cs_meta/project'), { name: 'Casco' }); await setDoc(doc(db, 'cs_acts/k1'), { name: 'Encofrado', sc: 'c-casa', ambId: 'n1-e1', days: [] }); });
+  const ed = user('editor@obra.pe'), le = user('lector@obra.pe');
+  for (const mods of [null, {}, { ava: ['editor'] }]) {
+    await seed(mods);
+    await assertFails(getDoc(doc(ed, 'cs_meta/project'))); await assertFails(getDocs(collection(ed, 'cs_acts'))); await assertFails(getDoc(doc(le, 'cs_acts/k1')));
+    await assertSucceeds(getDoc(doc(user(OWNER), 'cs_meta/project'))); await assertSucceeds(getDocs(collection(user(OWNER), 'cs_acts')));
+  }
+  await seed({ cas: ['editor'] });
+  await assertSucceeds(getDoc(doc(ed, 'cs_meta/project'))); await assertSucceeds(getDocs(collection(ed, 'cs_acts'))); await assertFails(getDoc(doc(le, 'cs_acts/k1')));
+  // los nombres de los niveles (cs_pisos) sí se leen sin Casco: el módulo Planos clasifica con ellos; nada más de Casco
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'cs_pisos/n1'), { name: 'Nivel 1', order: 1 }); });
+  await seed(null); await assertSucceeds(getDocs(collection(le, 'cs_pisos'))); await assertFails(getDocs(collection(le, 'cs_acts'))); await assertFails(getDoc(doc(le, 'cs_sectors/s1')));
+  // Last Planner no cambia con Casco apagado
+  await seed(null); await assertSucceeds(getDocs(collection(ed, 'acts'))); await assertSucceeds(getDoc(doc(le, 'meta/project')));
 });
 
 /* Módulo Casco (docs/ia/casco.md): las reglas de cs_ son la copia generada de las de Last Planner (scripts/reglas-casco.mjs) */

@@ -34,6 +34,14 @@ service cloud.firestore {
     // Tareo: editan el máster de personal y las partidas de control el administrador y el asistente de tareo (o campo con tasis)
     function tarEd() { return isMember() && notOff() && (role() in ['admin', 'tasis'] || campoTasis()); }
     function canEdit() { return isMember() && role() in ['admin', 'editor']; }
+    // Módulos por rol (meta/mods, Equipo › Módulos; docs/ia/interfaz.md): el administrador siempre; los demás, solo si su rol está en
+    // la lista del módulo ('ava' Avance, 'cas' Casco). Sin el documento o sin la lista, el módulo está apagado: un solo get, y si el
+    // documento no existe la expresión falla, que es «no». El rol planner (retirado) cuenta como lector, igual que en la app.
+    // Avance: se exige para leer y para escribir. Casco: se exige para LEER todo cs_ (lo agrega scripts/reglas-casco.mjs); sus
+    // escrituras no llevan esta lectura extra porque varias ya están al límite de consultas por regla.
+    function modOn(m) {
+      return isAdmin() || (role() == 'planner' ? 'lector' : role()) in get(/databases/$(database)/documents/meta/mods).data.get(m, []);
+    }
     function isAdmin() { return isMember() && role() == 'admin'; }
     // Versión para el cliente: el administrador y quienes él designe (members.cli), nunca subcontratistas ni capataces.
     // Versión cliente: solo el administrador (decidido con el dueño, oct 2026; antes también designados con members.cli)
@@ -689,19 +697,20 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     // Módulo Avance (docs/ia/avance.md): avance físico de partidas de acabados por ambiente. Lo lee todo LPS.
+    // Solo para los roles con el módulo encendido en Equipo › Módulos (modOn('ava')); el administrador siempre.
     // avp (partidas) y las filas de avm (descripción, unidad, metrado, etapas): administrador y editores. El avance diario (ava): también campo.
     // (avm.ll es del primer formato, que ya no se usa: la regla se conserva para no cambiar lo instalado.)
     // Nada se borra (se archiva); el historial por celda (ava.log) nunca se acorta.
     match /avp/{id} {
-      allow read: if lpsMember();
-      allow create, update: if canEdit() && request.resource.data.nom is string && request.resource.data.nom != '';
+      allow read: if lpsMember() && modOn('ava');
+      allow create, update: if canEdit() && modOn('ava') && request.resource.data.nom is string && request.resource.data.nom != '';
       allow delete: if false;
     }
     function avmOk(id, d) { return d.p is string && d.piso is string && d.p != '' && d.piso != '' && id == d.p + '_' + d.piso && d.get('r', {}) is map && d.get('ll', {}) is map; }
     match /avm/{id} {
-      allow read: if lpsMember();
-      allow create: if canEdit() && avmOk(id, request.resource.data);
-      allow update: if avmOk(id, request.resource.data)
+      allow read: if lpsMember() && modOn('ava');
+      allow create: if canEdit() && modOn('ava') && avmOk(id, request.resource.data);
+      allow update: if avmOk(id, request.resource.data) && modOn('ava')
         && (canEdit() || (canDaily() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ll', 'by', 't'])));
       allow delete: if false;
     }
@@ -710,9 +719,9 @@ service cloud.firestore {
         && d.c is map && d.log is list && d.keys().hasOnly(['p', 'piso', 'w', 'c', 'log', 'by', 't']);
     }
     match /ava/{id} {
-      allow read: if lpsMember();
-      allow create: if canDaily() && avaOk(id, request.resource.data);
-      allow update: if canDaily() && avaOk(id, request.resource.data) && request.resource.data.log.size() >= resource.data.log.size();
+      allow read: if lpsMember() && modOn('ava');
+      allow create: if canDaily() && modOn('ava') && avaOk(id, request.resource.data);
+      allow update: if canDaily() && modOn('ava') && avaOk(id, request.resource.data) && request.resource.data.log.size() >= resource.data.log.size();
       allow delete: if false;
     }
     // Matriz de ambientes (docs/ia/matriz.md): catálogo de actividades, tipos de ambiente y estado de cada ambiente.
@@ -902,6 +911,9 @@ service cloud.firestore {
     }
     function tarEd_cs() { return isMember_cs() && notOff_cs() && (role_cs() in ['admin', 'tasis'] || campoTasis_cs()); }
     function canEdit_cs() { return isMember_cs() && role_cs() in ['admin', 'editor']; }
+    function modOn_cs(m) {
+      return isAdmin_cs() || (role_cs() == 'planner' ? 'lector' : role_cs()) in get(/databases/$(database)/documents/cs_meta/mods).data.get(m, []);
+    }
     function isAdmin_cs() { return isMember_cs() && role_cs() == 'admin'; }
     function canCli_cs() { return isAdmin_cs(); }
     function canMP_cs() { return isMember_cs() && role_cs() in ['admin', 'planner']; }
@@ -966,7 +978,7 @@ service cloud.firestore {
       return !ch || (isDay_cs(id[0:10]) && request.time <= limaTs_cs(id[0:10], ccHH_cs(projData_cs())) + duration.value(10, 'm'));
     }
     match /cs_live/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       // tanda 1: nadie escribe los reportes en vivo de un día ya cerrado (Cierre del ingeniero, dayShut)
       allow create: if !dayShut_cs(id[0:10]) && (canDaily_cs() || (crew_cs() && request.resource.data.sc in scsOf_cs() && liveActOk_cs(id) && liveCloseOk_cs(id))
         || (isVeedor_cs() && liveActOk_cs(id) && request.resource.data.keys().hasOnly(['date', 'actId', 'pisoId', 'sc', 'seq', 'log', 'sat'])));
@@ -986,7 +998,7 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/cs_meta/propwin).data.get('closeAt', 0) > request.time.toMillis();
     }
     match /cs_lhprop/{sc} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       // el SC cambia sus borradores y envíos, pero no las «Respuestas del ingeniero» (hist): esas solo las escribe quien decide
       allow write: if canEdit_cs() || (isSC_cs() && sc in scsOf_cs() && request.resource.data.get('sc', sc) == sc && lhpHistOk_cs() && propOpen_cs());
     }
@@ -995,7 +1007,7 @@ service cloud.firestore {
         && timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10])) > request.time - duration.value(5, 'h');
     }
     match /cs_dplan/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       // Cerrado (con ids y sin reabrir), el editor no cambia lo comprometido ni el registro: solo el administrador (reabrir con motivo).
       // El editor publica de nuevo un día reabierto o que aún no tenía foto. «Deshacer publicación»: el editor solo en días futuros.
       // además, el editor solo en los pisos a su cargo (respOk)
@@ -1007,16 +1019,16 @@ service cloud.firestore {
       allow delete: if isAdmin_cs() || (edPiso_cs(resource.data) && dplanFuture_cs(resource.data.get('date', '')));
     }
     match /cs_lhlog/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if canEdit_cs() && request.resource.data.get('by', '') == mid_cs();
       allow update, delete: if false;
     }
     match /cs_frz/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow write: if false;
     }
     match /cs_lhphist/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if canEdit_cs();
       allow update: if canEdit_cs() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undone']);
     }
@@ -1034,7 +1046,7 @@ service cloud.firestore {
       allow delete: if isSC_cs() && scRestrOk_cs(resource.data);
     }
     match /cs_lib/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       // crítica, supervisión y «restringe a» las marca Calidad al programar (ya no hay matriz): el SC no las pone ni las cambia
       allow create: if canEdit_cs() || isCal_cs()
         || (isSC_cs() && request.resource.data.sc in scsOf_cs() && request.resource.data.st == 'sol' && request.resource.data.by == mid_cs()
@@ -1051,41 +1063,41 @@ service cloud.firestore {
       allow delete: if isAdmin_cs();
     }
     match /cs_cli/{id} {
-      allow read, write: if canCli_cs();
+      allow read, write: if modOn('cas') && (canCli_cs());
     }
     match /cs_clia/{id} {
-      allow read, write: if canCli_cs();
+      allow read, write: if modOn('cas') && (canCli_cs());
     }
     match /cs_clidx/{id} {
-      allow read, create: if canCli_cs();
+      allow read, create: if modOn('cas') && (canCli_cs());
     }
     match /cs_cliver/{id} {
-      allow read, create: if canCli_cs();
+      allow read, create: if modOn('cas') && (canCli_cs());
     }
     match /cs_libm/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow write: if isAdmin_cs() || isCal_cs();
     }
     match /cs_mp/{id} {
-      allow read, write: if canMP_cs();
+      allow read, write: if modOn('cas') && (canMP_cs());
     }
     match /cs_mpav/{id} {
-      allow read, write: if canMP_cs();
+      allow read, write: if modOn('cas') && (canMP_cs());
     }
     match /cs_mpl/{id} {
-      allow read, write: if canMP_cs();
+      allow read, write: if modOn('cas') && (canMP_cs());
     }
     match /cs_mpcfg/{id} {
-      allow read, write: if canMP_cs();
+      allow read, write: if modOn('cas') && (canMP_cs());
     }
     match /cs_mpver/{id} {
-      allow read: if canMP_cs();
+      allow read: if modOn('cas') && (canMP_cs());
       allow create: if isAdmin_cs() || (canMP_cs() && request.resource.data.get('st', '') == 'pend');
       allow update: if isAdmin_cs();
       allow delete: if false;
     }
     match /cs_daily/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       // tanda 1: id = <fecha>_<piso>; pasado el Cierre del ingeniero de esa fecha, nadie lo cambia (dayShut), tampoco el administrador
       allow create, update: if canDaily_cs() && !dayShut_cs(id[0:10]);
       // SEG-02: el registro diario (base del PPC) no lo borra campo ni el editor; solo el administrador (Equipo › Limpieza)
@@ -1093,20 +1105,20 @@ service cloud.firestore {
     }
     function scNpOk_cs(d) { return isSC_cs() && d.by == mid_cs() && d.sc in scsOf_cs() && d.get('scProp', false) == true && !('ver' in d); }
     match /cs_nprog/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if (canNP_cs() && request.resource.data.by == mid_cs()) || scNpOk_cs(request.resource.data);
       allow update: if canDaily_cs() || (canNP_cs() && resource.data.by == mid_cs() && request.resource.data.by == mid_cs())
         || (resource.data.by == mid_cs() && scNpOk_cs(request.resource.data));
       allow delete: if isAdmin_cs();
     }
     match /cs_hitos/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create, update: if (canEdit_cs() || isPlan_cs()) && request.resource.data.tipo in ['ini', 'fin']
         && request.resource.data.d is string && request.resource.data.n is string;
       allow delete: if isAdmin_cs();
     }
     match /cs_lkcom/{id} {
-      allow read: if lpsMember_cs() && (canEdit_cs() || isPlan_cs());
+      allow read: if modOn('cas') && (lpsMember_cs() && (canEdit_cs() || isPlan_cs()));
       allow create: if lpsMember_cs() && (canEdit_cs() || isPlan_cs()) && request.resource.data.k in ['act', 'amb', 'piso']
         && request.resource.data.ref is string && request.resource.data.piso is string
         && request.resource.data.txt is string && request.resource.data.txt.size() > 0 && request.resource.data.txt.size() <= 1000
@@ -1120,18 +1132,18 @@ service cloud.firestore {
       allow delete: if isAdmin_cs();
     }
     match /cs_frev/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create, update: if (canDaily_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs()))
         && request.resource.data.f is map && request.resource.data.n is number;
       allow delete: if isAdmin_cs();
     }
     match /cs_pull/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create, update: if canEdit_cs() && request.resource.data.ps is map && request.resource.data.piso is string;
       allow delete: if isAdmin_cs();
     }
     match /cs_pcrit/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create, update: if canDaily_cs() && request.resource.data.sc is string && request.resource.data.met is number;
       allow delete: if isAdmin_cs();
     }
@@ -1141,7 +1153,7 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/cs_pcrit/$(d.pc)).data.sc == d.sc;
     }
     match /cs_pav/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if pavDocOk_cs(request.resource.data) && (canDaily_cs() || pavScOk_cs(request.resource.data));
       allow update: if pavDocOk_cs(request.resource.data) && (canDaily_cs()
         || (pavScOk_cs(request.resource.data) && resource.data.sc in scsOf_cs() && resource.data.pc == request.resource.data.pc
@@ -1155,14 +1167,14 @@ service cloud.firestore {
         && (r == 'admin' || (r in ['editor', 'campo', 'capataz', 'sc', 'area', 'veedor'] && d.get('by', '') == mid_cs()));
     }
     match /cs_fotos/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       // una foto queda a nombre de quien la sube (by); ya guardada, nadie la reemplaza (evidencia): solo el administrador
       allow create: if fotoNewOk_cs();
       allow update: if isAdmin_cs() && request.resource.data.data.size() < 400000;
       allow delete: if canDaily_cs();
     }
     match /cs_pdz/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if edPiso_cs(request.resource.data)
         || (isSC_cs() && scPdzOld_cs(request.resource.data) && scPdzNew_cs(request.resource.data) && scPdzShape_cs(id, request.resource.data)
             && !request.resource.data.keys().hasAny(['dec', 'decBy', 'decN', 'decT']));
@@ -1172,14 +1184,14 @@ service cloud.firestore {
       allow delete: if edPiso_cs(resource.data) || (isSC_cs() && scPdzOld_cs(resource.data) && scDpropFrom_cs(resource.data));
     }
     match /cs_pzon/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if canEdit_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs());
       allow update: if canEdit_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs()
         && (!('sc' in resource.data) || resource.data.sc in scsOf_cs()));
       allow delete: if canEdit_cs();
     }
     match /cs_doneidx/{p} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create, update: if canDaily_cs();
       allow delete: if isAdmin_cs(); // SEG-02
     }
@@ -1274,7 +1286,7 @@ service cloud.firestore {
     function tOfiEd_cs() { return tarEd_cs() || tpubEd_cs(); }
     function pmetOk_cs(d) { return d.q is number && d.q >= 0 && d.pc is string && d.d is string && d.piso is string && d.piso != ''; }
     match /cs_pmet/{id} {
-      allow read: if isTar_cs() || canDaily_cs();
+      allow read: if modOn('cas') && (isTar_cs() || canDaily_cs());
       allow create, update: if canDaily_cs() && pmetOk_cs(request.resource.data);
       allow delete: if isAdmin_cs();
     }
@@ -1284,7 +1296,7 @@ service cloud.firestore {
         && d.c is map && d.log is list && d.keys().hasOnly(['p', 'piso', 'w', 'c', 'log', 'by', 't']);
     }
     match /cs_mcat/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if canEdit_cs() || (isSC_cs() && request.resource.data.get('by', '') == mid_cs()
         && request.resource.data.get('sc', '') in scsOf_cs() && request.resource.data.get('rev', null) is map
         && request.resource.data.rev.get('by', '') == mid_cs() && !request.resource.data.keys().hasAny(['arch', 'revOk', 'scs']));
@@ -1292,7 +1304,7 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /cs_mtipo/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create, update: if canEdit_cs();
       allow delete: if false;
     }
@@ -1319,7 +1331,7 @@ service cloud.firestore {
     }
     function campoCellOk_cs(d) { return canDaily_cs() && !canEdit_cs() && d.get('by', '') == mid_cs(); }
     match /cs_mamb/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if (canEdit_cs() && request.resource.data.get('by', '') == mid_cs())
         || (campoCellOk_cs(request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'by', 'n', 't']))
         || (scCellOk_cs(id, request.resource.data) && request.resource.data.keys().hasOnly(['c', 'm', 'k', 'l', 'by', 'n', 't'])
@@ -1333,7 +1345,7 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /cs_mlog/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if request.resource.data.get('by', '') == mid_cs() && request.resource.data.get('st', '') == 'pend'
         && (canEdit_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs()));
       allow update: if canEdit_cs() || (isSC_cs() && resource.data.get('by', '') == mid_cs()
@@ -1341,7 +1353,7 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /cs_mcatp/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if request.resource.data.get('by', '') == mid_cs() && request.resource.data.get('st', '') == 'pend'
         && (canEdit_cs() || (isSC_cs() && request.resource.data.get('sc', '') in scsOf_cs()));
       allow update: if canEdit_cs();
@@ -1355,7 +1367,7 @@ service cloud.firestore {
         && d.get('st', '') in ['ab', 'lev', 'anu'];
     }
     match /cs_mobs/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if mobShape_cs(request.resource.data) && request.resource.data.get('by', '') == mid_cs() && request.resource.data.st == 'ab'
         && (canDaily_cs() || (isSC_cs() && request.resource.data.sc in scsOf_cs()));
       allow update: if mobShape_cs(request.resource.data) && request.resource.data.get('by', '') == resource.data.get('by', '')
@@ -1370,13 +1382,13 @@ service cloud.firestore {
       allow delete: if isAdmin_cs();
     }
     match /cs_mobt/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create, update: if canEdit_cs() && request.resource.data.get('code', '') is string && request.resource.data.get('code', '').size() <= 12
         && request.resource.data.get('name', '') is string && request.resource.data.get('name', '') != '' && request.resource.data.get('name', '').size() <= 80;
       allow delete: if false;
     }
     match /cs_mver/{id} {
-      allow read: if lpsMember_cs();
+      allow read: if modOn('cas') && (lpsMember_cs());
       allow create: if canEdit_cs() && request.resource.data.get('by', '') == mid_cs();
       allow update, delete: if false;
     }
@@ -1397,7 +1409,7 @@ service cloud.firestore {
           .hasAny(['refWeek', 'refDate', 'propCutDow', 'propCutHH', 'frzCutDow', 'frzCutHH', 'planCutHH', 'closeCutHH', 'engCutHH', 'rstHasta', 'finObra', 'pushIni', 'pushFin', 'pushOff'])));
     }
     match /{col}/{id} {
-      allow read: if lpsMember_cs() && dataCol_cs(col);
+      allow read: if modOn('cas') && (lpsMember_cs() && dataCol_cs(col));
       allow create, update: if canEdit_cs() && dataCol_cs(col) && !(col in ['cs_pisos', 'cs_weeks', 'cs_meta'])
         // imágenes de sectorización anteriores: solo el administrador las archiva (decisión del dueño, oct 2026)
         && (col != 'cs_planos' || isAdmin_cs() || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['arch']));

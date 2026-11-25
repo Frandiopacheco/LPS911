@@ -66,7 +66,7 @@ Secretos de GitHub: `FIREBASE_SA_PRUEBAS` y `FIREBASE_SA_PRODUCCION` (instalan r
 
 En el código: `canWrite` (admin/editor), `canDaily` (+campo), `PM()` (subcontratista en modo propuesta), `ENG()` (ingeniero en Campo), `SCK()` (subcontratista), `AREA()` (área de apoyo), `isCal()`, `canNP()` (registra no programado: campo/editor/admin, Calidad y veedor) y `VEED()` (lo registra pero no verifica el avance).
 
-**Módulos por rol** (Equipo › Módulos, solo el administrador): qué roles ven Avance, Casco y Planos (`meta/mods`, `modRole()`; Avance y Casco nacen apagados; es visibilidad, no seguridad). Detalle en `docs/ia/interfaz.md` «Módulos por rol».
+**Módulos por rol** (Equipo › Módulos, solo el administrador): qué roles ven Avance, Casco y Planos (`meta/mods`, `modRole()` en la app y `modOn()` en las reglas; Avance y Casco nacen apagados y bloqueados también en reglas; en Planos es solo visibilidad). Detalle en `docs/ia/interfaz.md` «Módulos por rol».
 
 **Ver como** (solo copia de prueba, `LPS_ENV==='pruebas'`): el admin simula otro rol; se guarda en `sessionStorage` `lps.va` y lo aplica `vaApply()`. Solo cambia la interfaz: las escrituras van con el usuario real y las reglas reales. **📱 Vista celular** (`phonePreview`) abre la app en un `iframe` con medidas de teléfono; dentro del marco `html.in-frame` oculta esos controles.
 

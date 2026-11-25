@@ -85,7 +85,8 @@ const PLA_TABS=['pbib','pcar','p3d'];
    pasar módulos nuevos a la obra apagados): meta/mods de Last Planner = {ava:[roles], cas:[roles], pla:[roles]}.
    - El administrador siempre ve todo. Avance y Casco NACEN APAGADOS (sin dato = nadie más); Planos, sin dato, sigue como siempre.
    - Se suma a lo que ya limita cada módulo (p. ej. el capataz nunca ve Avance ni Casco); no lo reemplaza.
-   - Es visibilidad de la interfaz, no seguridad: las reglas siguen dejando leer esos datos a los miembros de la obra.
+   - Las reglas también lo exigen (modOn en firestore.rules): Avance, para leer y escribir; Casco, para leer todo cs_. Planos es solo
+     visibilidad del menú (sus láminas se usan dentro de Last Planner).
    - Se lee con modSub() también dentro de Casco (allí S.meta es cs_meta) y se guarda una copia en el equipo (lps.mods) para que
      al recargar no se rebote a Last Planner antes de que llegue el dato. */
 const MOD_ROLES=['editor','campo','sc','capataz','area','veedor','lector'],MOD_DEF={ava:[],cas:[],pla:null};
@@ -99,6 +100,8 @@ function modSub(){let un=null;const open=()=>{un=fcolLp('meta').doc('mods').onSn
       /* dentro de Casco nada más lo revisa: si a este rol se le quitó Casco, vuelve a Last Planner */
       if(CS()&&me&&!modOk('cas')){let ok=false;try{localStorage.removeItem('lps.ns');ok=localStorage.getItem('lps.ns')!=='cs'}catch(e){}
         if(ok)setTimeout(()=>location.reload(),1500);/* un momento, para que termine de guardarse lo que estuviera en curso; si no se pudo cambiar de espacio no se recarga (sería un bucle) */return}
+      /* si a este rol se le quitó Avance, se cierran sus escuchas (las reglas las cortarían y quedaría reintentando) */
+      if(me&&!canAva()&&typeof avStop==='function')avStop();
       modselApply();if(ready)requestRender()},()=>{un=null})};open();unsubs.push(()=>{if(un)un();un=null})}
 const canPla=()=>canLps();
 /* Oficina Técnica (área de apoyo «OT» u «Oficina Técnica») también carga: maneja las revisiones (decidido con el dueño, oct 2026) */
