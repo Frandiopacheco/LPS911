@@ -571,6 +571,7 @@ test('Avance: el material se reparte por orden de instalación: qué puedo insta
   await expect(page.locator('#avmsum')).toContainText('7 und');                                                                       // falta llegar: 16 − 9
   const niv = page.locator('#avmniv tr[data-avmp]');
   await expect(niv.nth(0)).toContainText('1. Primer piso'); await expect(niv.nth(1)).toContainText('2. Segundo piso');
+  await expect(niv.nth(0)).toContainText('93 %'); await expect(niv.nth(0)).toContainText('14 %');   // Primer piso: con material 13 de 14 (2 instalados + 7 + 4); instalado 2 de 14
   await expect(niv.nth(1)).toContainText('0 %');
   await page.click('#lqm [data-lqx]');
   await expect(page.locator('tr.avrw', { hasText: 'Escritorio' }).nth(0).locator('.avdt.p')).toHaveCount(1);     // parcial
