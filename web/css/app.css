@@ -5302,14 +5302,25 @@ table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height
 .avsp{flex:1}
 .avtot{font-size:13.5px;color:var(--ink2)}
 .avmu{color:var(--muted);font-size:12.5px}
-.avbox{overflow:auto;max-height:calc(100vh - 215px);min-height:200px;border:1px solid var(--line);border-radius:var(--r-card,10px);background:var(--panel)}
+.avbox{overflow:auto;max-height:calc(100vh - 190px);min-height:200px;border:1px solid var(--line);border-radius:var(--r-card,10px);background:var(--panel)}
 .avgr{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
-.avgr th,.avgr td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:4px 7px;white-space:nowrap;background:var(--panel);text-align:left;height:28px}
-.avgr th{background:var(--panel2);color:var(--ink2);font-weight:600;position:sticky;top:0;z-index:2}
-.avgr thead tr+tr th{top:29px}
+.avgr th,.avgr td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:2px 6px;white-space:nowrap;background:var(--panel);text-align:left;height:26px;line-height:18px}
+/* la cabecera entera es la que queda fija arriba (antes cada celda por separado, con la altura de la 1.ª línea a ojo: quedaba una rendija) */
+.avgr thead{position:sticky;top:0;z-index:4}
+.avgr th{background:var(--panel2);color:var(--ink2);font-weight:600}
 .avgr .num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
-.avgr .avs0{position:sticky;left:0;z-index:1;min-width:290px;max-width:290px;overflow:hidden;text-overflow:ellipsis}
+.avgr .avs0{position:sticky;left:0;z-index:1;min-width:260px;max-width:260px;overflow:hidden;text-overflow:ellipsis}
 .avgr th.avs0{z-index:3}
+.avgr th.avsk{position:sticky}
+.avgr .avskl{border-right:2px solid var(--line)}
+.avdw{display:flex;align-items:center;gap:3px;min-width:0}
+.avdw .avi{flex:none}.avdw .avnt,.avdw .avnm{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.avgr .avpw{flex:none;min-width:26px;text-align:right;font-family:var(--f-mono);padding:0 3px;border-radius:4px;cursor:text;box-shadow:inset 0 0 0 1px var(--line2)}
+.avgr .avpw:focus{outline:2px solid var(--accent);outline-offset:0;background:var(--panel)}
+.avdt{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:5px;vertical-align:middle;background:var(--muted)}.avdt.w{background:var(--today)}
+.avhlp{font-size:13px;color:var(--muted)}.avhlp summary{cursor:pointer;width:max-content}
+.ib.avon{background:var(--accent-soft);border-color:var(--accent);font-weight:600}
+.avemp{display:flex;flex-direction:column;align-items:center;gap:10px}.avemp .avact{justify-content:center}
 .avgr .avs0,.avgr .avsk{box-sizing:border-box}
 .avgr td.avsk{position:sticky;z-index:1;overflow:hidden}.avgr th.avsk{z-index:3;overflow:hidden}
 .avgr tr.avgho td.avs0{max-width:none}
@@ -5326,17 +5337,18 @@ table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height
 .avgr td.aved:hover{box-shadow:inset 0 0 0 1px var(--line)}
 .avgr td.aved:focus,.avgr td.avgh:focus{outline:2px solid var(--accent);outline-offset:-2px;background:var(--panel)}
 .avgr td.avtx{font-family:var(--f-ui);text-align:left}
-.avgr .avnm{display:inline-block;min-width:70px;max-width:calc(100% - 60px);overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;padding:0 3px;border-radius:4px;cursor:text}
+.avgr .avnm{padding:0 3px;border-radius:4px;cursor:text}
+.avgr td.avs0{padding-top:0;padding-bottom:0}.avgr .avdw{min-height:24px}
 .avgr .avnm:hover{box-shadow:inset 0 0 0 1px var(--line)}.avgr .avnm:focus{outline:2px solid var(--accent);outline-offset:0;background:var(--panel);text-overflow:clip}
 .avgr tr.avgho td{background:var(--panel)}
 .avgr td.avgh{cursor:text;box-shadow:inset 0 0 0 1px var(--line2)}
 .avgr td.avgh:empty::before{content:attr(data-ph);color:var(--muted);font-family:var(--f-ui)}
 .avadd{height:28px;font-size:13px;border:1px dashed var(--line);border-radius:var(--r-ctl,8px);background:var(--panel);color:var(--ink2);max-width:260px}
 .avi{display:inline-block}
-.avmb{float:right;border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:18px;height:20px;min-height:0!important;padding:0 5px;border-radius:6px}
+.avmb{flex:none;border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:16px;height:18px;min-height:0!important;padding:0 5px;border-radius:6px}
 .avmb:hover{background:var(--line2);color:var(--ink)}
 @media (pointer:coarse){.avgr .avmb{height:32px;min-width:36px;line-height:30px}.avadd{height:36px}}
-.avpb{display:inline-block;width:50px;height:8px;border-radius:4px;background:var(--line2);vertical-align:middle;margin-right:6px;overflow:hidden}
+.avpb{display:inline-block;width:36px;height:8px;border-radius:4px;background:var(--line2);vertical-align:middle;margin-right:6px;overflow:hidden}
 .avpb i{display:block;height:100%;background:var(--ok)}
 .avtg{display:inline-block;font-size:12px;border-radius:999px;padding:1px 8px;margin-right:4px;white-space:nowrap;background:var(--panel2);color:var(--ink2)}
 .avtg.o{background:var(--ok-soft);color:var(--ok)}.avtg.w{background:var(--warn-soft);color:var(--warn)}.avtg.b{background:var(--bad-soft);color:var(--bad)}
@@ -5364,9 +5376,9 @@ table.mx td.mc .mxob{position:absolute;top:-6px;right:-6px;min-width:15px;height
 /* ventanas: ficha de la partida, fila e importación */
 .avh{display:flex;justify-content:space-between;align-items:center;gap:10px}.avh>b{font-size:16px}
 .avf{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--ink2);min-width:0}
-.avf .tin{height:var(--h-ctl,34px);font-size:14px;color:var(--ink);width:100%}
+.avf .tin{height:var(--h-ctl,34px);font-size:14px;color:var(--ink);width:100%;box-sizing:border-box}
 .avf .avta{height:auto;padding:6px 8px;font-family:var(--f-mono);font-size:12.5px;resize:vertical}
-.avf2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}.avf3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.avf2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:end}.avf3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .avfs{border:1px solid var(--line2);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;margin:0}.avfs legend{font-size:12.5px;color:var(--ink2);padding:0 4px}
 .avfe{display:flex;gap:6px;align-items:center}.avfe .tin{flex:1;min-width:0}
 .avck,.lqc .avck{display:flex;flex-direction:row;gap:8px;align-items:center;font-size:13.5px}.avck input{flex:none;width:auto}
