@@ -259,6 +259,11 @@ test('Avance: fila de total, buscar, reordenar filas y rango seleccionado (copia
   const errors = await abrir(page);
   const total = page.locator('tr.avtt');
   await expect(total).toContainText('Total de la partida'); await expect(total).toContainText('20');     // 10 + 4 + 6 und
+  // nombres largos: completos al pasar el mouse y, con «Ajustar texto», en varias líneas (se recuerda)
+  await expect(page.locator('tr.avrw .avnm').first()).toHaveAttribute('title', 'EO-1 · Escritorio');
+  await page.click('[data-av="wrap"]'); await expect(page.locator('table.avgr.avwr')).toHaveCount(1);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lps911.ui')).avWrap)).toBe(true);
+  await page.click('[data-av="wrap"]'); await expect(page.locator('table.avgr.avwr')).toHaveCount(0);
   await page.fill('#avq', 'silla'); await expect(page.locator('tr.avrw')).toHaveCount(1);
   await expect(total).toContainText('Total de lo buscado'); await expect(page.locator('#avq')).toBeFocused();
   await page.fill('#avq', 'dpto 103'); await expect(page.locator('tr.avrw')).toContainText('EO-1');      // también busca por ambiente
