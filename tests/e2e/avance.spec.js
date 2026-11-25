@@ -581,6 +581,7 @@ test('Avance: el material se reparte por orden de instalación: qué puedo insta
   await expect(page.locator('tr.avam', { hasText: 'Dpto 103' }).locator('.avmtg')).toHaveAttribute('title', /Escritorio \(6 und\)/);
   // filtro: qué puedo instalar / qué está frenado
   await page.selectOption('#avmf', 'con'); await expect(page.locator('tr.avrw')).toHaveCount(2);
+  await expect(page.locator('tr.avam', { hasText: 'Dpto 101' })).toContainText('falta material');   // la marca del ambiente cuenta todas sus filas, no solo las visibles
   await page.selectOption('#avmf', 'sin'); await expect(page.locator('tr.avrw')).toHaveCount(1); await expect(page.locator('tr.avrw')).toContainText('Escritorio');
   await page.selectOption('#avmf', '');
   // se decide instalar primero el Segundo piso: ahora sus 6 quedan cubiertos y al primero le alcanza para 1
@@ -596,7 +597,10 @@ test('Avance: el material se reparte por orden de instalación: qué puedo insta
   // cálculo puro y lista de lo que falta llegar
   const r = await page.evaluate(() => { const D = avData(), p = avCur(), A = avMatAlloc(avMatRows(D), D.ex, p.mat, p.matOrd), s = avMatSum(A, D.ex);
     return { st: ['r1', 'r2', 'r3'].map(id => [A.R.get(id).st, A.R.get(id).give]), s: [Math.round(s.pos * 100), s.par, s.fal], fal: avMatFalAoa(p, avMatTypes(avMatRows(D), D.ex, p.mat)).slice(2) }; });
-  expect(r.st).toEqual([['par', 1], ['ok', 4], ['done', 0]]); expect(r.s).toEqual([65, 5, 7]);
+  expect(r.st).toEqual([['par', 1], ['ok', 4], ['done', 0]]);
+  // etapas de peso no exacto (1/3): con todo el lote en obra, ninguna fila queda «parcial» por redondeo
+  expect(await page.evaluate(() => { const et = [{ id: '_', n: 'a', w: 1 }, { id: 'b', n: 'b', w: 1 }, { id: 'c', n: 'c', w: 1 }], rows = [1, 2, 3].map(i => ({ id: 'x' + i, piso: 'p1', amb: 'a1', sec: '', desc: 'Puerta P-3', und: 'und', q: 1, et, o: i })), ex = {}; rows.forEach(r => { ex[r.id] = { _: { '2026-10-01': 1 } }; });
+    const A = avMatAlloc(rows, ex, { [avMatKey('Puerta P-3', 'und')]: { q: 3 } }, null), G = avMatGrp(A, rows); return [rows.map(r => A.R.get(r.id).st), G.full, G.pa, G.sn]; })).toEqual([['ok', 'ok', 'ok'], true, 0, 0]); expect(r.s).toEqual([65, 5, 7]);
   expect(r.fal).toEqual([['EO-1 · Escritorio', 'und', 16, 9, 8, 1, 7]]);
   // Resumen: los mismos números por partida
   await page.click('#tabs [data-tab="ares"]');
