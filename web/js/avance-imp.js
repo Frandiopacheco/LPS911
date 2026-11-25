@@ -30,8 +30,9 @@ function avImpPlan(){const p=AVP.get(AVI.pid),cur=avReady(p)?avData().rows:[];co
   let nu=0,ch=0,eqv=0;agg.forEach((o,k)=>{const h=have.get(k);o.old=h||null;if(!h)nu++;else if(Math.abs(h.q-o.q)>1e-9)ch++;else eqv++});
   return{agg,errs,skip,pend,nu,ch,eqv}}
 function avImpDraw(){const I=AVI,p=AVP.get(I.pid);if(!I||!p)return;let h=`<div class="avh"><b>Importar filas · ${esc(p.nom)}</b><button class="ib" data-lqx="1" aria-label="Cerrar">✕</button></div>`;
-  if(!I.rows){h+=`<p class="avnote">Columnas (primera fila con encabezados): <b>nivel, ambiente, descripcion</b> (o <b>codigo</b>, o las dos), <b>unidad</b> y <b>cantidad</b>. Sirve un archivo CSV o pegar las columnas copiadas de Excel.</p>
-    <label class="avf">Archivo CSV<input type="file" id="avifile" accept=".csv,.txt,text/csv"></label>
+  if(!I.rows){h+=`<p class="avnote"><b>Para editar la planilla en Excel:</b> descárgala con «Exportar», cámbiala y elige aquí ese mismo archivo: verás un resumen de los cambios antes de aplicarlos.</p>
+    <p class="avnote">Para cargar filas nuevas desde otra tabla, columnas (primera fila con encabezados): <b>nivel, ambiente, descripcion</b> (o <b>codigo</b>, o las dos), <b>unidad</b> y <b>cantidad</b>. Sirve un archivo CSV o pegar las columnas copiadas de Excel.</p>
+    <label class="avf">Archivo de Excel (.xlsx) o CSV<input type="file" id="avifile" accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
     <label class="avf">o pega aquí desde Excel<textarea class="tin avta" id="avitxt" rows="6" placeholder="nivel&#9;ambiente&#9;descripcion&#9;unidad&#9;cantidad"></textarea></label>
     ${I.err?`<p class="avtg b avblk">${esc(I.err)}</p>`:''}<div class="avact"><span class="avsp"></span><button type="button" class="ib" data-lqx="1">Cancelar</button><button type="button" class="ib pri" data-avi="read">Leer</button></div>`}
   else{avImpGuess();const P=avImpPlan(),ps=pisos();const nivs=[...new Set(I.rows.map(r=>r.niv))].filter(n=>mnk(n));
@@ -49,9 +50,13 @@ function avImpDraw(){const I=AVI,p=AVP.get(I.pid);if(!I||!p)return;let h=`<div c
     ${P.errs.length?`<details class="avierr"><summary>${P.errs.length} fila${P.errs.length===1?'':'s'} con error (no se importan)</summary>${P.errs.slice(0,40).map(x=>`<div>${esc(x)}</div>`).join('')}</details>`:''}
     <div class="avact"><button type="button" class="ib" data-avi="back">‹ Otro archivo</button><span class="avsp"></span><button type="button" class="ib" data-lqx="1">Cancelar</button><button type="button" class="ib pri" data-avi="go"${P.pend||I.busy||!(P.nu+P.ch)?' disabled':''}>Importar ${P.nu+P.ch} fila${P.nu+P.ch===1?'':'s'}</button></div>`}
   lqModal(h,e=>{const b=e.target.closest('[data-avi]');if(!b)return;const k=b.dataset.avi;if(k==='read')avImpRead();else if(k==='back'){AVI.rows=null;AVI.err='';avImpDraw()}else if(k==='all'){AVI.all=!AVI.all;avImpDraw()}else if(k==='go')avImpGo()},
-   e=>{const t=e.target;if(t.id==='avifile'&&t.files&&t.files[0]){const fr=new FileReader();fr.onload=()=>{const ta=$('#avitxt');if(ta)ta.value=String(fr.result||'');avImpRead()};fr.readAsText(t.files[0])}
+   e=>{const t=e.target;if(t.id==='avifile'&&t.files&&t.files[0]&&/\.xlsx?$/i.test(t.files[0].name)){avXlRead(t.files[0]);return}
+    if(t.id==='avifile'&&t.files&&t.files[0]){const fr=new FileReader();fr.onload=()=>{const ta=$('#avitxt');if(ta)ta.value=String(fr.result||'');avImpRead()};fr.readAsText(t.files[0])}
     else if(t.dataset.avn!=null){AVI.niv[t.dataset.avn]=t.value;avImpDraw()}else if(t.dataset.avia!=null){AVI.amb[t.dataset.avia]=t.value;avImpDraw()}})}
-function avImpRead(){const ta=$('#avitxt'),r=avImpParse(ta?ta.value:'');if(r.err){AVI.err=r.err;AVI.rows=null}else{AVI.rows=r.rows;AVI.err='';AVI.niv={};AVI.amb={}}avImpDraw()}
+function avImpRead(){const ta=$('#avitxt');
+  /* la planilla exportada, guardada como CSV o pegada entera: va por el resumen de cambios, no por el importador de filas */
+  if(ta&&ta.value.replace(/^\uFEFF/,'').trimStart().startsWith(AVX_MARK)){const a=avCsv(ta.value);if(a.length>2){avXlOpen(a,null);return}}
+  const r=avImpParse(ta?ta.value:'');if(r.err){AVI.err=r.err;AVI.rows=null}else{AVI.rows=r.rows;AVI.err='';AVI.niv={};AVI.amb={}}avImpDraw()}
 async function avImpGo(){const I=AVI,p=AVP.get(I.pid);if(!I||!p||I.busy||!avaCfg())return;if(!avReady(p)){toast('Espera a que cargue la planilla.');return}const P=avImpPlan();if(P.pend)return;I.busy=true;const w=avWho();
   const byPiso=new Map();let m=0;const t0=NOW();P.agg.forEach(o=>{if(o.old&&Math.abs(o.old.q-o.q)<=1e-9)return;const id=o.old?o.old.id:'r'+t0.toString(36)+(m++).toString(36),q=avR4(o.q);
     const pk=o.old?o.old.piso:o.piso/* la fila que ya existe se corrige en SU documento */,R=byPiso.get(pk)||{};R[id]=o.old?{q}:{amb:o.amb,sec:'',desc:o.desc.slice(0,160),und:o.und.slice(0,10),q,et:null,o:t0+m,an:(S.amb.get(o.amb)||{}).name||o.an};byPiso.set(pk,R)});
