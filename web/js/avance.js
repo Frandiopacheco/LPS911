@@ -85,7 +85,7 @@ function renderAReg(main){ensureAv();const p=avCur();avSubData(p?p.id:'');
       <select class="tin" id="avpiso" aria-label="Piso"><option value="">Todos los pisos</option>${pisoOptsZG(ps,U.piso)}</select>
       <span class="seg" role="group" aria-label="Cómo se ven y se tipean las celdas"><button type="button" data-avpct="0" class="${pct?'':'on'}">Cantidad</button><button type="button" data-avpct="1" class="${pct?'on':''}">%</button></span>
       <span class="avtot">${rows.length?`Avance: <b>${avPc(avGrpPct(D.ex,rows))}</b>`:''}</span><span class="avsp"></span>
-      ${cfg?`<button class="ib pri" data-av="new">＋ Partida</button><button class="ib" data-av="edit" title="Nombre y fechas de la partida">✎</button>${avReady(p)?'<button class="ib" data-av="imp">Importar…</button>':''}`:''}
+      ${cfg?`<button class="ib pri" data-av="new">＋ Partida</button><button class="ib" data-av="edit" title="Nombre y fechas de la partida">✎</button>${avReady(p)?'<button class="ib" data-av="amb" title="Crea la misma fila en muchos ambientes del Lookahead a la vez">Traer ambientes…</button><button class="ib" data-av="imp">Importar…</button>':''}`:''}
       <span class="seg" role="group" aria-label="Vista"><button type="button" data-avv="0" class="${AV.cel?'':'on'}">Planilla</button><button type="button" data-avv="1" class="${AV.cel?'on':''}">Celular</button></span></div>`;
     if(!avReady(p))h+=`<div class="empty">Cargando la planilla…</div>`;
     else h+=AV.cel?avCelHtml(p,D,rows):avGridHtml(p,D,rows)}
@@ -113,14 +113,14 @@ function avGridHtml(p,D,rows){const ex=D.ex,C=avWeeks(p),reg=avaReg(),cfg=avaCfg
   C.W.forEach(w=>{if(wo(w))w.days.forEach((d,i)=>h+=`<th class="num${dcls(d)}" title="${esc(nwReason(d)||'')}">${'LMXJVSD'[i]} ${d.slice(8)}</th>`);h+='<th class="num">total</th>'});h+='</tr></thead><tbody>';
   const edc=(k,txt,cls,ok,at='')=>ok?`<td class="num aved${cls}"${at} contenteditable="true" inputmode="decimal" data-k="${esc(k)}" data-o="${esc(txt)}">${esc(txt)}</td>`:`<td class="num${cls}"${at}>${esc(txt)}</td>`;const wtd=kW?`<td class="${kW.c}"${kW.a}></td>`:'';
   /* celdas de días: fn(d) → valor a mostrar (número) ; con `ek` son editables */
-  const days=(fn,ek)=>{let t='';const c=(d,x)=>{const v=fn(d),txt=ek?(pct?avE1(v):avE(v)):(v?avF(v):'');return ek?edc(ek+'|'+d,txt,x,can(d)):`<td class="num avro${x}">${txt}</td>`};
+  const days=(fn,ek,on=true)=>{let t='';const c=(d,x)=>{const v=fn(d),txt=ek?(pct?avE1(v):avE(v)):(v?avF(v):'');return ek?edc(ek+'|'+d,txt,x,on&&can(d)):`<td class="num avro${x}">${txt}</td>`};
     t+=c(AV_INI,'');C.W.forEach(w=>{if(wo(w))w.days.forEach(d=>t+=c(d,dcls(d)));const s=w.days.reduce((a,d)=>a+(fn(d)||0),0);t+=`<td class="num avwt">${s?avF(s):''}</td>`});return t};
   const grp=(cls,lab,rs,key,dep)=>{const sm=avSame(rs),v=avGrpPct(ex,rs),t=avSumQ(rs),o=!AV.C.has(key),n=rs.filter(r=>avOver(ex,r)||avFrac(ex,r)).length;
     return`<tr class="${cls}" data-avcol="${esc(key)}"><td class="avs0" title="${esc(lab)}">${ind(dep)}${o?'▾':'▸'} ${esc(lab)}</td><td class="${kU.c}"${kU.a}>${!rs.length?'':sm?esc(rs[0].und):'<span class="avmu">varias</span>'}</td><td class="num${kQ.c}"${kQ.a}>${sm&&rs.length?avF(t):''}</td>${wtd}<td class="num${kA.c}"${kA.a}>${sm&&rs.length?avF(v*t):''}</td><td class="avpc${kP.c}"${kP.a}>${rs.length?avBar(v):''}</td><td>${n?`<span class="avtg w">⚠ ${n}</span>`:''}</td>${days(d=>!rs.length?0:pct?avGrpDay(ex,rs,d)*100:sm?avGrpDay(ex,rs,d)*t:0)}</tr>`};
-  const row=(r,dep)=>{const v=avRowPct(ex,r),he=avHasEt(r);let al='';if(avOver(ex,r))al+='<span class="avtg w">supera el metrado</span>';if(avFrac(ex,r))al+='<span class="avtg">fracción de unidad</span>';
+  const row=(r,dep)=>{const v=avRowPct(ex,r),he=avHasEt(r);let al=r.q>0?'':'<span class="avtg" title="Escribe su metrado para poder registrar el avance">por metrar</span>';if(avOver(ex,r))al+='<span class="avtg w">supera el metrado</span>';if(avFrac(ex,r))al+='<span class="avtg">fracción de unidad</span>';
     let t=`<tr class="avrw${he?' avmad':''}"><td class="avs0" title="${esc(r.desc)}">${ind(dep)}${esc(r.desc)}${cfg?`<button type="button" class="avmb" data-avm="${esc(r.id)}" title="Etapas y opciones de la fila" aria-label="Opciones de la fila">⋯</button>`:''}</td>${cfg?`<td class="aved avtx${kU.c}"${kU.a} contenteditable="true" data-k="u|${esc(r.id)}" data-o="${esc(r.und)}">${esc(r.und)}</td>`:`<td class="${kU.c}"${kU.a}>${esc(r.und)}</td>`}${edc('q|'+r.id,avE(r.q),kQ.c,cfg,kQ.a)}${wtd}<td class="num${kA.c}"${kA.a}>${avF(v*r.q)}</td><td class="avpc${kP.c}"${kP.a}>${avBar(v)}</td><td class="aval">${al}</td>`;
-    t+=he?days(d=>avRowDay(ex,r,d)*(pct?100:r.q)):days(d=>avCell(ex,r.id,AV_E0,d)*(pct?(r.q?100/r.q:0):1),'c|'+r.id+'|'+AV_E0);t+='</tr>';
-    if(he){const sw=avSumW(r);r.et.forEach(e=>{const a=avAcc(ex,r.id,e.id);t+=`<tr class="avet"><td class="avs0">${ind(dep+1)}↳ ${esc(e.n)}</td><td class="${kU.c}"${kU.a}></td><td class="${kQ.c}"${kQ.a}></td>${edc('w|'+r.id+'|'+e.id,avE((+e.w||0)/sw*100),kW.c,cfg,kW.a)}<td class="num${kA.c}"${kA.a}>${avF(a)}</td><td class="avpc${kP.c}"${kP.a}>${avBar(r.q?Math.min(a/r.q,1):0)}</td><td>${a>r.q+1e-9?'<span class="avtg w">supera</span>':''}</td>${days(d=>avCell(ex,r.id,e.id,d)*(pct?(r.q?100/r.q:0):1),'c|'+r.id+'|'+e.id)}</tr>`})}return t};
+    t+=he?days(d=>avRowDay(ex,r,d)*(pct?100:r.q)):days(d=>avCell(ex,r.id,AV_E0,d)*(pct?(r.q?100/r.q:0):1),'c|'+r.id+'|'+AV_E0,r.q>0);t+='</tr>';
+    if(he){const sw=avSumW(r);r.et.forEach(e=>{const a=avAcc(ex,r.id,e.id);t+=`<tr class="avet"><td class="avs0">${ind(dep+1)}↳ ${esc(e.n)}</td><td class="${kU.c}"${kU.a}></td><td class="${kQ.c}"${kQ.a}></td>${edc('w|'+r.id+'|'+e.id,avE((+e.w||0)/sw*100),kW.c,cfg,kW.a)}<td class="num${kA.c}"${kA.a}>${avF(a)}</td><td class="avpc${kP.c}"${kP.a}>${avBar(r.q?Math.min(a/r.q,1):0)}</td><td>${a>r.q+1e-9?'<span class="avtg w">supera</span>':''}</td>${days(d=>avCell(ex,r.id,e.id,d)*(pct?(r.q?100/r.q:0):1),'c|'+r.id+'|'+e.id,r.q>0)}</tr>`})}return t};
   const gho=(g,dep,und)=>cfg?`<tr class="avgho" data-g="${esc(g)}"><td class="avs0 avgh gd" contenteditable="true" data-ph="＋ nueva fila: escribe la descripción" style="padding-left:${7+dep*14}px"></td><td class="avgh gu${kU.c}"${kU.a} contenteditable="true">${esc(und)}</td><td class="num avgh gq${kQ.c}"${kQ.a} contenteditable="true" inputmode="decimal" data-ph="metrado"></td><td colspan="${ncol-3}" class="avmu">Enter para agregarla y seguir con otra</td></tr>`:'';
   const last=rs=>rs.length?rs[rs.length-1].und:'und';
   vp.forEach(pi=>{const T=avTree(pi.id,rows,AV.xa);h+=grp('avpi',pi.name,T.rows,pi.id,0);if(AV.C.has(pi.id))return;
@@ -131,7 +131,7 @@ function avGridHtml(p,D,rows){const ex=D.ex,C=avWeeks(p),reg=avaReg(),cfg=avaCfg
       h+=`<tr class="avgho"><td class="avs0" style="padding-left:21px"><select class="avadd" data-avadd="${esc(pi.id)}" aria-label="Agregar un ambiente a ${esc(pi.name)}"><option value="">＋ agregar ambiente a ${esc(pi.name)}…</option>${ss.map(s=>{const L=[...S.amb.values()].filter(a=>a.sectorId===s.id&&!used.has(a.id)).sort(byOrder);return`<optgroup label="${esc(s.name||s.code||'Sector')}">${L.map(a=>`<option value="A:${esc(a.id)}">${esc(a.name||a.code||a.id)}</option>`).join('')}<option value="S:${esc(s.id)}">(todo el sector: fila sin ambiente)</option></optgroup>`}).join('')}<option value="P:">(todo el piso: fila sin ambiente)</option></select></td><td colspan="${ncol-1}"></td></tr>`}});
   return h+`</tbody></table></div><p class="avnote">${reg?`Escribe en cada día ${pct?'el porcentaje':'la cantidad'} ejecutado. Enter baja a la fila siguiente; clic derecho (o mantener el dedo) en una celda muestra su historial. `:''}${cfg?'Para agregar una fila, escribe en la línea «＋ nueva fila» de su ambiente. «⋯» en una fila: etapas y más opciones. ':''}Clic en una semana o en un grupo para plegarlo.</p>`}
 /** celular: piso → lugar → filas (o etapas) con lo ejecutado del día */
-function avCelGroups(pid,rows){const T=avTree(pid,rows,[]),G=[];if(T.direct.length)G.push({k:'P',nom:'Todo el piso',rows:T.direct});
+function avCelGroups(pid,rows){const T=avTree(pid,rows.filter(r=>r.q>0)/* sin metrado no se registra */,[]),G=[];if(T.direct.length)G.push({k:'P',nom:'Todo el piso',rows:T.direct});
   T.secs.forEach(s=>{if(s.direct.length)G.push({k:'S'+s.id,nom:s.nom+' (todo el sector)',rows:s.direct});s.ambs.forEach(a=>G.push({k:'A'+a.id,nom:a.nom,sub:T.showSec?s.nom:'',rows:a.rows}))});return G}
 function avCelHtml(p,D,rows){const ex=D.ex,reg=avaReg(),t=todayIso(),pct=!!U.avPct;if(AV.day!==addD(t,-1))AV.day=t;const d=AV.day;
   const all=[...pisos(),...ARCH.pis.values()].filter(x=>rows.some(r=>r.piso===x.id)),cp=all.find(x=>x.id===U.piso)||all[0];
@@ -213,7 +213,7 @@ function avClick(e){if(U.tab!=='areg')return;const g=a=>{const el=e.target.close
   else if((v=g('data-avd'))){AV.day=v}
   else if((v=g('data-avgrp'))!=null){AV.grp=v||null}
   else if((v=g('data-avst'))){const b=e.target.closest('[data-avst]'),k=b.dataset.r.split('|'),row=avRowOf(k[0]);if(!row)return;const c=avCell(avData().ex,row.id,k[1],AV.day),step=U.avPct?row.q/10:1;avSetCell(row,k[1],AV.day,Math.max(0,c+ +v*step)).then(()=>requestRender());return}
-  else if((v=g('data-av'))){if(v==='new')avPartDlg(null);else if(v==='edit')avPartDlg(avCur());else if(v==='imp')avImpOpen();else if(v==='todo')avTodo();return}
+  else if((v=g('data-av'))){if(v==='new')avPartDlg(null);else if(v==='edit')avPartDlg(avCur());else if(v==='imp')avImpOpen();else if(v==='amb')avAmbDlg();else if(v==='todo')avTodo();return}
   else return;requestRender()}
 /** celular: completa de un toque lo que falta en el lugar abierto */
 function avTodo(){const p=avCur(),D=avData();if(!p||!avaReg()||!avReady(p))return;const all=[...pisos(),...ARCH.pis.values()].filter(x=>D.rows.some(r=>r.piso===x.id)),cp=all.find(x=>x.id===U.piso)||all[0];if(!cp)return;
@@ -258,3 +258,30 @@ function avRowMenu(id){const p=avCur(),r=avRowOf(id);if(!p||!r||!avaCfg())return
     if(k==='del'){const has=avEtOf(row).some(s=>avAcc(ex,row.id,s.id)>0);
       if(!await uiAsk({title:'¿Quitar esta fila?',text:`${row.desc} (${avLoc(row)}).${has?' Tiene avance registrado: se conserva en la base, pero deja de contar.':''}`,ok:'Quitar fila',tone:has?'danger':'warn'}))return;
       avRowPatch(p,row,{arch:avWho()});lqClose();toast('Fila quitada');requestRender()}})}
+
+/* ---------- «Traer ambientes…»: la misma fila en muchos ambientes del Lookahead (25-11-2026, pedido del dueño) ----------
+   Para partidas que se repiten en casi todos los ambientes (pintura, enchape, zócalos): se escribe la descripción y la unidad una
+   vez, se desmarcan los ambientes que no aplican y se crea una fila en cada uno con el metrado en blanco («por metrar»: no cuenta
+   en el avance ni se puede registrar hasta ponerle metrado). No crea ambientes: usa los de la obra. */
+function avAmbDlg(st){const p=avCur();if(!p||!avaCfg())return;if(!avReady(p)){toast('Espera a que cargue la planilla.');return}
+  st=st||{desc:'',und:'m²',off:new Set()};const ps=pisos().filter(x=>!U.piso||x.id===U.piso);
+  const L=ps.map(pi=>({pi,secs:[...S.sec.values()].filter(s=>s.pisoId===pi.id).sort(byOrder).map(s=>({s,ambs:[...S.amb.values()].filter(a=>a.sectorId===s.id).sort(byOrder)})).filter(x=>x.ambs.length)})).filter(x=>x.secs.length);
+  if(!L.length){toast('No hay ambientes en '+(U.piso?'este piso':'la obra')+'. Se crean en el Lookahead.');return}
+  const all=L.flatMap(x=>x.secs.flatMap(y=>y.ambs)),cnt=()=>all.filter(a=>!st.off.has(a.id)).length,lab=n=>`Crear ${n} fila${n===1?'':'s'}`;
+  const rd=()=>{const d=$('#avad'),u=$('#avau');if(d)st.desc=d.value;if(u)st.und=u.value};
+  lqModal(`<div class="avh"><b>Traer ambientes · ${esc(p.nom)}</b><button class="ib" data-lqx="1" aria-label="Cerrar">✕</button></div>
+  <p class="avnote">Crea <b>la misma fila</b> en cada ambiente marcado, con el metrado en blanco para que lo llenes después en la planilla. ${U.piso?'Solo el piso elegido arriba.':'Todos los pisos (elige un piso arriba para traer solo ese).'}</p>
+  <div class="avf2"><label class="avf">Descripción de la fila<input class="tin" id="avad" maxlength="160" value="${esc(st.desc)}" placeholder="p. ej. Pintura látex en muros"></label>
+    <label class="avf">Unidad<input class="tin" id="avau" maxlength="10" list="avaul" value="${esc(st.und)}"><datalist id="avaul">${['m²','und','ml','m','m³','kg','pto','glb'].map(u=>`<option value="${u}">`).join('')}</datalist></label></div>
+  <div class="avibox">${L.map(x=>{const ids=x.secs.flatMap(y=>y.ambs),on=ids.filter(a=>!st.off.has(a.id)).length;return`<div class="avaph"><span>${esc(x.pi.name)} · ${on} de ${ids.length}</span><button type="button" class="lnkb" data-avap="${esc(x.pi.id)}">${on?'Desmarcar todos':'Marcar todos'}</button></div>${x.secs.map(y=>`${x.secs.length>1?`<div class="avasn">${esc(y.s.name||y.s.code||'Sector')}</div>`:''}<div class="avagr">${y.ambs.map(a=>`<label class="avck"><input type="checkbox" data-avac="${esc(a.id)}" id="avac_${esc(a.id)}"${st.off.has(a.id)?'':' checked'}> ${esc(a.name||a.code||a.id)}</label>`).join('')}</div>`).join('')}`}).join('')}</div>
+  <div class="avact"><span class="avsp"></span><button type="button" class="ib" data-lqx="1">Cancelar</button><button type="button" class="ib pri" id="avago" data-avak="go">${lab(cnt())}</button></div>`,
+  e=>{const b=e.target.closest('[data-avap],[data-avak]');if(!b)return;rd();
+    if(b.dataset.avap){const ids=L.find(x=>x.pi.id===b.dataset.avap).secs.flatMap(y=>y.ambs).map(a=>a.id),on=ids.some(i=>!st.off.has(i));ids.forEach(i=>on?st.off.add(i):st.off.delete(i));avAmbDlg(st);return}
+    const desc=st.desc.trim(),und=(st.und.trim()||'und').slice(0,10);if(!desc){toast('Escribe la descripción de la fila.');$('#avad').focus();return}
+    const have=new Set(avData().rows.filter(r=>r.amb).map(r=>r.amb+'|'+mnk(r.desc)+'|'+mnk(r.und))),w=avWho(),t0=NOW(),by=new Map();let n=0,dup=0;
+    all.forEach((a,i)=>{if(st.off.has(a.id))return;if(have.has(a.id+'|'+mnk(desc)+'|'+mnk(und))){dup++;return}const pi=pisoOfAmb(a.id),R=by.get(pi)||{};
+      R['r'+t0.toString(36)+i.toString(36)]={amb:a.id,sec:'',desc:desc.slice(0,160),und,q:0,et:null,o:t0+i,an:a.name||''};by.set(pi,R);n++});
+    if(!n){toast(dup?'Esos ambientes ya tienen esa fila.':'Marca al menos un ambiente.');return}
+    const bt=db.batch();by.forEach((R,pi)=>bt.set(avMRef(p,pi),{p:p.id,piso:pi,r:R,by:w.by,t:w.t},{merge:true}));bgWrite(bt.commit());lqClose();
+    toast(`${n} fila${n===1?'':'s'} creada${n===1?'':'s'}${dup?` · ${dup} ya existía${dup===1?'':'n'}`:''}. Ahora escribe su metrado: Enter baja a la siguiente.`);requestRender()},
+  e=>{const c=e.target;if(c.dataset&&c.dataset.avac){c.checked?st.off.delete(c.dataset.avac):st.off.add(c.dataset.avac);const g=$('#avago');if(g)g.textContent=lab(cnt())}})}

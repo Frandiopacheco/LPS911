@@ -166,6 +166,32 @@ test('Avance: partida nueva, filas desde la tabla y etapas agregadas en la fila'
   noErrors(errors, 'filas');
 });
 
+test('Avance: «Traer ambientes» crea la misma fila en los ambientes del Lookahead, por metrar y sin duplicar', async ({ page }) => {
+  const errors = await abrir(page);
+  await page.click('[data-av="amb"]');
+  await expect(page.locator('#avago')).toHaveText('Crear 3 filas');
+  await page.fill('#avad', 'Pintura de puertas'); await page.fill('#avau', 'und');
+  await page.uncheck('#avac_a2'); await expect(page.locator('#avago')).toHaveText('Crear 2 filas');
+  await page.click('#avago'); await expect(page.locator('#lqm')).toHaveCount(0);
+  const nuevas = () => page.evaluate(() => ['pm_p1', 'pm_p2'].flatMap(d => Object.entries(__dbGet('avm', d).r).filter(x => x[1].desc.toLowerCase() === 'pintura de puertas').map(x => ({ id: x[0], ...x[1] }))));
+  const N = await nuevas();
+  expect(N).toMatchObject([{ amb: 'a1', und: 'und', q: 0, et: null, an: 'Dpto 101' }, { amb: 'a3', und: 'und', q: 0, an: 'Dpto 103' }]);
+  // «por metrar»: no cuenta en el avance ni deja registrar hasta tener metrado
+  const f1 = page.locator('tr.avrw', { hasText: 'Pintura de puertas' }).first();
+  await expect(f1).toContainText('por metrar'); await expect(f1.locator('.aved[data-k^="c|"]')).toHaveCount(0);
+  await expect(page.locator('tr.avpi').first()).toContainText('14');           // metrado del piso: 10 + 4, sin la fila nueva
+  // se llena el metrado bajando con Enter por la columna
+  await celda(page, `q|${N[0].id}`).click(); await page.keyboard.type('6'); await page.keyboard.press('Enter');
+  await expect(celda(page, 'q|r2')).toBeFocused();
+  await expect.poll(async () => (await nuevas())[0].q).toBe(6);
+  await expect(f1.locator('.aved[data-k^="c|"]').first()).toBeVisible(); await expect(f1).not.toContainText('por metrar');
+  // repetirlo no duplica: solo crea la del ambiente que faltaba
+  await page.click('[data-av="amb"]'); await page.fill('#avad', 'pintura de PUERTAS'); await page.fill('#avau', 'und'); await page.click('#avago');
+  await expect.poll(async () => (await nuevas()).map(r => r.amb).sort()).toEqual(['a1', 'a2', 'a3']);
+  expect(await page.evaluate(() => Object.keys(__dbAll('ambientes')).length)).toBe(3);
+  noErrors(errors, 'traer ambientes');
+});
+
 test('Avance: importar filas con el cuadro de equivalencias, sin crear ambientes ni duplicar', async ({ page }) => {
   const errors = await abrir(page);
   const csv = ['partida,codigo,descripcion,unidad,plano,nivel,ambiente,cantidad', 'Mobiliario,EO-1,ESCRITORIO,und,AB-02,PRIMER PISO,DPTO 101,12', 'Mobiliario,M-1,MESA CUADRADA,und,AB-02,PRIMER PISO,Depto. 102,5',
