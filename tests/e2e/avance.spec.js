@@ -398,3 +398,85 @@ test('Avance en el celular: piso → ambiente → filas con lo ejecutado hoy, en
   expect(await page.evaluate(k => __dbGet('ava', k).c['2026-10-01'].r1._, SEM)).toBe(7);
   noErrors(errors, 'celular');
 });
+
+test('Avance: quitar una fila o todo un ambiente desde «Editar filas», con confirmación y Ctrl+Z', async ({ page }) => {
+  const errors = await abrir(page);
+  await expect(page.locator('.avdel')).toHaveCount(0);                         // sin «Editar filas» no hay ✕
+  await page.click('[data-av="edf"]');
+  const msgs = []; let ok = false; page.on('dialog', d => { msgs.push(d.message()); ok ? d.accept() : d.dismiss(); });
+  await page.locator('tr.avrw', { hasText: 'Silla' }).locator('.avdel').click();
+  await expect.poll(() => msgs.length).toBe(1); expect(msgs[0]).toContain('SO-3 · Silla');
+  expect((await page.evaluate(() => __dbGet('avm', 'pm_p1'))).r.r2.arch).toBeFalsy();    // cancelar no cambia nada
+  ok = true;
+  await page.locator('tr.avrw', { hasText: 'Silla' }).locator('.avdel').click();
+  await expect(page.locator('tr.avrw')).toHaveCount(2);
+  expect((await page.evaluate(() => __dbGet('avm', 'pm_p1'))).r.r2.arch).toBeTruthy();   // se archiva, no se borra
+  // todo un piso: avisa cuántas filas son y que una tiene avance
+  await page.locator('tr.avpi', { hasText: 'Primer piso' }).locator('.avdel').click();
+  await expect.poll(() => msgs.length).toBe(3); expect(msgs[2]).toMatch(/avance registrado/);
+  await expect(page.locator('tr.avrw')).toHaveCount(1);
+  expect((await page.evaluate(() => __dbGet('avm', 'pm_p1'))).r.r1.arch).toBeTruthy();
+  expect((await page.evaluate(() => __dbGet('ava', 'pm_p1_ini'))).c.ini.r1._).toBe(2);   // el avance sigue en la base
+  expect((await page.evaluate(() => __dbGet('ambientes', 'a1')))).toBeTruthy();                // el ambiente de la obra no se toca
+  await page.click('[data-av="undo"]'); await expect(page.locator('tr.avrw')).toHaveCount(2);
+  await page.click('[data-av="undo"]'); await expect(page.locator('tr.avrw')).toHaveCount(3);
+  expect((await page.evaluate(() => __dbGet('avm', 'pm_p1'))).r.r2.arch).toBeFalsy();
+  noErrors(errors);
+});
+
+test('Avance: ida y vuelta con Excel (exportar, editar e importar con resumen; conflictos, permisos y deshacer)', async ({ page }) => {
+  const errors = await abrir(page);
+  await escribir(page, 'c|r1|_|2026-09-29', 3);
+  const aoa = await page.evaluate(() => { const D = avData(); return avXlAoa(avCur(), D.rows, D.ex, NOW() - 5000); });
+  expect(aoa[0].slice(0, 2)).toEqual(['LPS911-AVANCE', 'pm']);
+  expect(aoa[1].slice(0, 9)).toEqual(['ID', 'Piso', 'Sector', 'Ambiente', 'Descripción', 'Etapa', 'Und', 'Metrado', '21/09/2026']);
+  const col = d => aoa[1].indexOf(d), fila = id => aoa.find(r => r[0] === id);
+  expect(fila('r1').slice(3, 8)).toEqual(['Dpto 101', 'EO-1 · Escritorio', '', 'und', 10]);
+  expect(fila('r1')[col('29/09/2026')]).toBe(3);
+  // sin tocar nada no hay cambios
+  expect(await page.evaluate(a => { const P = avXlPlan(a, false); return [P.rowsP.length, P.news.length, P.cells.length, P.errs.length, P.faltan]; }, aoa)).toEqual([0, 0, 0, 0, 0]);
+  // el usuario edita en Excel: nombre y metrado, un día (como texto con coma), uno que superaría el metrado, una fila nueva, una fila que borra y basura
+  fila('r1')[4] = 'EO-1 · Escritorio en L'; fila('r1')[7] = 12; fila('r1')[col('30/09/2026')] = '2,5';
+  fila('r2')[col('30/09/2026')] = 99; fila('r2')[col('29/09/2026')] = 'x';
+  aoa.splice(aoa.findIndex(r => r[0] === 'r3'), 1);
+  const n = aoa[1].length, nueva = Array(n).fill(''); Object.assign(nueva, { 1: 'Primer piso', 3: 'Dpto 102', 4: 'Mesa de centro', 6: 'und', 7: 2 }); nueva[col('01/10/2026')] = 1; aoa.push(nueva);
+  const mala = Array(n).fill(''); Object.assign(mala, { 1: 'P1', 3: 'Dpto 999', 4: 'Otra', 7: 1 }); aoa.push(mala);
+  // mientras tanto, otra persona cambió una celda en la app
+  await escribir(page, 'c|r1|_|2026-09-28', 1); await expect.poll(() => page.evaluate(() => (AVD.get('pm_p1_2026-09-28').log || []).length)).toBe(2); aoa.find(r => r[0] === 'r1')[col('28/09/2026')] = 4;
+  const plan = await page.evaluate(a => { const P = avXlPlan(a, false); return { rows: P.rowsP.map(x => x.patch), news: P.news.map(x => [x.row.piso, x.data.amb, x.data.desc, x.data.q]), cells: P.cells.map(c => [c.row.id.length > 3 ? 'N' : c.row.id, c.d, c.q]), conf: P.conf, adj: P.adj, faltan: P.faltan, errs: P.errs }; }, aoa);
+  expect(plan.rows).toEqual([{ desc: 'EO-1 · Escritorio en L', q: 12 }]);
+  expect(plan.news).toEqual([['p1', 'a2', 'Mesa de centro', 2]]);
+  expect(plan.cells).toEqual([['r1', '2026-09-30', 2.5], ['r2', '2026-09-30', 4], ['N', '2026-10-01', 1]]);   // 99 se ajusta al metrado (4)
+  expect([plan.conf, plan.adj, plan.faltan]).toEqual([1, 1, 1]);              // la celda cambiada después se conserva; la fila borrada del Excel se deja
+  expect(plan.errs.length).toBe(2); expect(plan.errs.join(' ')).toMatch(/«x».*no es un número/); expect(plan.errs.join(' ')).toMatch(/Dpto 999/);
+  // ventana de resumen y aplicar, pisando también el conflicto
+  await page.evaluate(a => avXlOpen(a), aoa);
+  await expect(page.locator('#lqm')).toContainText('1 filas nuevas'); await expect(page.locator('#lqm')).toContainText('cambió en la app después de tu descarga');
+  await page.check('#avxpis'); await expect(page.locator('#lqm [data-avx="go"]')).toContainText('Aplicar 6 cambios');
+  await page.click('#lqm [data-avx="go"]'); await expect(page.locator('#lqm')).toHaveCount(0);
+  await expect(page.locator('tr.avrw')).toHaveCount(4);
+  const m = await page.evaluate(() => __dbGet('avm', 'pm_p1')), a = await page.evaluate(s => __dbGet('ava', s), SEM);
+  expect([m.r.r1.desc, m.r.r1.q]).toEqual(['EO-1 · Escritorio en L', 12]);
+  const nid = Object.keys(m.r).find(k => m.r[k].desc === 'Mesa de centro'); expect(m.r[nid]).toMatchObject({ amb: 'a2', q: 2, und: 'und', an: 'Dpto 102' });
+  expect([a.c['2026-09-28'].r1._, a.c['2026-09-30'].r1._, a.c['2026-09-30'].r2._, a.c['2026-10-01'][nid]._]).toEqual([4, 2.5, 4, 1]);
+  expect(a.log.filter(l => l.d === '2026-09-30').length).toBe(2);              // cada celda deja su historial
+  expect((await page.evaluate(() => __dbGet('avm', 'pm_p2'))).r.r3.arch).toBeFalsy();
+  // una sola acción para deshacer
+  await page.click('[data-av="undo"]'); await expect(page.locator('tr.avrw')).toHaveCount(3);
+  const m2 = await page.evaluate(() => __dbGet('avm', 'pm_p1')), a2 = await page.evaluate(s => __dbGet('ava', s), SEM);
+  expect([m2.r.r1.desc, m2.r.r1.q, a2.c['2026-09-28'].r1._]).toEqual(['EO-1 · Escritorio', 10, 1]);
+  expect((a2.c['2026-09-30'] || {}).r1 ? a2.c['2026-09-30'].r1._ || 0 : 0).toBe(0);
+  // archivo de otra partida: no se aplica
+  await page.selectOption('#avp', 'pp');
+  expect(await page.evaluate(a => avXlPlan(a, true).otra, aoa)).toBe('Mobiliario');
+  noErrors(errors);
+});
+
+test('Avance: desde el Excel, el ingeniero de campo solo cambia los días (no filas ni metrados)', async ({ page }) => {
+  const errors = await abrir(page, { as: 'campo' }); await expect(page.locator('tr.avrw')).toHaveCount(3);
+  const r = await page.evaluate(() => { const D = avData(), a = avXlAoa(avCur(), D.rows, D.ex, NOW()), c = a[1].indexOf('30/09/2026'), f = a.find(x => x[0] === 'r1');
+    f[4] = 'Otro nombre'; f[7] = 50; f[c] = 2; const n = Array(a[1].length).fill(''); n[1] = 'Primer piso'; n[4] = 'Nueva'; n[7] = 1; a.push(n);
+    const P = avXlPlan(a, false); return [P.rowsP.length, P.news.length, P.cells.map(x => [x.row.id, x.d, x.q]), P.noperm]; });
+  expect(r).toEqual([0, 0, [['r1', '2026-09-30', 2]], 2]);
+  noErrors(errors);
+});

@@ -124,6 +124,20 @@ Lo que hacía la hoja RESUMEN del Excel del dueño. La ven todos los que ven el 
 - Volver a importar no duplica: la fila existente (mismo ambiente, descripción y unidad, comparados con `mnk`) conserva su id, su nombre y su avance, y solo cambia el metrado si es distinto; se corrige en **su** documento de piso.
 - Todo va en un lote (`db.batch`): `avp.eq` y un `avm` por piso.
 
+## Excel: exportar, editar e importar (`avance-xls.js`, 25-11-2026, pedido del dueño)
+
+«Exportar» (barra de la planilla) descarga la partida abierta; el usuario la edita libremente en Excel y la carga con «Importar…» (el mismo diálogo: acepta `.xlsx` y `.csv`). Si el archivo trae la marca, se abre el **resumen de cambios** (`avXlOpen` → `avXlDraw`) y nada se aplica hasta confirmar; un `.xlsx` sin marca pasa al importador de filas con equivalencias.
+- **Hoja** (`avXlAoa`, pura): fila 1 oculta = marca `['LPS911-AVANCE', partidaId, hora de la descarga, nombre]`; fila 2 = `ID | Piso | Sector | Ambiente | Descripción | Etapa | Und | Metrado | un día por columna (dd/mm/aaaa)`; una línea por fila y, con etapas, una por etapa (`ID` = `filaId` o `filaId#etapaId`). Los días van siempre en **cantidad**.
+- **Plan** (`avXlPlan(aoa, pisar)`, puro; se recalcula al dibujar y al aplicar): descripción, unidad y metrado distintos → parche de fila; celdas de día distintas → celdas; líneas sin ID → filas nuevas (piso y ambiente por nombre exacto o por una equivalencia ya guardada en `p.eq`; no crea ambientes; no duplica).
+- **Decidido con el dueño:** (1) las filas que faltan en el archivo **no se quitan** (se avisa cuántas); (2) las celdas que cambiaron en la app después de la descarga (entrada del `log` con `t` posterior a la marca) se cuentan aparte y solo se pisan con la casilla marcada; (3) las **etapas no se crean ni se renombran** desde el Excel (solo sus valores; si la fila cambió de etapas, esa línea se ignora).
+- Lo que superaría el metrado **se ajusta** (como al pegar); un metrado vacío o 0 en el archivo no borra el de la app; columnas fuera de las fechas de la partida se ignoran; textos que no son número se listan como error.
+- **Permisos:** filas nuevas, descripción, unidad y metrado solo admin/editores (`avaCfg`); el ingeniero de campo solo los días (`avaReg`); lo que el rol no puede se cuenta en el resumen.
+- **Aplicar** (`avXlGo`): un solo `avUGroup` con `avRowPatch` + `avPutCells` → una sola acción para Ctrl+Z y cada celda deja su historial.
+
+## Quitar filas, ambientes, sectores o pisos de la partida (25-11-2026, pedido del dueño)
+
+Con «Editar filas» encendido cada fila y cada cabecera de piso, sector y ambiente muestra una **✕** (`.avdel`, `data-avdel="r:<fila>"` o `g:<clave del grupo>`; `AV.gr` guarda las filas de cada grupo al dibujar). `avDelAsk` siempre pide confirmación (lista las filas; en rojo si alguna tiene avance), **archiva** las filas (`arch`) en un solo grupo de deshacer y no toca los ambientes de la obra. Con una búsqueda activa quita solo las filas que se ven.
+
 ## Pruebas
 
 - `tests/e2e/avance.spec.js` (9; incluye «fila de total, buscar, reordenar y rango» y «Resumen»): cálculo; registro con historial, confirmación al superar el metrado y fracción de unidad; interruptor Cantidad | %, pesos de etapas, unidades mezcladas y permisos de lectura; partida nueva, filas desde la tabla y etapas; importar con equivalencias; celular.
