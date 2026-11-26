@@ -165,6 +165,7 @@ Este archivo tiene lo esencial. El detalle de cada módulo está aparte para no 
 - Una corrección de Last Planner, Tareo o Planos sigue el flujo normal hacia `main` (PR con `auto-unir`) y el dueño la **prueba en la copia de prueba**.
 - Cuando el dueño la apruebe para la obra: rama nueva **desde `produccion`** (`git fetch origin produccion && git checkout -b fix-… origin/produccion`), `git cherry-pick` del commit que se unió a `main` (resolver conflictos sin traer nada de Casco), PR **a `produccion`** y unir con *merge* cuando pase «Revisar». Nunca se escribe directo en `produccion`.
 - Si la corrección toca reglas: en `produccion` no existe la sección CASCO ni `scripts/reglas-casco.mjs`; no los agregues allí.
+- **Avance ya está en producción** (26-11-2026, PR #580: rama hecha desde `produccion` con el módulo Avance y «Módulos por rol», sin nada de Casco; allí nace apagado). Sus correcciones siguen este mismo camino; detalle y diferencias con `main` en `docs/ia/pendientes.md` «Avance ya está en la obra».
 - Cuando el dueño apruebe Casco, se borra esta sección y vuelve el pase normal.
 
 ## Obra en curso y proyecto nuevo (decidido con el dueño, 11-11-2026)

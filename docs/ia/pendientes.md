@@ -29,7 +29,16 @@ Parte de la guía para IA (ver `CLAUDE.md`). Léela solo si tu tarea toca este t
 - **Observaciones de la Matriz (punch list, 19-11-2026; `matriz.md` «Observaciones»): YA EN PRODUCCIÓN (19-11-2026, aprobado por el dueño, PR #559 con #555–#558 por cherry-pick, sin Casco).** Pensadas para la obra en curso (decisión del dueño). Sin Casco: `matriz-obs.js` nuevo + enganches en `matriz.js`, `matriz-look.js`, `matriz-plano.js`, `lookahead.js` (insignia), `plano.js` (`ambMap` `o.pins`), `interfaz.js`, `base.js`, `auditoria.js`, CSS, reglas `mobs` (sin la sección CASCO en `produccion`) y `storage.rules`. Pasan cuando el dueño las apruebe en la copia de prueba.
 - **No van todavía:** «Traer ambientes del plano» (ya no depende de Casco desde el 17-11-2026: `plDxfLam` en `planos-dxf.js`; falta la aprobación del dueño), las láminas del plan diario desde Planos (#467) y todo Casco.
 
-## Pase completo `main → produccion` con Casco y Avance apagados (análisis del 25-11-2026; decide el dueño)
+## Avance ya está en la obra; Casco no pasa hasta terminarlo (decidido con el dueño, 25/26-11-2026)
+
+Tras ver el análisis de abajo, el dueño decidió **no** hacer el pase completo: «Casco todavía está en proceso de implementación, a diferencia de Avance; antes de que pase a producción me gustaría primero terminarlo por completo. Solo quisiera que pase Avance».
+- **Hecho (26-11-2026, PR #580 a `produccion`, unido con *merge*):** módulo Avance completo + «Módulos por rol» (Equipo › Módulos con Avance y Planos, `meta/mods`, `modOn` en reglas). Rama hecha desde `produccion`; los seis `web/js/avance*.js` son los de `main` tal cual y lo demás se adaptó a mano. Batería completa en local sobre esa rama (788 de interfaz, 105 de reglas) y revisión del diff: nada de Casco. Se instaló y publicó bien.
+- **En la obra Avance nace apagado:** solo los administradores lo ven y leen hasta que el dueño marque roles en Equipo › Módulos.
+- **Diferencias de `produccion` respecto de `main` en esto (a propósito):** `MOD_ROWS` sin Casco; `modSub` sin la salida de Casco; `pisoOptsZG` en versión simple (la obra aún no tiene «zonas generales»); reglas sin sección CASCO. Al hacer algún día el pase completo, todo se resuelve a favor de `main`.
+- **Correcciones futuras de Avance:** como siempre, a `main` primero y luego por *cherry-pick* a `produccion` con aprobación del dueño. Los `avance*.js` deberían entrar limpios; lo que toque `base.js`, `interfaz.js`, `config-equipo.js`, estilos o reglas hay que adaptarlo.
+- **Sigue vigente la regla 6 de `CLAUDE.md`** (Casco no va a producción). El análisis de abajo queda como referencia para cuando Casco esté terminado.
+
+## Pase completo `main → produccion` con Casco y Avance apagados (análisis del 25-11-2026; el dueño decidió no hacerlo por ahora)
 
 Con «Módulos por rol» (`interfaz.md`) Casco y Avance pueden ir a la obra apagados, en vez de pasar corrección por corrección. Se comparó el contenido de `origin/produccion` (b32e36a) con `origin/main` (d9b9ccb): 87 archivos, ~9 300 líneas; mucho de `main` ya está en producción por cherry-pick. **Hasta que el dueño lo apruebe sigue vigente la regla 6 de `CLAUDE.md`.**
 - **Conclusión:** razonablemente seguro. Sin `meta/mods`, Casco y Avance solo los ve el administrador; las tareas del servidor solo trabajan en Casco si existe `cs_meta/project` (en la obra no existe); no hay migraciones masivas ni campos nuevos obligatorios.
