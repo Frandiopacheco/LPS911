@@ -25,6 +25,8 @@ test.beforeEach(async () => {
     const S = (p, d) => setDoc(doc(db, p), d);
     await S('members/editor@obra.pe', { role: 'editor', name: 'Editor' });
     await S('meta/propwin', { closeAt: Date.now() + 864e5 }); // ventana de propuestas habilitada (sin ella el SC no propone)
+    // módulos por rol: en la obra de prueba Avance está encendido para todos (la prueba del apagado lo cambia)
+    await S('meta/mods', { ava: ['editor', 'campo', 'sc', 'area', 'veedor', 'lector'] });
     await S('members/campo@obra.pe', { role: 'campo', name: 'Jefe de campo' });
     await S('members/sc@obra.pe', { role: 'sc', name: 'SC Gabel', sc: 'c-gabel', scs: ['c-gabel'] });
     await S('members/lector@obra.pe', { role: 'lector', name: 'Lector' });
@@ -281,6 +283,10 @@ test('propuestas: pasado el corte el SC queda en solo lectura hasta que el ingen
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'lhprop/c-gabel'), { sc: 'c-gabel', items: {} })); // el ingeniero sí revisa
   await assertFails(setDoc(doc(sc, 'meta/propwin'), { closeAt: Date.now() + 864e5 })); // el SC no se habilita solo
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() + 864e5 }));
+  // meta/mods (qué roles ven cada módulo): solo el administrador; el editor no
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'meta/mods'), { ava: ['editor'] }));
+  await assertSucceeds(setDoc(doc(user(OWNER), 'meta/mods'), { ava: ['editor', 'campo'], cas: [] }));
+  await assertFails(setDoc(doc(user('editor@obra.pe'), 'meta/mods'), { ava: ['editor', 'sc'] }, { merge: true }));
   await assertSucceeds(setDoc(doc(sc, 'lhprop/c-gabel'), { sc: 'c-gabel', items: { x9: { sent: false } } }, { merge: true }));
   // bloquear a mano antes del corte: el ingeniero pone closeAt = ahora y el SC queda en solo lectura
   await assertSucceeds(setDoc(doc(user('editor@obra.pe'), 'meta/propwin'), { closeAt: Date.now() - 1000, man: true }));
@@ -1770,3 +1776,71 @@ test('revisión de flujos: el SC solo la de su partida; ingenieros todas; no se 
   await assertSucceeds(getDoc(doc(user('lector@obra.pe'), 'frev/59_a1_c-gabel')));
   await assertFails(deleteDoc(doc(user('editor@obra.pe'), 'frev/59_a1_c-gabel')));
 });
+
+/* Módulo Avance (docs/ia/avance.md) y módulos por rol (docs/ia/interfaz.md) */
+test('avance: partidas y metrado los escriben admin y editores; campo solo «Llegó» y el avance diario; nadie borra', async () => {
+  const P = { nom: 'Pintura', und: 'm²', et: [{ id: 'e1', nom: 'Empaste', peso: 100 }], items: {} };
+  const ed = user('editor@obra.pe'), ca = user('campo@obra.pe'), sc = user('sc@obra.pe'), le = user('lector@obra.pe');
+  await assertSucceeds(setDoc(doc(ed, 'avp/a1'), P));
+  await assertFails(setDoc(doc(ca, 'avp/a2'), P));
+  await assertFails(setDoc(doc(ed, 'avp/a3'), { v: 2, nom: '' }));
+  await assertSucceeds(setDoc(doc(ed, 'avp/a4'), { v: 2, nom: 'Enchape', d0: '2099-10-01', d1: '2099-12-01' }));
+  await assertFails(deleteDoc(doc(ed, 'avp/a1')));
+  await assertSucceeds(getDoc(doc(le, 'avp/a1')));
+  await assertSucceeds(getDocs(query(collection(sc, 'avm'), where('p', '==', 'a1'))));
+  // metrado
+  const M = { p: 'a1', piso: 'p1', r: { r1: { it: 'i1', amb: 'x', ub: '', q: 100 } } };
+  await assertFails(setDoc(doc(ca, 'avm/a1_p1'), M));
+  await assertFails(setDoc(doc(ed, 'avm/otro'), M));                       // el id debe calzar con partida y piso
+  await assertSucceeds(setDoc(doc(ed, 'avm/a1_p1'), M));
+  await assertSucceeds(setDoc(doc(ca, 'avm/a1_p1'), { p: 'a1', piso: 'p1', ll: { r1: 40 }, by: 'campo@obra.pe', t: 1 }, { merge: true }));
+  await assertFails(setDoc(doc(ca, 'avm/a1_p1'), { r: { r1: { q: 5 } } }, { merge: true }));   // campo no cambia el metrado
+  await assertFails(setDoc(doc(sc, 'avm/a1_p1'), { ll: { r1: 1 } }, { merge: true }));
+  await assertSucceeds(setDoc(doc(ed, 'avm/a1_p1'), { r: { r1: { q: 120 } } }, { merge: true }));
+  await assertFails(deleteDoc(doc(ed, 'avm/a1_p1')));
+  // avance diario: cada celda con su entrada de historial
+  const cell = (d, q, by) => ({ p: 'a1', piso: 'p1', w: '2099-10-05', c: { [d]: { r1: { e1: q } } }, log: arrayUnion({ d, r: 'r1', e: 'e1', q, a: 0, by, t: q }), by, t: 1 });
+  await assertSucceeds(setDoc(doc(ca, 'ava/a1_p1_2099-10-05'), cell('2099-10-05', 10, 'campo@obra.pe'), { merge: true }));
+  await assertSucceeds(setDoc(doc(ed, 'ava/a1_p1_2099-10-05'), cell('2099-10-06', 20, 'editor@obra.pe'), { merge: true }));
+  const got = (await getDoc(doc(ed, 'ava/a1_p1_2099-10-05'))).data();
+  assert.deepStrictEqual(got.c, { '2099-10-05': { r1: { e1: 10 } }, '2099-10-06': { r1: { e1: 20 } } });   // dos personas, celdas distintas: no se pisan
+  assert.strictEqual(got.log.length, 2);
+  await assertFails(updateDoc(doc(ca, 'ava/a1_p1_2099-10-05'), { log: [] }));          // el historial no se acorta
+  await assertFails(setDoc(doc(ca, 'ava/a1_p1_2099-10-12'), cell('2099-10-12', 1, 'x')));   // el id debe calzar con la semana
+  await assertFails(setDoc(doc(sc, 'ava/a1_p1_2099-10-05'), cell('2099-10-07', 5, 'sc@obra.pe'), { merge: true }));
+  await assertFails(setDoc(doc(le, 'ava/a1_p1_2099-10-05'), cell('2099-10-07', 5, 'lector@obra.pe'), { merge: true }));
+  await assertFails(deleteDoc(doc(ed, 'ava/a1_p1_2099-10-05')));
+});
+
+test('módulos por rol: Avance apagado no se lee ni se escribe; el administrador siempre; se enciende por rol', async () => {
+  const seed = async mods => env.withSecurityRulesDisabled(async c => { const db = c.firestore();
+    if (mods === null) await deleteDoc(doc(db, 'meta/mods')); else await setDoc(doc(db, 'meta/mods'), mods);
+    await setDoc(doc(db, 'avp/p1'), { v: 2, nom: 'Mobiliario' }); await setDoc(doc(db, 'avm/p1_n1'), { p: 'p1', piso: 'n1', r: {} });
+    await setDoc(doc(db, 'ava/p1_n1_2099-01-05'), { p: 'p1', piso: 'n1', w: '2099-01-05', c: {}, log: [] }); });
+  const ed = user('editor@obra.pe'), ca = user('campo@obra.pe'), le = user('lector@obra.pe');
+  const cel = { p: 'p1', piso: 'n1', w: '2099-01-05', c: { '2099-01-05': { r1: { _: 1 } } }, log: [{ d: '2099-01-05', r: 'r1', e: '_', q: 1 }] };
+  // sin el documento (como una obra que aún no decide): apagado para todos menos el administrador
+  for (const mods of [null, {}, { ava: [] }, { pla: ['editor'] }]) {
+    await seed(mods);
+    await assertFails(getDoc(doc(ed, 'avp/p1'))); await assertFails(getDocs(collection(ed, 'avp'))); await assertFails(getDoc(doc(le, 'avm/p1_n1'))); await assertFails(getDoc(doc(ca, 'ava/p1_n1_2099-01-05')));
+    await assertFails(setDoc(doc(ed, 'avp/p2'), { v: 2, nom: 'Pintura' })); await assertFails(setDoc(doc(ed, 'avm/p1_n1'), { p: 'p1', piso: 'n1', r: { r1: { desc: 'x' } } }));
+    await assertFails(setDoc(doc(ca, 'ava/p1_n1_2099-01-05'), cel));
+    await assertSucceeds(getDoc(doc(user(OWNER), 'avp/p1'))); await assertSucceeds(setDoc(doc(user(OWNER), 'avp/p3'), { v: 2, nom: 'Enchape' }));
+  }
+  // encendido para editor y campo: cada uno hace lo de su rol; el lector sigue sin verlo
+  await seed({ ava: ['editor', 'campo'] });
+  await assertSucceeds(getDoc(doc(ed, 'avp/p1'))); await assertSucceeds(getDocs(collection(ed, 'avp'))); await assertSucceeds(setDoc(doc(ed, 'avp/p2'), { v: 2, nom: 'Pintura' }));
+  await assertSucceeds(getDoc(doc(ca, 'avm/p1_n1'))); await assertSucceeds(setDoc(doc(ca, 'ava/p1_n1_2099-01-05'), cel));
+  await assertFails(setDoc(doc(ca, 'avp/p4'), { v: 2, nom: 'x' }));          // campo sigue sin crear partidas
+  await assertFails(getDoc(doc(le, 'avp/p1'))); await assertFails(getDoc(doc(le, 'ava/p1_n1_2099-01-05')));
+  // un lote grande como el de «Importar» (1 partida + una hoja por piso) no choca con el límite de consultas por regla
+  await seed({ ava: ['editor'] });
+  { const b = writeBatch(ed); b.set(doc(ed, 'avp/p9'), { v: 2, nom: 'Lote' }); for (let i = 0; i < 15; i++) b.set(doc(ed, 'avm/p9_n' + i), { p: 'p9', piso: 'n' + i, r: { r1: { desc: 'x', q: 1 } } }, { merge: true }); await assertSucceeds(b.commit()); }
+  // el capataz y un rol sin casilla (área) no entran; planner (retirado) cuenta como lector
+  await assertFails(getDoc(doc(user('ot@obra.pe'), 'avp/p1')));
+  await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'members/pl@obra.pe'), { role: 'planner', name: 'Planner' }); });
+  await assertFails(getDoc(doc(user('pl@obra.pe'), 'avp/p1'))); await seed({ ava: ['lector'] }); await assertSucceeds(getDoc(doc(user('pl@obra.pe'), 'avp/p1'))); await assertSucceeds(getDoc(doc(le, 'avp/p1')));
+  // Last Planner no depende de esto
+  await seed(null); await assertSucceeds(getDoc(doc(le, 'meta/project'))); await assertSucceeds(getDocs(collection(ed, 'pisos')));
+});
+

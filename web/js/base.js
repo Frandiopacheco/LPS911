@@ -40,7 +40,7 @@ const COLS={meta:'meta',pisos:'pis',contractors:'con',sectors:'sec',ambientes:'a
 const S={meta:new Map(),pis:new Map(),con:new Map(),sec:new Map(),amb:new Map(),act:new Map(),wk:new Map(),res:new Map(),tper:new Map(),tpc:new Map(),tcfg:new Map(),loaded:{}};
 const U=Object.assign({mod:'lps',tab:'look',week:null,win:6,qmode:'dias',piso:'',sector:'',sc:'',q:'',onlyWin:false,onlyRestr:false,onlyObs:false,changes:false,meeting:false,collapsed:[],rfilter:'pend',day:'',wkF:0,indMode:'dia',pdfPh:false,pdfSkip:true,acts:[],rgrp:''},store.get('ui',{}));if(!Array.isArray(U.acts))U.acts=[];U.indDate=null;
 U.q='';
-const saveUI=()=>store.set('ui',{mod:U.mod==='tar'||U.mod==='pla'?U.mod:'lps',pisoAll:!!U.pisoAll,lbMore:false,legOff:!!U.legOff,tab:U.tab,win:U.win,pvV:U.pvV||'sc',pcAll:!!U.pcAll,lkV:U.lkV==='flujo'?'flujo':'grid',flOpen:Array.isArray(U.flOpen)?U.flOpen:[],qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,grp:U.grp||'',pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAct:U.mxAct||'',mxActDone:!!U.mxActDone,mxFalta:!!U.mxFalta,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxPlOb:!!U.mxPlOb,mxPlEd:!!U.mxPlEd,mxPlObL:!!U.mxPlObL,mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc',cliv:!!U.cliv});
+const saveUI=()=>store.set('ui',{mod:U.mod==='tar'||U.mod==='pla'||U.mod==='ava'?U.mod:'lps',avP:U.avP||'',avPct:!!U.avPct,avWrap:!!U.avWrap,pisoAll:!!U.pisoAll,lbMore:false,legOff:!!U.legOff,tab:U.tab,win:U.win,pvV:U.pvV||'sc',pcAll:!!U.pcAll,lkV:U.lkV==='flujo'?'flujo':'grid',flOpen:Array.isArray(U.flOpen)?U.flOpen:[],qmode:U.qmode,piso:U.piso,sector:U.sector,sc:U.sc,grp:U.grp||'',pdHi:U.pdHi,onlyWin:U.onlyWin,showPast:!!U.showPast,showDone:!!U.showDone,lkGh:!!U.lkGh,onlyRestr:U.onlyRestr,onlyObs:U.onlyObs,changes:U.changes,meeting:U.meeting,collapsed:U.collapsed,rfilter:U.rfilter,indMode:U.indMode,pdfPh:U.pdfPh,pdfSkip:U.pdfSkip,acts:U.acts,rgrp:U.rgrp,libV:U.libV,teamOpen:U.teamOpen,teamV:U.teamV||'per',cfgV:U.cfgV||'sc',mxRecSug:!!U.mxRecSug,mxAct:U.mxAct||'',mxActDone:!!U.mxActDone,mxFalta:!!U.mxFalta,mxAll:!!U.mxAll,mxZ:U.mxZ,mxOrd:U.mxOrd,mxF:U.mxF||'',mxV:U.mxV||'mat',mxPlSc:U.mxPlSc||'',mxPlCat:U.mxPlCat||'',mxPlOb:!!U.mxPlOb,mxPlEd:!!U.mxPlEd,mxPlObL:!!U.mxPlObL,mxSc:Array.isArray(U.mxSc)?U.mxSc:[],planV:U.planV==='amb'?'amb':'sc',cliv:!!U.cliv});
 const pisos=()=>[...S.pis.values()].sort(byOrder);
 const firstPiso=()=>(pisos()[0]||{}).id||'';
 const pisoOfSecObj=s=>s&&s.pisoId&&(S.pis.has(s.pisoId)||ARCH.pis.has(s.pisoId))?s.pisoId:firstPiso();
@@ -68,17 +68,45 @@ const tarEdit=()=>!!me&&(me.role==='admin'||TASIS());
 /* Módulo Planos (docs/ia/planos.md): biblioteca de planos del proyecto. La ve el equipo de Last Planner (no el capataz de un SC,
    que solo usa «En obra»); cargan y editan los planos el administrador, los editores y Oficina Técnica */
 const PLA_TABS=['pbib','pcar','p3d'];
+/* Módulos por rol (Equipo › Módulos, solo el administrador; docs/ia/interfaz.md «Módulos por rol», 25-11-2026, pedido del dueño para
+   pasar módulos nuevos a la obra apagados): meta/mods = {ava:[roles], pla:[roles]}.
+   - El administrador siempre ve todo. Avance NACE APAGADO (sin dato = nadie más); Planos, sin dato, sigue como siempre.
+   - Se suma a lo que ya limita cada módulo (p. ej. el capataz nunca ve Avance); no lo reemplaza.
+   - Las reglas también lo exigen para Avance (modOn en firestore.rules: leer y escribir). Planos es solo visibilidad del menú
+     (sus láminas se usan dentro de Last Planner).
+   - Se lee con modSub() y se guarda una copia en el equipo (lps.mods) para que al recargar no se rebote a Last Planner antes de
+     que llegue el dato. */
+const MOD_ROLES=['editor','campo','sc','capataz','area','veedor','lector'],MOD_DEF={ava:[],cas:[],pla:null};
+let MODCFG=null;try{MODCFG=JSON.parse(localStorage.getItem('lps.mods')||'null')}catch(e){MODCFG=null}
+/** roles que ven el módulo; null = todos los que ya podían */
+const modList=m=>{const c=MODCFG&&MODCFG[m];return Array.isArray(c)?c:(m in MOD_DEF?MOD_DEF[m]:null)};
+const modRole=m=>{if(!me)return false;if(me.role==='admin')return true;const l=modList(m);return l===null||l.includes(me.role)};
+function modSub(){let un=null;const open=()=>{un=fcolLp('meta').doc('mods').onSnapshot(d=>{/* sin conexión y sin copia local del documento: no es «apagado», todavía no se sabe (se conserva lo último conocido) */
+      if(d&&!d.exists&&d.metadata&&d.metadata.fromCache)return;
+      const v=d&&d.exists?(d.data()||{}):{};MODCFG={ava:v.ava,cas:v.cas,pla:v.pla};try{localStorage.setItem('lps.mods',JSON.stringify(MODCFG))}catch(e){}
+      /* si a este rol se le quitó Avance, se cierran sus escuchas (las reglas las cortarían y quedaría reintentando) */
+      if(me&&!canAva()&&typeof avStop==='function')avStop();
+      modselApply();if(ready)requestRender()},()=>{un=null})};open();unsubs.push(()=>{if(un)un();un=null})}
+/** opciones del selector de piso (en main agrupa además las «zonas generales», que la obra aún no tiene) */
+function pisoOptsZG(ps,sel){return ps.map(p=>`<option value="${p.id}"${sel===p.id?' selected':''}>${esc(p.code)} · ${esc(p.name)}</option>`).join('')}
+/* Módulo Avance (docs/ia/avance.md): avance físico de partidas de acabados por ambiente. Usa los pisos y ambientes de Last Planner.
+   Configuran (partidas, metrado) administrador y editores; registran además los de campo */
+const AVA_TABS=['areg','ares'];
+const canAva=()=>canLps()&&!CS()&&me.role!=='capataz'&&modRole('ava');
+const avaCfg=()=>!!me&&canAva()&&(me.role==='admin'||me.role==='editor');
+const avaReg=()=>!!me&&canAva()&&(me.role==='admin'||me.role==='editor'||me.role==='campo');
 const canPla=()=>canLps();   /* también el capataz de un SC (11-11-2026, pedido del dueño): consulta; los ETO, solo de su partida */
 /* Oficina Técnica (área de apoyo «OT» u «Oficina Técnica») también carga: maneja las revisiones (decidido con el dueño, oct 2026) */
 const isOTArea=()=>!!me&&me.role==='area'&&/^\s*(o\.?\s*t\.?|oficina\s+t[eé]cnica.*)\s*$/i.test(me.area||'');
 const plaEd=()=>!!me&&(me.role==='admin'||me.role==='editor'||isOTArea());
 /* módulos de la app: [id, nombre] de los que este usuario puede abrir (el selector aparece si hay más de uno) */
-const modOk=m=>m==='tar'?canTar():m==='pla'?canPla():canLps();
-const MODS=()=>[['lps','Last Planner'],['tar','Tareo'],['pla','Planos']].filter(x=>modOk(x[0]));
-const tabMod=t=>TAR_TABS.includes(t)?'tar':PLA_TABS.includes(t)?'pla':'lps';
-const modHome=m=>m==='tar'?'tdia':m==='pla'?'pbib':'hoy';
+/* Planos: el control por rol va aquí y no en canPla(), que también habilita las láminas dentro de Last Planner (▦ del Lookahead, Capas del Plan diario) */
+const modOk=m=>m==='tar'?canTar():m==='pla'?canPla()&&modRole('pla'):m==='ava'?canAva():canLps();
+const MODS=()=>[['lps','Last Planner'],['tar','Tareo'],['pla','Planos'],['ava','Avance']].filter(x=>modOk(x[0]));
+const tabMod=t=>TAR_TABS.includes(t)?'tar':PLA_TABS.includes(t)?'pla':AVA_TABS.includes(t)?'ava':'lps';
+const modHome=m=>m==='tar'?'tdia':m==='pla'?'pbib':m==='ava'?'areg':'hoy';
 /** ¿se está en un módulo distinto de Last Planner? (sin piso, semana, deshacer ni exportes de LPS) */
-const offLps=()=>U.mod==='tar'||U.mod==='pla';
+const offLps=()=>U.mod==='tar'||U.mod==='pla'||U.mod==='ava';
 /** cambia de módulo (selector de la barra o «Más» del celular): lleva a la pestaña inicial del módulo */
 function goMod(m){if(!modOk(m))return;closePop();const sh=$('#msheet');if(sh)sh.remove();
   if(U.mod===m&&tabMod(U.tab)===m)return;U.mod=m;U.tab=modHome(m);U.tab=tabAllowed(U.tab)?U.tab:tabHome();saveUI();sendPresence();render()}
@@ -524,7 +552,7 @@ async function startSession(u,fdb){
   me.rsig=roleSig(m.data());me.realAdmin=m.data().role==='admin'||isOwnerEmail(me.email);const md=vaApply(m.data());me.role=(md.role==='planner'?'lector':md.role)||'lector';/* planner: rol del plan maestro (retirado, oct 2026): ve como lector */me.sc=md.sc||'';me.scs=memScs(md);me.area=md.area||'';me.cli=md.cli===true;me.tpub=md.tpub===true;me.tasis=md.tasis===true;if(me.role!=='capataz')U.tab='hoy';{const ht=location.hash.slice(1);if(['hoy','dash','look','pull','mat','restr','plan','mapa','campo','cap','lib','ind','prod','planos','cfg','team'].includes(ht)){U.tab=ht;U.mod='lps'}else if(TAR_TABS.includes(ht)){U.tab=ht;U.mod='tar'}}
   /* módulo: el de solo tareo siempre en Tareo; el resto vuelve al último que usó si puede verlo (render() lleva a la pestaña inicial) */
   if(TAR_ONLY())U.mod='tar';else if(!offLps()||!modOk(U.mod))U.mod='lps';isAdmin=me.role==='admin';canWrite=isAdmin||me.role==='editor';canDaily=canWrite||me.role==='campo';if(location.hash==='#plano')U.tab='mapa';if(me.role==='capataz')U.tab='cap';document.body.classList.toggle('cap-mode',me.role==='capataz');
-  db=fdb;hideLogin();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
+  db=fdb;hideLogin();if(!TAR_ONLY())modSub();$('#blogout').hidden=false;$('#tabTeam').hidden=false;
   $('#meBox').textContent=(md.name||me.email)+' · '+(ROLE[me.role]||me.role)+(me.role==='campo'&&me.tasis?' y asistente de tareo':'');
   /* los roles de solo tareo no cargan nada de Last Planner (en el celular pesa y las reglas no se lo permiten) */
   if(!TAR_ONLY()){for(const[col,k]of Object.entries(COLS))subCol(col,k,true);
@@ -798,15 +826,15 @@ $('#bnav').onclick=e=>{const b=e.target.closest('[data-bt]');if(!b)return;if(b.d
 /* ---------- barra superior ---------- */
 /** selector de módulo (barra superior y «Más» del celular): solo para quien usa los dos */
 const modSegHtml=()=>`<span class="seg modseg" role="group" aria-label="Módulo">${MODS().map(([m,l])=>`<button type="button" data-mod="${m}" class="${U.mod===m?'on':''}" aria-pressed="${U.mod===m}">${l}</button>`).join('')}</span>`;
-function modselApply(){const el=$('#modsel');document.body.classList.toggle('mod-tar',U.mod==='tar');document.body.classList.toggle('mod-pla',U.mod==='pla');if(!el)return;const ms=MODS(),show=ms.length>1;if(el.hidden!==!show)el.hidden=!show;
+function modselApply(){const el=$('#modsel');document.body.classList.toggle('mod-tar',U.mod==='tar');document.body.classList.toggle('mod-pla',U.mod==='pla');document.body.classList.toggle('mod-ava',U.mod==='ava');if(!el)return;const ms=MODS(),show=ms.length>1;if(el.hidden!==!show)el.hidden=!show;
   if(!show)return;const sig=ms.map(x=>x[0]).join();if(el.dataset.sig!==sig){el.dataset.sig=sig;el.innerHTML=ms.map(([m,l])=>`<button type="button" data-mod="${m}">${l}</button>`).join('')}
   el.querySelectorAll('[data-mod]').forEach(b=>{const on=b.dataset.mod===U.mod;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)})}
 $('#modsel').onclick=e=>{const b=e.target.closest('[data-mod]');if(b)goMod(b.dataset.mod)};
 function renderTop(){
   modselApply();
   if(offLps()){/* Tareo y Planos: sin piso, semana, deshacer ni exportes de Last Planner (los oculta también el CSS con body.mod-tar / mod-pla) */
-    let pn=P().name||'';if(!pn)try{pn=localStorage.getItem('lps.pname')||''}catch(e){}const pl=U.mod==='pla';
-    stx('#pname',pl?'Planos del proyecto':'Tareo de personal obrero');$('#pname').title='';stx('#pcode',(pn?pn+' · ':'')+(pl?'Planos':'Tareo'));
+    let pn=P().name||'';if(!pn)try{pn=localStorage.getItem('lps.pname')||''}catch(e){}const pl=U.mod==='pla',av=U.mod==='ava';
+    stx('#pname',av?'Avance de partidas':pl?'Planos del proyecto':'Tareo de personal obrero');$('#pname').title='';stx('#pcode',(pn?pn+' · ':'')+(av?'Avance':pl?'Planos':'Tareo'));
     $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tabKey()));
     navApply();topDateApply();topToolsApply();updUndo();setStatus();renderBnav();return}
   const p=P();stx('#pname',p.name||'Proyecto');$('#pname').title=p.fullName||'';
@@ -874,7 +902,7 @@ function render(){
   if(me&&me.role==='capataz')U.tab='cap';else if(U.tab==='cap'&&!SCK())U.tab='look';if(me&&me.role==='sc')canWrite=PM();if(LKP&&LKP.lock)canWrite=false;if(LKP&&U.tab!=='look')rSafe('presStop',presStop);if(U.tab==='look'||(me&&me.role==='sc'))rSafe('ensureProp',ensureProp);rSafe('pmSync',pmSync);document.body.classList.toggle('cap-mode',!!(me&&me.role==='capataz'));
   if(U.tab==='dash'&&!canDash())U.tab='look';document.body.classList.toggle('v-dash',U.tab==='dash');if(U.tab!=='dash')document.body.classList.remove('dash-tv');
   if(U.tab!=='mapa'&&window.__plano&&window.__plano.zcClose)rSafe('zcClose',()=>window.__plano.zcClose());rSafe('vaBanner',vaBanner);}
-  const views={hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,trh:renderTRh,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(U.tab!=='look'&&typeof PLV!=='undefined'&&PLV&&PLV.dock)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=U.mod==='lps'?'look':modHome(U.mod);
+  const views={areg:renderAReg,ares:renderARes,hoy:renderHoy,dash:renderDash,cap:renderCap,look:renderLook,pull:renderPull,mat:renderMat,campo:renderCampo,mapa:renderMapaTab,plan:renderPlan,restr:renderRestr,lib:renderLib,ind:renderInd,prod:renderProd,planos:renderPlanos,cfg:renderCfg,team:renderTeam,tdia:renderTDia,tper:renderTPer,tpc:renderTPc,tcfg:renderTCfg,tpub:renderTPub,tcos:renderTCos,trh:renderTRh,pbib:renderPBib,pcar:renderPCar,p3d:renderP3d};document.body.classList.toggle('v-campo',U.tab==='campo');if(typeof LKFS!=='undefined'&&LKFS&&U.tab!=='look')lkFs(false);if(U.tab!=='look'&&typeof PLV!=='undefined'&&PLV&&PLV.dock)plClose(true);if(U.tab!=='mat'&&document.body.classList.contains('mxfs')&&typeof mxFsSet==='function')mxFsSet(false);document.body.classList.toggle('v-mapa',U.tab==='mapa');if(!views[U.tab])U.tab=U.mod==='lps'?'look':modHome(U.mod);
   let st=null,fk=null,ss=null,se=null;
   if(main.dataset.view===U.tab&&U.tab!=='look'){const sc=main.querySelector('.scroll');st=sc?sc.scrollTop:null;const ae=document.activeElement;if(ae&&main.contains(ae)&&ae.dataset&&ae.dataset.fk){fk=ae.dataset.fk;ss=ae.selectionStart;se=ae.selectionEnd}}
   if(main.dataset.view!==U.tab){main=leaveView(main);main.dataset.view=U.tab;main.dataset.built='';main=enterView(main)}

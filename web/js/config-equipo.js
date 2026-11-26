@@ -165,7 +165,7 @@ function teamRows(list,online){const q=fold(TQ.q).trim();const words=q?q.split(/
    secciones (U.teamV): Personas · Capataces (enlaces/QR) · Datos y respaldo · Limpieza (las tres últimas, solo administrador).
    Personas: una línea por persona (nombre y correo, alcance en chips, permisos en píldoras); todo lo editable va en la ficha
    «✎ Editar» (teamEdit, ventana lqModal) con los mismos campos data-mem/data-f de antes. */
-const TEAMV=[['per','Personas'],['cap','Capataces (enlaces)'],['dat','Datos y respaldo'],['cln','Limpieza']];
+const TEAMV=[['per','Personas'],['cap','Capataces (enlaces)'],['mod','Módulos'],['dat','Datos y respaldo'],['cln','Limpieza']];
 const teamV=()=>isAdmin&&TEAMV.some(([k])=>k===U.teamV)?U.teamV:'per';
 let TEDIT=null;
 const TEAM_HELP=`<p><b>Para sumar a alguien:</b> agrégalo con su correo, envíale el enlace de esta página y pídele que pulse <b>«¿Primera vez? Crear mi cuenta»</b> con ese mismo correo y confirme el correo que le llegará. Solo los correos de la lista pueden entrar.</p>
@@ -218,6 +218,20 @@ async function teamClick(e){const rm=e.target.closest('[data-scrm]');if(rm&&isAd
     if(!await uiAsk({title:'Quitar acceso',text:`${m.name||em} ya no podrá entrar a LPS 911. Lo que registró se conserva.`,ok:'Quitar acceso',tone:'danger'}))return true;
     try{await fcol('members').doc(em).delete();TEDIT=null;lqClose();toast('Acceso retirado a '+(m.name||em))}catch(err){toast('No se pudo quitar: '+(err.code||err.message))}return true}
   return false}
+/* Equipo › Módulos: qué roles ven cada módulo (base.js «Módulos por rol»). Last Planner y Tareo no entran: siguen como siempre */
+const MOD_ROWS=[['ava','Avance','Avance físico de partidas de acabados por ambiente.'],['pla','Planos','Biblioteca de planos. Apagarlo no quita las láminas dentro de Last Planner (▦ del Lookahead, Capas del Plan diario).']];
+const modNo=(m,r)=>r==='capataz'&&m!=='pla';   /* el capataz nunca ve Avance */
+function modCard(){if(!isAdmin)return'';
+  return`<div class="card"><div class="hd">Módulos por rol <span class="sub">quién ve cada módulo en el selector de arriba</span></div><div class="bd">
+    <p class="modn">Marca los roles que pueden entrar a cada módulo. El <b>administrador</b> siempre ve todos. Un módulo sin ninguna casilla queda apagado para la obra (solo lo ves tú). Last Planner y Tareo no cambian.</p>
+    <div class="modw"><table class="modt"><thead><tr><th>Módulo</th>${MOD_ROLES.map(r=>`<th>${esc(ROLE[r]||r)}</th>`).join('')}<th></th></tr></thead><tbody>${MOD_ROWS.map(([m,n,tx])=>{const l=modList(m),on=r=>!modNo(m,r)&&(l===null||l.includes(r)),k=MOD_ROLES.filter(on).length;
+      return`<tr><td><b>${n}</b><small>${tx}</small></td>${MOD_ROLES.map(r=>`<td class="modc"><input type="checkbox" data-modr="${m}|${r}"${on(r)?' checked':''}${modNo(m,r)?' disabled title="El capataz no usa este módulo"':''} aria-label="${n}: ${esc(ROLE[r]||r)}"></td>`).join('')}<td>${k?`<span class="avtg o">${k} rol${k===1?'':'es'}</span>`:'<span class="avtg">Apagado</span>'}</td></tr>`}).join('')}</tbody></table></div>
+    <p class="modn">En <b>Avance</b> es un bloqueo real: un rol sin casilla tampoco puede leer ni escribir esos datos. En <b>Planos</b> solo se quita el módulo del menú, porque sus láminas se usan dentro de Last Planner. Los cambios se aplican al instante en los equipos conectados.</p></div></div>`}
+function wireMods(main){const tb=$('.modt',main);if(!tb)return;tb.onchange=e=>{const t=e.target;if(U.tab!=='team'||!t.dataset||!t.dataset.modr||!isAdmin)return;const m=t.dataset.modr.split('|')[0];
+    const roles=[...main.querySelectorAll('input[data-modr^="'+m+'|"]')].filter(x=>x.checked&&!x.disabled).map(x=>x.dataset.modr.split('|')[1]);
+    MODCFG={...(MODCFG||{}),[m]:roles};   /* al instante; la foto de la base llega después con lo mismo */
+    /* escritura directa (no op/apply): esto no entra al deshacer */
+    bgWrite(fcolLp('meta').doc('mods').set({[m]:roles,by:me.email||'',t:NOW()},{merge:true}));toast('Módulos actualizados');modselApply();requestRender()}}
 function teamSeg(){if(!isAdmin)return'';const v=teamV();return`<span class="seg tseg" role="tablist" aria-label="Secciones de Equipo">${TEAMV.map(([k,l])=>`<button type="button" role="tab" data-teamv="${k}" class="${v===k?'on':''}" aria-selected="${v===k}">${l}</button>`).join('')}</span>`}
 function renderTeam(main){
   const list=[...MEM.entries()];const v=teamV();
@@ -253,6 +267,7 @@ function renderTeam(main){
      <div><b>Cargar datos</b><p class="note" id="impmsg">${IMPMSG?esc(IMPMSG):'Usa el archivo de datos que te enviaron (por ejemplo <b>lookahead-real.json</b>) o un respaldo. Los registros con el mismo código se reemplazan; los demás no se tocan.'}</p>
       <div class="tbtns"><label class="ib">Cargar datos desde archivo…<input type="file" id="fimport" accept=".json,application/json" hidden></label></div></div>
     </div></div>`;
+  else if(v==='mod')body=modCard();
   else if(v==='cln')body=cleanCard();
   main.innerHTML=`<div class="scroll"><div class="wrap">
   ${pageHead('Equipo',`${list.length} persona${list.length===1?'':'s'} con acceso`,acts)}
@@ -260,6 +275,7 @@ function renderTeam(main){
   ${body}
   </div></div>`;
   if(v==='cln')wireClean(main);
+  if(v==='mod')wireMods(main);
   /* la ficha abierta se actualiza con los cambios (salvo mientras se escribe el nombre) */
   if(TEDIT&&$('#lqm')&&document.activeElement&&document.activeElement.id!=='ted-name')teamEdit(TEDIT);else if(TEDIT&&!$('#lqm'))TEDIT=null;
   const f=$('#tadd',main);
