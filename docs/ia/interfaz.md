@@ -83,4 +83,4 @@ El dueño quiere pasar módulos nuevos a la obra **apagados** y abrirlos a quien
   - Consecuencia para una obra donde Avance o Casco ya se usan: al instalar estas reglas quedan cerrados para todos menos el administrador hasta que marque los roles en Equipo › Módulos.
 - **«Ver como»** simula el rol elegido también aquí (usa `me.role`).
 - Pruebas: `tests/e2e/modulos-rol.spec.js` (3) y `tests/rules` («propuestas: pasado el corte…», bloque `meta/mods`). La obra de prueba (`fake-firebase.js`) siembra `meta/mods` con Avance y Casco encendidos para todos.
-- **Pendiente (decisión del dueño):** con esto se puede hacer el pase completo `main → produccion` con Casco y Avance apagados en vez de pasar corrección por corrección; antes hay que revisar qué más cambia para la obra en esos commits (reglas, tareas del servidor, láminas desde Planos). Hasta que él lo diga, sigue vigente la regla 6 de `CLAUDE.md`.
+- **En producción desde el 26-11-2026** (PR #580), en versión sin Casco: filas Avance y Planos. El dueño decidió no hacer el pase completo hasta terminar Casco (`pendientes.md` «Avance ya está en la obra»); sigue vigente la regla 6 de `CLAUDE.md`.
