@@ -96,7 +96,7 @@ Este archivo tiene lo esencial. El detalle de cada módulo está aparte para no 
 | `docs/ia/avance.md` | Módulo Avance: planilla única por partida (filas por piso › sector › ambiente con unidad y metrado, etapas por fila, registro diario en cantidad o %), importación con equivalencias; colecciones `avp`, `avm`, `ava`. |
 | `docs/ia/avisos.md` | Avisos de detenciones al celular y la computadora (push): `avisos.js`, `sw.js`, `avisoDetenido`. |
 | `docs/ia/pendientes.md` | Pendientes conocidos de las auditorías: revísalo antes de una auditoría nueva. |
-| `docs/ia/auditoria-externa.md` | Preparar un encargo para otra IA (Argon/Gemini 4, ChatGPT): paquete `scripts/paquete-auditoria.mjs`, pedido para pegar, revisión por video, vínculos de planos. |
+| `docs/ia/auditoria-externa.md` | Preparar un encargo para otra IA (Argon/Gemini 4, ChatGPT): paquete `scripts/paquete-auditoria.mjs`, pedido para pegar, revisión por video, vínculos de planos; Codex dentro de Claude Code (sección 5). |
 
 **Fuente única del proyecto (decidido con el dueño, 10-11-2026):** `CLAUDE.md` y `docs/ia/` son el único lugar donde vive el contexto de LPS 911; no se usa la memoria de la cuenta de Claude. Si algo de afuera (memoria, chat, informe) contradice al repo, **manda el repo** salvo que el dueño diga lo contrario.
 - Cada cambio o decisión se anota en **el archivo del tema** (no en este, salvo que sea algo general) **en el mismo commit** que lo implementa.
@@ -184,6 +184,7 @@ El proyecto se trabaja también desde Claude Code (claude.ai/code, app de Claude
 - Con el entorno listo, en la sesión: `cd tests/e2e && npm install` y `cd tests/rules && npm install`; las reglas se pueden probar en local con el comando de «Cómo probar».
 - Si el entorno no tiene alguna herramienta (el script avisa con ⚠), sigue igual: la batería completa corre en GitHub en el PR.
 - Flujo de GitHub, «Modo rápido» y la regla 6 (Casco no va a producción) valen igual en cualquier superficie.
+- **Codex (ChatGPT) como segunda revisión:** con el entorno de nube «LPS911» (no el «Default») Claude puede pedirle a Codex revisar un cambio usando el plan de ChatGPT del dueño; hay que iniciar sesión con un código una vez por conversación. Detalle en `docs/ia/auditoria-externa.md` sección 5.
 
 ## Modelo, esfuerzo y subagentes (decidido con el dueño, 11-11-2026)
 

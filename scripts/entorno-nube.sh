@@ -38,5 +38,10 @@ else warn "No se pudo instalar Firebase CLI"; fi
 if npx -y "playwright@${PW_VER}" install --with-deps chromium >/dev/null 2>&1 || npx -y "playwright@${PW_VER}" install chromium >/dev/null 2>&1; then ok "Chromium de Playwright ${PW_VER}"
 else warn "No se pudo instalar Chromium de Playwright: las pruebas de interfaz solo correrán en GitHub"; fi
 
+# 4. Codex (ChatGPT) para la segunda revisión desde Claude Code (docs/ia/auditoria-externa.md, sección 5).
+#    Solo sirve en un entorno con salida de red a auth.openai.com y chatgpt.com (el entorno «LPS911»).
+if command -v codex >/dev/null || npm install -g @openai/codex --silent >/dev/null 2>&1; then ok "Codex $(codex --version 2>/dev/null)"
+else warn "No se pudo instalar Codex: la revisión con ChatGPT no estará disponible"; fi
+
 echo "Listo. En la sesión: cd tests/e2e && npm install (interfaz) · cd tests/rules && npm install (reglas)."
 exit 0
